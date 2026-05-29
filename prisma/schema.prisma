@@ -1,0 +1,242 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  PENDING // compte créé, en attente de validation par un ADMIN
+  ADMIN
+  KINE
+}
+
+enum PatientStatus {
+  intake_pending
+  intake_completed
+  study_pending
+  study_completed
+  report_sent
+  followup_pending
+  followup_completed
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  VIEW_SENSITIVE
+  EXPORT
+  ANONYMIZE
+}
+
+enum ComponentCategory {
+  SELLE
+  POTENCE
+  CINTRE
+  CALE_PIEDS
+  MANIVELLES
+  PEDALES
+  AUTRE
+}
+
+enum ExerciseCategory {
+  SOUPLESSE
+  RENFORCEMENT
+  MOBILITE
+  PROPRIOCEPTION
+  AUTRE
+}
+
+// ─── MODELS ──────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  clerkId   String   @unique
+  email     String   @unique
+  name      String
+  role      Role     @default(PENDING)
+  createdBy String?  // id du kiné admin qui a créé ce compte
+
+  patients   Patient[]
+  studies    PostureStudy[]
+  exercises  Exercise[]
+  components BikeComponent[]
+  auditLogs  AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clerkId])
+}
+
+model Patient {
+  id              String        @id @default(uuid())
+  kineId          String
+  kine            User          @relation(fields: [kineId], references: [id])
+
+  // Données de base (récupérées via Calendly/n8n)
+  email           String        @unique
+  firstName       String
+  lastName        String
+  phone           String?
+  calendlyEventId String?
+  status          PatientStatus @default(intake_pending)
+
+  // Données anonymisées (RGPD) — null si anonymisé
+  isAnonymized    Boolean       @default(false)
+
+  intake    PatientIntake?
+  studies   PostureStudy[]
+  followups Followup[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kineId])
+  @@index([status])
+}
+
+model PatientIntake {
+  id        String  @id @default(uuid())
+  patientId String  @unique
+  patient   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  // Données morphologiques
+  heightCm  Float?
+  weightKg  Float?
+
+  // Pratique vélo
+  bikeType      String?   // route, vtt, gravel, triathlon...
+  ridingLevel   String?   // loisir, sportif, compétiteur
+  weeklyHours   Float?
+  yearsRiding   Int?
+
+  // Douleurs & objectifs
+  injuries      String[]  // liste de douleurs déclarées
+  goals         String?
+  medicalNotes  String?
+
+  // Source des données
+  source        String    @default("google_forms") // google_forms | custom_form | manual
+  rawData       Json?     // réponses brutes du formulaire
+
+  submittedAt DateTime @default(now())
+}
+
+model PostureStudy {
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+  kineId    String
+  kine      User    @relation(fields: [kineId], references: [id])
+
+  // Mesures (stockées en JSON pour flexibilité)
+  measures  Json    // voir StudyMeasures type dans types/index.ts
+
+  // Liens vers bibliothèque
+  componentsUsed       BikeComponent[] @relation("StudyComponents")
+  exercisesPrescribed  Exercise[]      @relation("StudyExercises")
+
+  // Rapport
+  reportUrl   String?   // URL Vercel Blob du PDF
+  reportSentAt DateTime?
+
+  observations String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([kineId])
+}
+
+model Followup {
+  id        String  @id @default(uuid())
+  patientId String
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  // Scores
+  painLevel     Int?    // 0-10
+  comfortScore  Int?    // 0-10
+  satisfactionScore Int? // 0-10
+
+  // Pratique
+  ridingFrequency String? // "3×/semaine", etc.
+  returningToSport Boolean?
+
+  // Texte libre
+  generalFeedback String?
+
+  // Source & données brutes
+  source    String  @default("google_forms")
+  rawResponses Json? // réponses brutes
+
+  submittedAt DateTime @default(now())
+
+  @@index([patientId])
+}
+
+model Exercise {
+  id          String          @id @default(uuid())
+  createdById String
+  createdBy   User            @relation(fields: [createdById], references: [id])
+
+  name        String
+  description String
+  category    ExerciseCategory @default(AUTRE)
+  frequency   String?          // "2×/jour", "3×/semaine"
+  duration    String?          // "30 secondes", "3 séries de 10"
+  mediaUrl    String?          // lien vidéo ou image explicative
+  isActive    Boolean          @default(true)
+
+  studies     PostureStudy[]   @relation("StudyExercises")
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([createdById])
+}
+
+model BikeComponent {
+  id          String            @id @default(uuid())
+  createdById String
+  createdBy   User              @relation(fields: [createdById], references: [id])
+
+  name        String
+  brand       String?
+  model       String?
+  category    ComponentCategory @default(AUTRE)
+  notes       String?
+  isActive    Boolean           @default(true)
+
+  studies     PostureStudy[]    @relation("StudyComponents")
+
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([createdById])
+  @@index([category])
+}
+
+model AuditLog {
+  id       String      @id @default(uuid())
+  userId   String
+  user     User        @relation(fields: [userId], references: [id])
+
+  action   AuditAction
+  entity   String      // "patient", "study", "component"...
+  entityId String
+  metadata Json?
+
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityId])
+  @@index([timestamp])
+}
