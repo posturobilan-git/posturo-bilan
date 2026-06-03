@@ -4,7 +4,6 @@ import { getCurrentKine } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { SearchBar } from "@/components/patients/SearchBar";
 import { RgpdActions } from "@/components/rgpd/RgpdActions";
 
@@ -70,7 +69,6 @@ export default async function RgpdPage({ searchParams }: Props) {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Patient</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Statut</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Données</th>
                   <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Actions RGPD</th>
                 </tr>
@@ -82,7 +80,6 @@ export default async function RgpdPage({ searchParams }: Props) {
                       <div className="text-sm font-medium text-gray-900">{p.firstName} {p.lastName}</div>
                       <div className="text-sm text-gray-500">{p.email}</div>
                     </td>
-                    <td className="px-6 py-4"><Badge status={p.status} /></td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {p._count.studies} étude{p._count.studies !== 1 ? "s" : ""} · {p._count.followups} suivi{p._count.followups !== 1 ? "s" : ""}
                     </td>

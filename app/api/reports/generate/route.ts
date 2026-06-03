@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Attribute the audit log to the study's kiné.
-    const study = await prisma.postureStudy.findUnique({
+    const study = await prisma.study.findUnique({
       where: { id: studyId },
       select: { kineId: true },
     });

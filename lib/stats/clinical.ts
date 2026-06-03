@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import type { StudyMeasureValue } from "@/types";
 
 export interface ClinicalStats {
   avgPainLevel: number | null; // J+30 residual pain (lower is better)
@@ -30,13 +31,9 @@ export async function getClinicalStats(): Promise<ClinicalStats> {
       LIMIT 8
     `,
 
-    prisma.$queryRaw<[{ avg_height: number | null; count: number }]>`
-      SELECT
-        ROUND(AVG((measures->>'saddleHeight')::float)::numeric, 1)::float as avg_height,
-        COUNT(*)::int as count
-      FROM "PostureStudy"
-      WHERE measures->>'saddleHeight' IS NOT NULL
-    `,
+    // Average final saddle height across studies, computed from the dynamic
+    // côtes ("Hauteur de selle") since measures are no longer fixed columns.
+    avgSaddleHeight(),
   ]);
 
   return {
@@ -45,7 +42,27 @@ export async function getClinicalStats(): Promise<ClinicalStats> {
     avgSatisfactionScore: outcomes[0]?.avg_satisfaction ?? null,
     followupCount: outcomes[0]?.count ?? 0,
     injuryDistribution: injuries,
-    avgSaddleHeight: saddle[0]?.avg_height ?? null,
-    studiesWithSaddle: saddle[0]?.count ?? 0,
+    avgSaddleHeight: saddle.avg,
+    studiesWithSaddle: saddle.count,
   };
+}
+
+/** Average of the "after" saddle-height côte across all studies. */
+async function avgSaddleHeight(): Promise<{ avg: number | null; count: number }> {
+  const measurement = await prisma.measurement.findFirst({
+    where: { name: { contains: "Hauteur de selle", mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (!measurement) return { avg: null, count: 0 };
+
+  const studies = await prisma.study.findMany({ select: { measureValues: true } });
+  const heights: number[] = [];
+  for (const s of studies) {
+    const values = (s.measureValues as StudyMeasureValue[] | null) ?? [];
+    const v = values.find((x) => x.measurementId === measurement.id);
+    if (v?.after != null) heights.push(v.after);
+  }
+  if (heights.length === 0) return { avg: null, count: 0 };
+  const avg = Math.round((heights.reduce((a, b) => a + b, 0) / heights.length) * 10) / 10;
+  return { avg, count: heights.length };
 }

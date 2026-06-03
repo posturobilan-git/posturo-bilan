@@ -15,18 +15,20 @@ async function getStats(kineId: string, isAdmin: boolean) {
     prisma.patient.count({
       where: {
         ...kineFilter,
-        status: { not: "followup_completed" },
         isAnonymized: false,
       },
     }),
-    prisma.postureStudy.count({
+    prisma.study.count({
       where: {
         ...(isAdmin ? {} : { kineId }),
         createdAt: { gte: startOfMonth },
       },
     }),
-    prisma.patient.count({
-      where: { ...kineFilter, status: "report_sent" },
+    prisma.study.count({
+      where: {
+        ...(isAdmin ? {} : { kineId }),
+        status: { in: ["report_sent", "followup_pending", "followup_completed"] },
+      },
     }),
     prisma.followup.count({
       where: isAdmin ? {} : { patient: { kineId } },
@@ -39,7 +41,7 @@ async function getStats(kineId: string, isAdmin: boolean) {
 const STAT_CARDS = [
   {
     key: "activePatients",
-    label: "Patients actifs",
+    label: "Patients",
     tint: "bg-brand-50 text-brand-600",
     icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
   },
@@ -74,7 +76,7 @@ export default async function DashboardPage() {
     getStats(kine.id, isAdmin),
     prisma.patient.findMany({
       where: { ...kineFilter, isAnonymized: false },
-      include: { kine: { select: { name: true } } },
+      include: { kine: { select: { name: true } }, _count: { select: { studies: true } } },
       orderBy: { createdAt: "desc" },
       take: 10,
     }),

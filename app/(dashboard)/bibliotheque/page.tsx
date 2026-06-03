@@ -4,18 +4,26 @@ import { Suspense } from "react";
 import { getCurrentKine } from "@/lib/auth";
 import { getExercises } from "@/actions/exercise.actions";
 import { getComponents } from "@/actions/component.actions";
+import { getBikeTypes, getActiveBikeTypes } from "@/actions/bikeType.actions";
+import { getMeasurements } from "@/actions/measurement.actions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchBar } from "@/components/patients/SearchBar";
 import { CategoryFilter } from "@/components/bibliotheque/CategoryFilter";
 import { ExerciseCard } from "@/components/bibliotheque/ExerciseCard";
 import { ComponentCard } from "@/components/bibliotheque/ComponentCard";
+import { BikeTypeCard } from "@/components/bibliotheque/BikeTypeCard";
+import { MeasurementCard } from "@/components/bibliotheque/MeasurementCard";
 import { CreateExerciseModal } from "@/components/bibliotheque/CreateExerciseModal";
 import { CreateComponentModal } from "@/components/bibliotheque/CreateComponentModal";
+import { CreateBikeTypeModal } from "@/components/bibliotheque/CreateBikeTypeModal";
+import { CreateMeasurementModal } from "@/components/bibliotheque/CreateMeasurementModal";
 import {
   EXERCISE_CATEGORY_LABELS,
   COMPONENT_CATEGORY_LABELS,
 } from "@/lib/labels";
 import type { ExerciseCategory, ComponentCategory } from "@prisma/client";
+
+type Tab = "exercices" | "composants" | "velos" | "cotes";
 
 interface Props {
   searchParams: Promise<{ tab?: string; q?: string; category?: string }>;
@@ -26,7 +34,14 @@ export default async function BibliothequePage({ searchParams }: Props) {
   if (!kine) redirect("/sign-in");
 
   const { tab, q, category } = await searchParams;
-  const activeTab = tab === "composants" ? "composants" : "exercices";
+  const activeTab: Tab =
+    tab === "composants"
+      ? "composants"
+      : tab === "velos"
+      ? "velos"
+      : tab === "cotes"
+      ? "cotes"
+      : "exercices";
   const isAdmin = kine.role === "ADMIN";
 
   const exercises =
@@ -37,22 +52,33 @@ export default async function BibliothequePage({ searchParams }: Props) {
     activeTab === "composants"
       ? await getComponents({ search: q, category: category as ComponentCategory | undefined })
       : [];
+  const bikeTypes = activeTab === "velos" ? await getBikeTypes({ search: q }) : [];
+  const measurements = activeTab === "cotes" ? await getMeasurements({ search: q }) : [];
+  // The côte editor needs the list of active bike types to associate.
+  const activeBikeTypes = activeTab === "cotes" ? await getActiveBikeTypes() : [];
+  const bikeTypeOptions = activeBikeTypes.map((b) => ({ id: b.id, name: b.name }));
 
   const categoryOptions: [string, string][] =
     activeTab === "exercices"
       ? Object.entries(EXERCISE_CATEGORY_LABELS)
-      : Object.entries(COMPONENT_CATEGORY_LABELS);
+      : activeTab === "composants"
+      ? Object.entries(COMPONENT_CATEGORY_LABELS)
+      : [];
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Bibliothèque"
-        description="Exercices et composants vélo"
+        description="Exercices, composants et types de vélo"
         action={
           isAdmin
             ? activeTab === "exercices"
               ? <CreateExerciseModal />
-              : <CreateComponentModal />
+              : activeTab === "composants"
+              ? <CreateComponentModal />
+              : activeTab === "velos"
+              ? <CreateBikeTypeModal />
+              : <CreateMeasurementModal bikeTypes={bikeTypeOptions} />
             : undefined
         }
       />
@@ -61,6 +87,8 @@ export default async function BibliothequePage({ searchParams }: Props) {
       <div className="flex gap-1 border-b border-gray-200">
         <TabLink label="Exercices" tab="exercices" active={activeTab === "exercices"} />
         <TabLink label="Composants" tab="composants" active={activeTab === "composants"} />
+        <TabLink label="Types de vélo" tab="velos" active={activeTab === "velos"} />
+        <TabLink label="Côtes" tab="cotes" active={activeTab === "cotes"} />
       </div>
 
       {/* Filters */}
@@ -70,9 +98,11 @@ export default async function BibliothequePage({ searchParams }: Props) {
             <SearchBar defaultValue={q} />
           </Suspense>
         </div>
-        <Suspense>
-          <CategoryFilter options={categoryOptions} defaultValue={category} />
-        </Suspense>
+        {(activeTab === "exercices" || activeTab === "composants") && (
+          <Suspense>
+            <CategoryFilter options={categoryOptions} defaultValue={category} />
+          </Suspense>
+        )}
       </div>
 
       {/* Grid */}
@@ -86,12 +116,32 @@ export default async function BibliothequePage({ searchParams }: Props) {
             ))}
           </div>
         )
-      ) : components.length === 0 ? (
-        <EmptyState label="composant" />
+      ) : activeTab === "composants" ? (
+        components.length === 0 ? (
+          <EmptyState label="composant" />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {components.map((c) => (
+              <ComponentCard key={c.id} component={c} isAdmin={isAdmin} />
+            ))}
+          </div>
+        )
+      ) : activeTab === "velos" ? (
+        bikeTypes.length === 0 ? (
+          <EmptyState label="type de vélo" />
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {bikeTypes.map((bt) => (
+              <BikeTypeCard key={bt.id} bikeType={bt} isAdmin={isAdmin} />
+            ))}
+          </div>
+        )
+      ) : measurements.length === 0 ? (
+        <EmptyState label="côte" />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {components.map((c) => (
-            <ComponentCard key={c.id} component={c} isAdmin={isAdmin} />
+          {measurements.map((m) => (
+            <MeasurementCard key={m.id} measurement={m} bikeTypes={bikeTypeOptions} isAdmin={isAdmin} />
           ))}
         </div>
       )}

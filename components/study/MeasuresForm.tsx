@@ -1,245 +1,150 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import type { StudyMeasures } from "@/types";
+import { MEASUREMENT_CATEGORY_LABELS } from "@/lib/labels";
+import type { Measurement, MeasurementCategory } from "@prisma/client";
 
-// ─── Validation ranges (mirror lib/validations/study.schema.ts) ────────────────
+export type MeasurementForStudy = Measurement & { bikeTypes: { id: string }[] };
 
-const RANGES: Partial<Record<keyof StudyMeasures, { min: number; max: number; label: string }>> = {
-  saddleHeight: { min: 50, max: 120, label: "Hauteur selle" },
-  saddleSetback: { min: 0, max: 200, label: "Recul selle" },
-  saddleAngle: { min: -10, max: 10, label: "Angle selle" },
-  cleatAngle: { min: -15, max: 15, label: "Angle cale" },
-};
-
-// ─── Field helpers ────────────────────────────────────────────────────────────
-
-function FieldGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <fieldset className="space-y-4 rounded-lg border border-gray-200 p-5">
-      <legend className="px-1 text-sm font-semibold text-gray-700">{title}</legend>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{children}</div>
-    </fieldset>
-  );
+interface MeasureValue {
+  before: number | null;
+  after: number | null;
 }
-
-interface NumberFieldProps {
-  label: string;
-  unit?: string;
-  value: number | undefined;
-  onChange: (v: number | undefined) => void;
-  min?: number;
-  max?: number;
-  required?: boolean;
-  error?: string;
-}
-
-function NumberField({ label, unit, value, onChange, min, max, required, error }: NumberFieldProps) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-gray-600">
-        {label}
-        {required && <span className="ml-0.5 text-red-500">*</span>}
-        {unit && <span className="ml-1 text-gray-400">({unit})</span>}
-      </span>
-      <input
-        type="number"
-        min={min}
-        max={max}
-        step="0.1"
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value === "" ? undefined : parseFloat(e.target.value))}
-        className={`rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-          error
-            ? "border-red-400 focus:border-red-500 focus:ring-red-500"
-            : "border-gray-300 focus:border-brand-500 focus:ring-brand-500"
-        }`}
-      />
-      {error && <span className="text-xs text-red-600">{error}</span>}
-    </label>
-  );
-}
-
-function TextField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string | undefined;
-  onChange: (v: string | undefined) => void;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-gray-600">{label}</span>
-      <input
-        type="text"
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value || undefined)}
-        className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-      />
-    </label>
-  );
-}
-
-function SelectField({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string | undefined;
-  options: string[];
-  onChange: (v: string | undefined) => void;
-}) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-gray-600">{label}</span>
-      <select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value || undefined)}
-        className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-      >
-        <option value="">—</option>
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-// ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
-  /** Source of truth (the Zustand store) */
-  values: StudyMeasures;
-  onChange: (measures: StudyMeasures) => void;
+  /** All active côtes, with the bike types they're linked to. */
+  measurements: MeasurementForStudy[];
+  /** Selected bike type — determines which côtes are shown. */
+  bikeTypeId: string | null;
+  /** Saisies courantes, indexées par measurementId. */
+  values: Record<string, MeasureValue>;
+  observations: string;
+  onSetValue: (measurementId: string, field: "before" | "after", value: number | null) => void;
+  onSetObservations: (text: string) => void;
+  onBack: () => void;
   onNext: () => void;
   onSaveDraft: () => void;
   saving: boolean;
 }
 
-export function MeasuresForm({ values, onChange, onNext, onSaveDraft, saving }: Props) {
-  const [errors, setErrors] = useState<Partial<Record<keyof StudyMeasures, string>>>({});
+function NumberInput({
+  value,
+  placeholder,
+  onChange,
+}: {
+  value: number | null;
+  placeholder: string;
+  onChange: (v: number | null) => void;
+}) {
+  return (
+    <input
+      type="number"
+      step="0.1"
+      placeholder={placeholder}
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value === "" ? null : parseFloat(e.target.value))}
+      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+    />
+  );
+}
 
-  function set<K extends keyof StudyMeasures>(key: K, value: StudyMeasures[K]) {
-    onChange({ ...values, [key]: value });
-    // Clear the field error as soon as the user edits it
-    if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }));
-  }
+export function MeasuresForm({
+  measurements,
+  bikeTypeId,
+  values,
+  observations,
+  onSetValue,
+  onSetObservations,
+  onBack,
+  onNext,
+  onSaveDraft,
+  saving,
+}: Props) {
+  // Côtes applicables : tronc commun + celles liées au vélo sélectionné.
+  const applicable = measurements.filter(
+    (m) => m.isCommon || (bikeTypeId != null && m.bikeTypes.some((b) => b.id === bikeTypeId))
+  );
 
-  /** Validates required fields + ranges; returns true if OK. */
-  function validate(): boolean {
-    const next: Partial<Record<keyof StudyMeasures, string>> = {};
-
-    if (values.saddleHeight == null) next.saddleHeight = "Requis";
-    if (values.saddleSetback == null) next.saddleSetback = "Requis";
-
-    for (const [key, range] of Object.entries(RANGES) as [keyof StudyMeasures, typeof RANGES[keyof StudyMeasures]][]) {
-      const v = values[key] as number | undefined;
-      if (v != null && range && (v < range.min || v > range.max)) {
-        next[key] = `Entre ${range.min} et ${range.max}`;
-      }
-    }
-
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  }
-
-  function handleNext() {
-    if (validate()) onNext();
-  }
-
-  function handleSaveDraft() {
-    // Drafts allow partial data, but still block out-of-range values.
-    const rangeErrors: Partial<Record<keyof StudyMeasures, string>> = {};
-    for (const [key, range] of Object.entries(RANGES) as [keyof StudyMeasures, typeof RANGES[keyof StudyMeasures]][]) {
-      const v = values[key] as number | undefined;
-      if (v != null && range && (v < range.min || v > range.max)) {
-        rangeErrors[key] = `Entre ${range.min} et ${range.max}`;
-      }
-    }
-    setErrors(rangeErrors);
-    if (Object.keys(rangeErrors).length === 0) onSaveDraft();
+  // Regroupées par catégorie pour l'affichage (déjà triées par `order`).
+  const byCategory = new Map<MeasurementCategory, MeasurementForStudy[]>();
+  for (const m of applicable) {
+    const list = byCategory.get(m.category) ?? [];
+    list.push(m);
+    byCategory.set(m.category, list);
   }
 
   return (
     <div className="space-y-5">
-      <FieldGroup title="Selle">
-        <NumberField label="Hauteur selle" unit="cm" required min={50} max={120}
-          value={values.saddleHeight} error={errors.saddleHeight} onChange={(val) => set("saddleHeight", val)} />
-        <NumberField label="Recul selle" unit="mm" required min={0} max={200}
-          value={values.saddleSetback} error={errors.saddleSetback} onChange={(val) => set("saddleSetback", val)} />
-        <NumberField label="Angle selle" unit="°" min={-10} max={10}
-          value={values.saddleAngle} error={errors.saddleAngle} onChange={(val) => set("saddleAngle", val)} />
-        <TextField label="Modèle de selle"
-          value={values.saddleModel} onChange={(val) => set("saddleModel", val)} />
-      </FieldGroup>
+      <p className="text-sm text-gray-600">
+        Renseignez les côtes (avant / après) pour ce type de vélo.
+      </p>
 
-      <FieldGroup title="Cintre / Potence">
-        <NumberField label="Hauteur cintre" unit="cm"
-          value={values.handlebarHeight} onChange={(val) => set("handlebarHeight", val)} />
-        <NumberField label="Longueur potence" unit="mm"
-          value={values.stemLength} onChange={(val) => set("stemLength", val)} />
-        <NumberField label="Angle potence" unit="°"
-          value={values.stemAngle} onChange={(val) => set("stemAngle", val)} />
-        <NumberField label="Largeur cintre" unit="mm"
-          value={values.handlebarWidth} onChange={(val) => set("handlebarWidth", val)} />
-      </FieldGroup>
+      {applicable.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-gray-300 py-8 text-center">
+          <p className="text-sm text-gray-400">Aucune côte définie pour ce type de vélo.</p>
+          <p className="mt-1 text-xs text-gray-400">
+            Un administrateur peut en ajouter depuis la Bibliothèque (onglet Côtes).
+          </p>
+        </div>
+      ) : (
+        [...byCategory.entries()].map(([category, items]) => (
+          <fieldset key={category} className="space-y-3 rounded-lg border border-gray-200 p-5">
+            <legend className="px-1 text-sm font-semibold text-gray-700">
+              {MEASUREMENT_CATEGORY_LABELS[category]}
+            </legend>
 
-      <FieldGroup title="Position du corps">
-        <NumberField label="Reach effectif" unit="mm"
-          value={values.effectiveReach} onChange={(val) => set("effectiveReach", val)} />
-        <NumberField label="Angle tronc" unit="°"
-          value={values.trunkAngle} onChange={(val) => set("trunkAngle", val)} />
-        <NumberField label="Angle genou (PDC)" unit="°"
-          value={values.kneeAngle} onChange={(val) => set("kneeAngle", val)} />
-      </FieldGroup>
+            {/* Column headers */}
+            <div className="hidden grid-cols-[1fr_auto_auto] items-center gap-3 sm:grid">
+              <span />
+              <span className="w-28 text-center text-xs font-medium uppercase tracking-wide text-gray-400">Avant</span>
+              <span className="w-28 text-center text-xs font-medium uppercase tracking-wide text-gray-400">Après</span>
+            </div>
 
-      <FieldGroup title="Cale-pieds">
-        <NumberField label="Angle cale" unit="°" min={-15} max={15}
-          value={values.cleatAngle} error={errors.cleatAngle} onChange={(val) => set("cleatAngle", val)} />
-        <SelectField label="Position cale"
-          value={values.cleatPosition}
-          options={["neutre", "avant", "arrière"]}
-          onChange={(val) => set("cleatPosition", val)} />
-      </FieldGroup>
-
-      <FieldGroup title="Manivelles">
-        <NumberField label="Longueur manivelles" unit="mm"
-          value={values.crankLength} onChange={(val) => set("crankLength", val)} />
-      </FieldGroup>
+            {items.map((m) => {
+              const v = values[m.id] ?? { before: null, after: null };
+              return (
+                <div key={m.id} className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[1fr_auto_auto]">
+                  <span className="col-span-2 text-sm text-gray-700 sm:col-span-1">
+                    {m.name}
+                    <span className="ml-1 text-gray-400">({m.unit})</span>
+                  </span>
+                  <div className="sm:w-28">
+                    <span className="mb-1 block text-xs text-gray-400 sm:hidden">Avant</span>
+                    <NumberInput value={v.before} placeholder="—" onChange={(val) => onSetValue(m.id, "before", val)} />
+                  </div>
+                  <div className="sm:w-28">
+                    <span className="mb-1 block text-xs text-gray-400 sm:hidden">Après</span>
+                    <NumberInput value={v.after} placeholder="—" onChange={(val) => onSetValue(m.id, "after", val)} />
+                  </div>
+                </div>
+              );
+            })}
+          </fieldset>
+        ))
+      )}
 
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-gray-600">Observations libres</span>
         <textarea
           rows={4}
           maxLength={3000}
-          value={values.observations ?? ""}
-          onChange={(e) => set("observations", e.target.value || undefined)}
+          value={observations}
+          onChange={(e) => onSetObservations(e.target.value)}
           placeholder="Remarques posturales, asymétries observées…"
           className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
       </label>
 
-      {Object.keys(errors).length > 0 && (
-        <div className="rounded-md bg-red-50 p-3">
-          <p className="text-sm text-red-700">Veuillez corriger les champs en rouge avant de continuer.</p>
+      <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+        <Button variant="ghost" onClick={onBack}>← Étape précédente</Button>
+        <div className="flex justify-between gap-3 sm:justify-end">
+          <Button variant="secondary" onClick={onSaveDraft} loading={saving}>
+            Sauvegarder brouillon
+          </Button>
+          <Button onClick={onNext} loading={saving}>
+            Étape suivante →
+          </Button>
         </div>
-      )}
-
-      <div className="flex justify-between pt-2">
-        <Button variant="secondary" onClick={handleSaveDraft} loading={saving}>
-          Sauvegarder brouillon
-        </Button>
-        <Button onClick={handleNext} loading={saving}>
-          Étape suivante →
-        </Button>
       </div>
     </div>
   );

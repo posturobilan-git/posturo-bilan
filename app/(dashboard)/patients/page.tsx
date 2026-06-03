@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { PatientStatus } from "@prisma/client";
 import { getCurrentKine } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getPatients } from "@/actions/patient.actions";
@@ -8,22 +7,18 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PatientTable } from "@/components/patients/PatientTable";
 import { NewPatientButton } from "@/components/patients/NewPatientButton";
 import { SearchBar } from "@/components/patients/SearchBar";
-import { StatusFilter } from "@/components/patients/StatusFilter";
 
 interface Props {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ q?: string }>;
 }
 
 export default async function PatientsPage({ searchParams }: Props) {
   const kine = await getCurrentKine();
   if (!kine) redirect("/sign-in");
 
-  const { q, status } = await searchParams;
+  const { q } = await searchParams;
 
-  const patients = await getPatients({
-    search: q,
-    status: status as PatientStatus | undefined,
-  });
+  const patients = await getPatients({ search: q });
 
   // ADMIN can assign a new patient to any active kiné; KINE only ever creates
   // for themselves so the list is fetched lazily for admins only.
@@ -57,16 +52,13 @@ export default async function PatientsPage({ searchParams }: Props) {
             <SearchBar defaultValue={q} />
           </Suspense>
         </div>
-        <Suspense>
-          <StatusFilter defaultValue={status} />
-        </Suspense>
       </div>
 
       <PatientTable
         patients={patients}
         emptyMessage={
-          q || status
-            ? "Aucun patient ne correspond à ces filtres."
+          q
+            ? "Aucun patient ne correspond à cette recherche."
             : "Aucun patient pour le moment."
         }
       />

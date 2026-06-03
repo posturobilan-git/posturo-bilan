@@ -9,7 +9,7 @@ import path from "node:path";
  * The Blob store is PRIVATE: files are never publicly accessible. They are
  * served to authenticated kinés through the streaming route at
  * `/api/reports/[studyId]`, which calls `readReport()` below. The returned key
- * is what gets persisted on `PostureStudy.reportUrl`.
+ * is what gets persisted on `Study.reportUrl`.
  *
  * - Production / when BLOB_READ_WRITE_TOKEN is set → Vercel Blob (private, durable).
  * - Local dev without a Blob token → writes under `public/` (gitignored).

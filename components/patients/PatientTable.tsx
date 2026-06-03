@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { Badge } from "@/components/ui/Badge";
 import type { Patient, User } from "@prisma/client";
 
-type PatientRow = Patient & { kine: Pick<User, "name"> };
+type PatientRow = Patient & {
+  kine: Pick<User, "name">;
+  _count: { studies: number };
+};
 
 interface PatientTableProps {
   patients: PatientRow[];
@@ -11,6 +13,17 @@ interface PatientTableProps {
 
 function initials(first: string, last: string) {
   return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
+}
+
+function StudyCount({ count }: { count: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      {count} étude{count !== 1 ? "s" : ""}
+    </span>
+  );
 }
 
 export function PatientTable({ patients, emptyMessage = "Aucun patient trouvé." }: PatientTableProps) {
@@ -47,7 +60,7 @@ export function PatientTable({ patients, emptyMessage = "Aucun patient trouvé."
                   </div>
                   <div className="truncate text-sm text-content-muted">{p.email}</div>
                 </div>
-                <Badge status={p.status} />
+                <StudyCount count={p._count.studies} />
               </div>
               <div className="mt-3 flex items-center justify-between text-xs text-content-muted">
                 <span>{p.kine.name}</span>
@@ -73,7 +86,7 @@ export function PatientTable({ patients, emptyMessage = "Aucun patient trouvé."
               Date
             </th>
             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-content-subtle">
-              Statut
+              Études
             </th>
             <th className="relative px-6 py-3">
               <span className="sr-only">Voir</span>
@@ -103,7 +116,7 @@ export function PatientTable({ patients, emptyMessage = "Aucun patient trouvé."
                 {new Date(p.createdAt).toLocaleDateString("fr-FR")}
               </td>
               <td className="whitespace-nowrap px-6 py-3.5">
-                <Badge status={p.status} />
+                <StudyCount count={p._count.studies} />
               </td>
               <td className="whitespace-nowrap px-6 py-3.5 text-right text-sm font-medium">
                 <Link

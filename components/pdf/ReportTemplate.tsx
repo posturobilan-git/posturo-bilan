@@ -1,5 +1,12 @@
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
-import type { StudyForReport, StudyMeasures } from "@/types";
+import type { StudyForReport } from "@/types";
+
+export interface ReportMeasureRow {
+  name: string;
+  unit: string;
+  before: number | null;
+  after: number | null;
+}
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
@@ -43,6 +50,14 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", paddingVertical: 3, borderBottomWidth: 0.5, borderBottomColor: LIGHT },
   rowLabel: { width: "45%", color: GRAY },
   rowValue: { width: "55%", fontFamily: "Helvetica-Bold" },
+
+  // measures table (côte / avant / après)
+  tHead: { flexDirection: "row", backgroundColor: "#F3F4F6", paddingVertical: 4, paddingHorizontal: 6 },
+  tRow: { flexDirection: "row", paddingVertical: 4, paddingHorizontal: 6, borderBottomWidth: 0.5, borderBottomColor: LIGHT },
+  tColName: { width: "50%", color: DARK },
+  tColNameHead: { width: "50%", color: GRAY, fontSize: 9, textTransform: "uppercase" },
+  tColVal: { width: "25%", textAlign: "right", fontFamily: "Helvetica-Bold" },
+  tColValHead: { width: "25%", textAlign: "right", color: GRAY, fontSize: 9, textTransform: "uppercase" },
 
   // two-column grid
   grid: { flexDirection: "row", flexWrap: "wrap" },
@@ -146,10 +161,19 @@ function Cell({ label, value }: { label: string; value: string | number | null |
 
 // ─── Document ─────────────────────────────────────────────────────────────────
 
-export function ReportTemplate({ study }: { study: StudyForReport }) {
+function fmtVal(value: number | null, unit: string): string {
+  return value == null ? "—" : `${value} ${unit}`;
+}
+
+export function ReportTemplate({
+  study,
+  measureRows,
+}: {
+  study: StudyForReport;
+  measureRows: ReportMeasureRow[];
+}) {
   const { patient, kine } = study;
   const intake = patient.intake;
-  const m = study.measures as StudyMeasures;
   const studyDate = new Date(study.createdAt).toLocaleDateString("fr-FR", {
     day: "numeric",
     month: "long",
@@ -210,21 +234,27 @@ export function ReportTemplate({ study }: { study: StudyForReport }) {
       <Page size="A4" style={styles.page}>
         <Header tag="Mesures posturales" />
 
-        <Text style={styles.sectionTitle}>Mesures relevées</Text>
-        <KV label="Hauteur de selle" value={m.saddleHeight ? `${m.saddleHeight} cm` : null} />
-        <KV label="Recul de selle" value={m.saddleSetback != null ? `${m.saddleSetback} mm` : null} />
-        <KV label="Angle de selle" value={m.saddleAngle != null ? `${m.saddleAngle} °` : null} />
-        <KV label="Modèle de selle" value={m.saddleModel} />
-        <KV label="Hauteur de cintre" value={m.handlebarHeight ? `${m.handlebarHeight} cm` : null} />
-        <KV label="Longueur de potence" value={m.stemLength ? `${m.stemLength} mm` : null} />
-        <KV label="Angle de potence" value={m.stemAngle != null ? `${m.stemAngle} °` : null} />
-        <KV label="Largeur de cintre" value={m.handlebarWidth ? `${m.handlebarWidth} mm` : null} />
-        <KV label="Reach effectif" value={m.effectiveReach ? `${m.effectiveReach} mm` : null} />
-        <KV label="Angle du tronc" value={m.trunkAngle != null ? `${m.trunkAngle} °` : null} />
-        <KV label="Angle du genou" value={m.kneeAngle != null ? `${m.kneeAngle} °` : null} />
-        <KV label="Angle de cale" value={m.cleatAngle != null ? `${m.cleatAngle} °` : null} />
-        <KV label="Position de cale" value={m.cleatPosition} />
-        <KV label="Longueur de manivelles" value={m.crankLength ? `${m.crankLength} mm` : null} />
+        <KV label="Type de vélo" value={study.bikeType.name} />
+
+        <Text style={styles.sectionTitle}>Côtes relevées (avant / après)</Text>
+        {measureRows.length === 0 ? (
+          <Text style={styles.para}>Aucune côte renseignée.</Text>
+        ) : (
+          <>
+            <View style={styles.tHead}>
+              <Text style={styles.tColNameHead}>Côte</Text>
+              <Text style={styles.tColValHead}>Avant</Text>
+              <Text style={styles.tColValHead}>Après</Text>
+            </View>
+            {measureRows.map((r, i) => (
+              <View key={i} style={styles.tRow}>
+                <Text style={styles.tColName}>{r.name}</Text>
+                <Text style={styles.tColVal}>{fmtVal(r.before, r.unit)}</Text>
+                <Text style={styles.tColVal}>{fmtVal(r.after, r.unit)}</Text>
+              </View>
+            ))}
+          </>
+        )}
 
         {study.componentsUsed.length > 0 && (
           <>
@@ -239,10 +269,10 @@ export function ReportTemplate({ study }: { study: StudyForReport }) {
           </>
         )}
 
-        {m.observations && (
+        {study.observations && (
           <>
             <Text style={styles.sectionTitle}>Observations du kiné</Text>
-            <Text style={styles.para}>{m.observations}</Text>
+            <Text style={styles.para}>{study.observations}</Text>
           </>
         )}
 

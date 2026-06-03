@@ -1,10 +1,13 @@
+import type { StudyStep } from "@/lib/stores/studyStore";
+
 const STEPS = [
-  { n: 1, label: "Mesures" },
-  { n: 2, label: "Composants" },
-  { n: 3, label: "Exercices" },
+  { n: 1, label: "Vélo" },
+  { n: 2, label: "Mesures" },
+  { n: 3, label: "Composants" },
+  { n: 4, label: "Exercices" },
 ] as const;
 
-export function StudyStepper({ current }: { current: 1 | 2 | 3 }) {
+export function StudyStepper({ current }: { current: StudyStep }) {
   return (
     <nav aria-label="Étapes de l'étude" className="flex items-center gap-0">
       {STEPS.map(({ n, label }, i) => {

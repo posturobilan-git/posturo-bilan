@@ -18,7 +18,7 @@ export async function getMonthlyTrends(): Promise<MonthlyTrend[]> {
       TO_CHAR(DATE_TRUNC('month', s."createdAt"), 'YYYY-MM') as month,
       COUNT(DISTINCT s.id)::int as studies,
       COUNT(DISTINCT s."patientId")::int as patients
-    FROM "PostureStudy" s
+    FROM "Study" s
     WHERE s."createdAt" >= ${twelveMonthsAgo}
     GROUP BY DATE_TRUNC('month', s."createdAt")
     ORDER BY month ASC

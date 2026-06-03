@@ -36,24 +36,31 @@ Trigger: Calendly (nouveau RDV confirmé)
 
 ## Phase 4 — Suivi J+30
 
+> **Note (refacto multi-études) :** le statut du cycle de vie est désormais porté
+> par chaque **étude** (`Study.status`), plus par le patient. Un patient peut avoir
+> plusieurs études (un vélo = une étude). L'éligibilité au suivi J+30 se calcule
+> donc sur les études en statut `report_sent`.
+
 ```
 Trigger: Cron / Schedule
   │
-  ├── Condition: patient.status === "report_sent"
-  │             AND NOW() >= patient.reportSentAt + 30 jours
+  ├── Condition: study.status === "report_sent"
+  │             AND NOW() >= study.reportSentAt + 30 jours
   │
-  ├── Récupérer liste patients éligibles
+  ├── Récupérer liste études éligibles
   │     GET https://app.velobile.fr/api/followup/eligible
   │     (endpoint à créer — retourne les patientIds éligibles)
   │
-  ├── Pour chaque patient éligible:
+  ├── Pour chaque étude éligible:
   │     Envoyer email avec lien Google Form de suivi
-  │     Mettre status → followup_pending
+  │     Mettre study.status → followup_pending
   │
   └── On submit Google Form suivi:
         POST https://app.velobile.fr/api/followup/receive
         Headers: x-api-key: {{ $env.N8N_API_KEY }}
         Body: { patientId: "...", responses: {...formData} }
+        → l'app marque l'étude la plus récente (report_sent / followup_pending)
+          du patient en followup_completed
 ```
 
 **Champs Google Form suivi à créer :**

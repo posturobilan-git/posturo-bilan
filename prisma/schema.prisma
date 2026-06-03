@@ -16,9 +16,9 @@ enum Role {
   KINE
 }
 
-enum PatientStatus {
-  intake_pending
-  intake_completed
+// Le cycle de vie porte désormais sur l'étude (et non plus le patient) :
+// un patient peut avoir plusieurs études, chacune avec son propre statut.
+enum StudyStatus {
   study_pending
   study_completed
   report_sent
@@ -53,6 +53,16 @@ enum ExerciseCategory {
   AUTRE
 }
 
+enum MeasurementCategory {
+  SELLE
+  CINTRE
+  POTENCE
+  POSITION
+  CALE_PIEDS
+  MANIVELLES
+  AUTRE
+}
+
 // ─── MODELS ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -63,11 +73,13 @@ model User {
   role      Role     @default(PENDING)
   createdBy String?  // id du kiné admin qui a créé ce compte
 
-  patients   Patient[]
-  studies    PostureStudy[]
-  exercises  Exercise[]
-  components BikeComponent[]
-  auditLogs  AuditLog[]
+  patients     Patient[]
+  studies      Study[]
+  exercises    Exercise[]
+  components   BikeComponent[]
+  bikeTypes    BikeType[]
+  measurements Measurement[]
+  auditLogs    AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -86,20 +98,18 @@ model Patient {
   lastName        String
   phone           String?
   calendlyEventId String?
-  status          PatientStatus @default(intake_pending)
 
   // Données anonymisées (RGPD) — null si anonymisé
   isAnonymized    Boolean       @default(false)
 
   intake    PatientIntake?
-  studies   PostureStudy[]
+  studies   Study[]
   followups Followup[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([kineId])
-  @@index([status])
 }
 
 model PatientIntake {
@@ -129,15 +139,67 @@ model PatientIntake {
   submittedAt DateTime @default(now())
 }
 
-model PostureStudy {
+model BikeType {
+  id          String   @id @default(uuid())
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  name        String   // Route, VTT, Gravel, Triathlon...
+  isActive    Boolean  @default(true)
+
+  studies      Study[]
+  measurements Measurement[] @relation("BikeTypeMeasurements")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+}
+
+// Une "côte" : mesure relevée pendant une étude. Tronc commun (isCommon) ou
+// spécifique à un/plusieurs types de vélo. Gérée par l'admin (CRUD).
+model Measurement {
+  id          String   @id @default(uuid())
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  name        String              // "Hauteur de selle", "Recul de selle"...
+  unit        String              // "cm", "mm", "°"
+  category    MeasurementCategory @default(AUTRE)
+  order       Int                 @default(0) // ordre d'affichage
+  isCommon    Boolean             @default(false) // tronc commun (tous les vélos)
+  isActive    Boolean             @default(true)
+
+  // Si non commune, liée à un ou plusieurs types de vélo
+  bikeTypes   BikeType[] @relation("BikeTypeMeasurements")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+}
+
+model Study {
   id        String  @id @default(uuid())
   patientId String
   patient   Patient @relation(fields: [patientId], references: [id])
   kineId    String
   kine      User    @relation(fields: [kineId], references: [id])
 
-  // Mesures (stockées en JSON pour flexibilité)
-  measures  Json    // voir StudyMeasures type dans types/index.ts
+  // Type de vélo étudié (un patient peut avoir plusieurs études / vélos)
+  bikeTypeId String
+  bikeType   BikeType @relation(fields: [bikeTypeId], references: [id])
+
+  // Statut du cycle de vie de cette étude
+  status    StudyStatus @default(study_pending)
+
+  // Valeurs des côtes saisies pour cette étude : avant/après par côte.
+  // Tableau de { measurementId, before, after } — voir StudyMeasureValue.
+  measureValues Json @default("[]")
+
+  // Ancien format de mesures à champs fixes (legacy, conservé pour les études
+  // antérieures à la refacto des côtes dynamiques). Plus alimenté.
+  measures  Json?
 
   // Liens vers bibliothèque
   componentsUsed       BikeComponent[] @relation("StudyComponents")
@@ -154,6 +216,8 @@ model PostureStudy {
 
   @@index([patientId])
   @@index([kineId])
+  @@index([bikeTypeId])
+  @@index([status])
 }
 
 model Followup {
@@ -195,7 +259,7 @@ model Exercise {
   mediaUrl    String?          // lien vidéo ou image explicative
   isActive    Boolean          @default(true)
 
-  studies     PostureStudy[]   @relation("StudyExercises")
+  studies     Study[]          @relation("StudyExercises")
 
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
@@ -215,7 +279,7 @@ model BikeComponent {
   notes       String?
   isActive    Boolean           @default(true)
 
-  studies     PostureStudy[]    @relation("StudyComponents")
+  studies     Study[]           @relation("StudyComponents")
 
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt

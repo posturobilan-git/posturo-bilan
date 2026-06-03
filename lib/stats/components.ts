@@ -43,7 +43,7 @@ export async function getComponentStats(): Promise<ComponentStats> {
 
     // Studies created this month + their components → aggregate in JS,
     // avoiding fragile raw queries against the implicit join table.
-    prisma.postureStudy.findMany({
+    prisma.study.findMany({
       where: { createdAt: { gte: startOfMonth } },
       select: { componentsUsed: { select: { id: true, name: true, brand: true } } },
     }),

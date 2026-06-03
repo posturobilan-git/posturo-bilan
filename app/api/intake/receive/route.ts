@@ -36,11 +36,9 @@ export async function POST(req: NextRequest) {
         phone: data.patient.phone,
         calendlyEventId: data.calendlyEventId,
         kineId: data.kineId,
-        status: "intake_completed",
         intake: { create: intakeData },
       },
       update: {
-        status: "intake_completed",
         intake: { upsert: { create: intakeData, update: intakeData } },
       },
     });

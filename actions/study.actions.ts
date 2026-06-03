@@ -6,10 +6,26 @@ import { studySchema } from "@/lib/validations/study.schema";
 import { logAudit } from "@/lib/audit";
 import { requireKine } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
-import type { Prisma, PatientStatus } from "@prisma/client";
+import { Prisma, StudyStatus } from "@prisma/client";
+import type { StudyListItem } from "@/types";
 import { z } from "zod";
 
 type StudyInput = z.infer<typeof studySchema>;
+
+// ─── State machine (now per-study) ──────────────────────────────────────────────
+
+const VALID_TRANSITIONS: Record<StudyStatus, StudyStatus | null> = {
+  study_pending: "study_completed",
+  study_completed: "report_sent",
+  report_sent: "followup_pending",
+  followup_pending: "followup_completed",
+  followup_completed: null,
+};
+
+// Statuses that should move forward to study_completed when a study is finalised.
+// report_sent is included so that re-submitting an edited study (whose report
+// was just invalidated) drops back to study_completed.
+const ADVANCE_ON_SUBMIT: StudyStatus[] = ["study_pending", "report_sent"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -20,23 +36,13 @@ function buildRelations(componentIds: string[], exerciseIds: string[]) {
   };
 }
 
-// Statuses that should move forward to study_completed when a study is
-// finalised. report_sent is included so that re-submitting an edited study
-// (whose report was just invalidated) drops back to study_completed.
-const NEEDS_ADVANCE: PatientStatus[] = [
-  "intake_pending",
-  "intake_completed",
-  "study_pending",
-  "report_sent",
-];
-
 /**
  * When an already-reported study is edited, the sent report is stale, so the
- * patient drops back from report_sent to study_completed. No-op otherwise.
+ * study drops back from report_sent to study_completed. No-op otherwise.
  */
-async function revertReportStatus(patientId: string) {
-  await prisma.patient.updateMany({
-    where: { id: patientId, status: "report_sent" },
+async function revertReportStatus(studyId: string) {
+  await prisma.study.updateMany({
+    where: { id: studyId, status: "report_sent" },
     data: { status: "study_completed" },
   });
 }
@@ -46,20 +52,49 @@ async function revertReportStatus(patientId: string) {
 export async function getStudy(id: string) {
   const kine = await requireKine();
 
-  return prisma.postureStudy.findUnique({
+  return prisma.study.findUnique({
     where: {
       id,
       ...(kine.role !== "ADMIN" && { kineId: kine.id }),
     },
-    include: { componentsUsed: true, exercisesPrescribed: true },
+    include: { bikeType: true, componentsUsed: true, exercisesPrescribed: true },
+  });
+}
+
+/** Shared write payload for a study's côtes + free-text observations. */
+function studyDataFrom(validated: StudyInput) {
+  return {
+    bikeTypeId: validated.bikeTypeId,
+    measureValues: validated.measureValues as Prisma.InputJsonValue,
+    observations: validated.observations ?? null,
+  };
+}
+
+/** All studies across patients, scoped to the kiné (ADMIN sees everything). */
+export async function getStudies(filters?: {
+  status?: StudyStatus;
+}): Promise<StudyListItem[]> {
+  const kine = await requireKine();
+
+  return prisma.study.findMany({
+    where: {
+      ...(kine.role !== "ADMIN" && { kineId: kine.id }),
+      ...(filters?.status && { status: filters.status }),
+    },
+    include: {
+      bikeType: true,
+      patient: { select: { id: true, firstName: true, lastName: true, isAnonymized: true } },
+      kine: { select: { name: true } },
+    },
+    orderBy: { createdAt: "desc" },
   });
 }
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 /**
- * Saves progress without advancing patient status.
- * Creates a new PostureStudy if no draftStudyId, otherwise updates.
+ * Saves progress without finalising the study.
+ * Creates a new Study (status study_pending) if no draftStudyId, otherwise updates.
  */
 export async function saveDraftStudy(
   data: StudyInput
@@ -73,24 +108,24 @@ export async function saveDraftStudy(
 
     if (validated.draftStudyId) {
       // Editing an existing study invalidates any previously generated report.
-      await prisma.postureStudy.update({
+      await prisma.study.update({
         where: { id: validated.draftStudyId },
         data: {
-          measures: validated.measures as Prisma.InputJsonValue,
+          ...studyDataFrom(validated),
           ...buildRelations(validated.componentIds, validated.exerciseIds),
           reportUrl: null,
           reportSentAt: null,
         },
       });
-      await revertReportStatus(validated.patientId);
+      await revertReportStatus(validated.draftStudyId);
       return ok({ studyId: validated.draftStudyId });
     }
 
-    const study = await prisma.postureStudy.create({
+    const study = await prisma.study.create({
       data: {
         patientId: validated.patientId,
         kineId: kine.id,
-        measures: validated.measures as Prisma.InputJsonValue,
+        ...studyDataFrom(validated),
         componentsUsed: { connect: validated.componentIds.map((id) => ({ id })) },
         exercisesPrescribed: { connect: validated.exerciseIds.map((id) => ({ id })) },
       },
@@ -105,8 +140,8 @@ export async function saveDraftStudy(
 }
 
 /**
- * Finalises the study and advances patient status to study_completed
- * (only if the patient hasn't already moved past that stage).
+ * Finalises the study and advances its status to study_completed
+ * (only if it hasn't already moved past that stage).
  */
 export async function submitStudy(
   data: StudyInput
@@ -115,21 +150,16 @@ export async function submitStudy(
   if (!parsed.success) return fail(formatZodError(parsed.error));
   const validated = parsed.data;
 
-  // Require at least the core measures before finalising.
-  if (validated.measures.saddleHeight == null || validated.measures.saddleSetback == null) {
-    return fail("Hauteur et recul de selle sont requis pour soumettre l'étude.");
-  }
-
   try {
     const kine = await requireKine();
     let studyId: string;
 
     if (validated.draftStudyId) {
       // Editing an existing study invalidates any previously generated report.
-      await prisma.postureStudy.update({
+      await prisma.study.update({
         where: { id: validated.draftStudyId },
         data: {
-          measures: validated.measures as Prisma.InputJsonValue,
+          ...studyDataFrom(validated),
           ...buildRelations(validated.componentIds, validated.exerciseIds),
           reportUrl: null,
           reportSentAt: null,
@@ -137,11 +167,11 @@ export async function submitStudy(
       });
       studyId = validated.draftStudyId;
     } else {
-      const study = await prisma.postureStudy.create({
+      const study = await prisma.study.create({
         data: {
           patientId: validated.patientId,
           kineId: kine.id,
-          measures: validated.measures as Prisma.InputJsonValue,
+          ...studyDataFrom(validated),
           componentsUsed: { connect: validated.componentIds.map((id) => ({ id })) },
           exercisesPrescribed: { connect: validated.exerciseIds.map((id) => ({ id })) },
         },
@@ -149,30 +179,66 @@ export async function submitStudy(
       studyId = study.id;
     }
 
-    // Advance status only if the patient is still at/before study stage.
-    const current = await prisma.patient.findUnique({
-      where: { id: validated.patientId },
-      select: { status: true },
+    // Advance the study to study_completed only if it's still at/before that stage.
+    await prisma.study.updateMany({
+      where: { id: studyId, status: { in: ADVANCE_ON_SUBMIT } },
+      data: { status: "study_completed" },
     });
-    if (current && NEEDS_ADVANCE.includes(current.status)) {
-      await prisma.patient.update({
-        where: { id: validated.patientId },
-        data: { status: "study_completed" },
-      });
-    }
 
     await logAudit({
       userId: kine.id,
       action: "UPDATE",
       entity: "study",
       entityId: studyId,
-      metadata: { submitted: true, fromStatus: current?.status },
+      metadata: { submitted: true },
     });
 
     revalidatePath(`/patients/${validated.patientId}`);
+    revalidatePath("/etudes");
     return ok({ studyId });
   } catch (e) {
     console.error("submitStudy failed:", e);
     return fail("Impossible de soumettre l'étude. Réessayez.");
   }
+}
+
+/**
+ * Canonical state-machine transition for a study status. Enforces strict
+ * sequential transitions (study_pending → … → followup_completed).
+ */
+export async function updateStudyStatus(studyId: string, newStatus: StudyStatus) {
+  const kine = await requireKine();
+
+  const current = await prisma.study.findUnique({
+    where: {
+      id: studyId,
+      ...(kine.role !== "ADMIN" && { kineId: kine.id }),
+    },
+    select: { status: true, patientId: true },
+  });
+
+  if (!current) throw new Error("Étude introuvable");
+
+  const allowed = VALID_TRANSITIONS[current.status];
+  if (allowed !== newStatus) {
+    throw new Error(
+      `Transition invalide : ${current.status} → ${newStatus}. Attendu : ${allowed ?? "aucun"}`
+    );
+  }
+
+  const study = await prisma.study.update({
+    where: { id: studyId },
+    data: { status: newStatus },
+  });
+
+  await logAudit({
+    userId: kine.id,
+    action: "UPDATE",
+    entity: "study",
+    entityId: studyId,
+    metadata: { from: current.status, to: newStatus },
+  });
+  revalidatePath(`/patients/${current.patientId}`);
+  revalidatePath("/etudes");
+  return study;
 }

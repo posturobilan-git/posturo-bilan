@@ -42,8 +42,8 @@ Reçoit les données patient après soumission du formulaire Google Form (Phase 
 
 **Comportement :**
 - Upsert du patient (email comme clé de déduplication)
-- Création du `PatientIntake` associé
-- Mise à jour du statut → `intake_completed`
+- Création / mise à jour du `PatientIntake` associé
+- Le patient n'a plus de statut : le cycle de vie est porté par les études
 - Réponse `{ success: true, patientId: "uuid" }`
 
 ---
@@ -73,7 +73,8 @@ Reçoit les réponses au formulaire de suivi J+30 (Phase 4).
 
 **Comportement :**
 - Création d'un `Followup` lié au patient
-- Mise à jour du statut → `followup_completed`
+- L'étude la plus récente du patient en `report_sent` / `followup_pending` passe
+  en `followup_completed`
 - Réponse `{ success: true, followupId: "uuid" }`
 
 ---
@@ -112,11 +113,13 @@ Ces fonctions sont appelées depuis les composants React. Elles ne sont pas des 
 | Action | Fichier | Description |
 |--------|---------|-------------|
 | `createPatient` | `patient.actions.ts` | Créer un patient manuellement |
-| `updatePatientStatus` | `patient.actions.ts` | Changer le statut pipeline |
-| `submitStudy` | `study.actions.ts` | Soumettre le formulaire d'étude |
-| `generateReport` | `report.actions.ts` | Générer PDF + envoyer par email |
+| `getStudies` | `study.actions.ts` | Lister toutes les études (vue `/etudes`) |
+| `submitStudy` | `study.actions.ts` | Soumettre le formulaire d'étude (avance `study_completed`) |
+| `updateStudyStatus` | `study.actions.ts` | Transition stricte du statut d'une étude |
+| `generateReport` / `sendReport` | `report.actions.ts` | Générer le PDF / l'envoyer (avance `report_sent`) |
 | `createExercise` | `exercise.actions.ts` | Créer un exercice (ADMIN) |
 | `createComponent` | `component.actions.ts` | Créer un composant (ADMIN) |
+| `createBikeType` | `bikeType.actions.ts` | Créer un type de vélo (ADMIN) |
 
 ---
 

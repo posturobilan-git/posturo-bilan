@@ -11,29 +11,16 @@ import {
 import { logAudit } from "@/lib/audit";
 import { requireKine, requirePatientOwnership } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
-import { Prisma, PatientStatus, type Patient } from "@prisma/client";
-
-// ─── State machine ────────────────────────────────────────────────────────────
-
-const VALID_TRANSITIONS: Record<PatientStatus, PatientStatus | null> = {
-  intake_pending: "intake_completed",
-  intake_completed: "study_pending",
-  study_pending: "study_completed",
-  study_completed: "report_sent",
-  report_sent: "followup_pending",
-  followup_pending: "followup_completed",
-  followup_completed: null,
-};
+import { Prisma, type Patient } from "@prisma/client";
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
-export async function getPatients(filters?: { search?: string; status?: PatientStatus }) {
+export async function getPatients(filters?: { search?: string }) {
   const kine = await requireKine();
 
   return prisma.patient.findMany({
     where: {
       ...(kine.role !== "ADMIN" && { kineId: kine.id }),
-      ...(filters?.status && { status: filters.status }),
       ...(filters?.search && {
         OR: [
           { firstName: { contains: filters.search, mode: "insensitive" } },
@@ -42,7 +29,7 @@ export async function getPatients(filters?: { search?: string; status?: PatientS
         ],
       }),
     },
-    include: { kine: { select: { name: true } } },
+    include: { kine: { select: { name: true } }, _count: { select: { studies: true } } },
     orderBy: { createdAt: "desc" },
   });
 }
@@ -59,7 +46,7 @@ export async function getPatientDossier(id: string) {
       kine: { select: { name: true } },
       intake: true,
       studies: {
-        include: { componentsUsed: true, exercisesPrescribed: true },
+        include: { bikeType: true, componentsUsed: true, exercisesPrescribed: true },
         orderBy: { createdAt: "desc" },
       },
       followups: { orderBy: { submittedAt: "asc" } },
@@ -102,7 +89,7 @@ export async function createPatient(
     }
 
     const patient = await prisma.patient.create({
-      data: { ...fields, kineId: assignedKineId, status: "intake_pending" },
+      data: { ...fields, kineId: assignedKineId },
     });
 
     await logAudit({ userId: kine.id, action: "CREATE", entity: "patient", entityId: patient.id });
@@ -159,7 +146,7 @@ export async function deletePatient(patientId: string): Promise<ActionResult<voi
 
     // Bloquer la suppression si une étude posturale existe — les données
     // cliniques ne doivent pas être perdues. Orienter vers l'anonymisation RGPD.
-    const studyCount = await prisma.postureStudy.count({ where: { patientId } });
+    const studyCount = await prisma.study.count({ where: { patientId } });
     if (studyCount > 0) {
       return fail(
         `Impossible de supprimer ce patient — ${studyCount} étude(s) posturale(s) associée(s). Utilisez l'anonymisation RGPD à la place.`
@@ -188,41 +175,4 @@ export async function deletePatient(patientId: string): Promise<ActionResult<voi
     console.error("deletePatient failed:", e);
     return fail("Impossible de supprimer le patient. Réessayez.");
   }
-}
-
-export async function updatePatientStatus(patientId: string, newStatus: PatientStatus) {
-  const kine = await requireKine();
-
-  const current = await prisma.patient.findUnique({
-    where: {
-      id: patientId,
-      ...(kine.role !== "ADMIN" && { kineId: kine.id }),
-    },
-    select: { status: true },
-  });
-
-  if (!current) throw new Error("Patient introuvable");
-
-  const allowed = VALID_TRANSITIONS[current.status];
-  if (allowed !== newStatus) {
-    throw new Error(
-      `Transition invalide : ${current.status} → ${newStatus}. Attendu : ${allowed ?? "aucun"}`
-    );
-  }
-
-  const patient = await prisma.patient.update({
-    where: { id: patientId },
-    data: { status: newStatus },
-  });
-
-  await logAudit({
-    userId: kine.id,
-    action: "UPDATE",
-    entity: "patient",
-    entityId: patientId,
-    metadata: { from: current.status, to: newStatus },
-  });
-  revalidatePath("/patients");
-  revalidatePath(`/patients/${patientId}`);
-  return patient;
 }

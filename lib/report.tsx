@@ -5,10 +5,10 @@ import { getResend } from "@/lib/email";
 import { storePdf } from "@/lib/storage";
 import { logAudit } from "@/lib/audit";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
-import { ReportTemplate } from "@/components/pdf/ReportTemplate";
+import { ReportTemplate, type ReportMeasureRow } from "@/components/pdf/ReportTemplate";
 import { ReportEmail } from "@/lib/emails/ReportEmail";
 import { isLocalEnv } from "@/lib/env";
-import type { StudyForReport } from "@/types";
+import type { StudyForReport, StudyMeasureValue } from "@/types";
 
 const CABINET = process.env.CABINET_NAME || "PosturoBilan";
 const FROM = process.env.RESEND_FROM_EMAIL || "PosturoBilan <onboarding@resend.dev>";
@@ -20,15 +20,34 @@ function buildAdjustments(study: StudyForReport): string[] {
 }
 
 async function fetchStudyForReport(studyId: string): Promise<StudyForReport | null> {
-  return (await prisma.postureStudy.findUnique({
+  return (await prisma.study.findUnique({
     where: { id: studyId },
     include: {
+      bikeType: true,
       componentsUsed: true,
       exercisesPrescribed: true,
       kine: true,
       patient: { include: { intake: true } },
     },
   })) as StudyForReport | null;
+}
+
+/** Resolves a study's stored côte values into labelled before/after rows. */
+async function buildMeasureRows(study: StudyForReport): Promise<ReportMeasureRow[]> {
+  const values = (study.measureValues as StudyMeasureValue[] | null) ?? [];
+  if (values.length === 0) return [];
+
+  const measurements = await prisma.measurement.findMany({
+    where: { id: { in: values.map((v) => v.measurementId) } },
+    select: { id: true, name: true, unit: true, order: true },
+  });
+  const byId = new Map(measurements.map((m) => [m.id, m]));
+
+  return values
+    .map((v) => ({ v, m: byId.get(v.measurementId) }))
+    .filter((r): r is { v: StudyMeasureValue; m: (typeof measurements)[number] } => Boolean(r.m))
+    .sort((a, b) => a.m.order - b.m.order || a.m.name.localeCompare(b.m.name))
+    .map(({ v, m }) => ({ name: m.name, unit: m.unit, before: v.before ?? null, after: v.after ?? null }));
 }
 
 // ─── Generate ─────────────────────────────────────────────────────────────────
@@ -54,10 +73,11 @@ export async function generateReportForStudy(
   }
 
   try {
-    const pdfBuffer = await renderToBuffer(<ReportTemplate study={study} />);
+    const measureRows = await buildMeasureRows(study);
+    const pdfBuffer = await renderToBuffer(<ReportTemplate study={study} measureRows={measureRows} />);
     const url = await storePdf(`reports/${studyId}.pdf`, pdfBuffer);
 
-    await prisma.postureStudy.update({
+    await prisma.study.update({
       where: { id: studyId },
       data: { reportUrl: url },
     });
@@ -81,7 +101,7 @@ export async function generateReportForStudy(
 
 /**
  * Emails the (already generated) report to the patient and advances the
- * patient to report_sent. Requires the report to have been generated first.
+ * study to report_sent. Requires the report to have been generated first.
  */
 export async function sendReportForStudy(
   studyId: string,
@@ -107,7 +127,8 @@ export async function sendReportForStudy(
   try {
     // Re-render for the email attachment (current data == generated data,
     // since editing the study resets the report).
-    const pdfBuffer = await renderToBuffer(<ReportTemplate study={study} />);
+    const measureRows = await buildMeasureRows(study);
+    const pdfBuffer = await renderToBuffer(<ReportTemplate study={study} measureRows={measureRows} />);
 
     let emailed = false;
     if (canEmail) {
@@ -136,17 +157,17 @@ export async function sendReportForStudy(
       console.warn(`[report] Email skipped (RESEND_API_KEY unset). Report at ${study.reportUrl}`);
     }
 
-    await prisma.postureStudy.update({
+    await prisma.study.update({
       where: { id: studyId },
       data: { reportSentAt: new Date() },
     });
 
-    if (study.patient.status === "study_completed") {
-      await prisma.patient.update({
-        where: { id: study.patientId },
-        data: { status: "report_sent" },
-      });
-    }
+    // Advance the study to report_sent (only from study_completed — never
+    // downgrade a study already in the follow-up phase).
+    await prisma.study.updateMany({
+      where: { id: studyId, status: "study_completed" },
+      data: { status: "report_sent" },
+    });
 
     await logAudit({
       userId: actorId,
