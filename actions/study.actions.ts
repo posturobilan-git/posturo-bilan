@@ -9,6 +9,8 @@ import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result
 import { deleteReport } from "@/lib/storage";
 import { Prisma, StudyStatus } from "@prisma/client";
 import type { StudyListItem } from "@/types";
+import type { ListResult, PageQuery, SortDir } from "@/lib/pagination";
+import { toSkipTake } from "@/lib/pagination";
 import { z } from "zod";
 
 type StudyInput = z.infer<typeof studySchema>;
@@ -71,24 +73,55 @@ function studyDataFrom(validated: StudyInput) {
   };
 }
 
+function studyOrderBy(sort: string, dir: SortDir): Prisma.StudyOrderByWithRelationInput {
+  switch (sort) {
+    case "status":
+      return { status: dir };
+    case "patient":
+      return { patient: { lastName: dir } };
+    case "createdAt":
+    default:
+      return { createdAt: dir };
+  }
+}
+
 /** All studies across patients, scoped to the kiné (ADMIN sees everything). */
 export async function getStudies(filters?: {
   status?: StudyStatus;
-}): Promise<StudyListItem[]> {
+  search?: string;
+  page?: PageQuery;
+}): Promise<ListResult<StudyListItem>> {
   const kine = await requireKine();
 
-  return prisma.study.findMany({
-    where: {
-      ...(kine.role !== "ADMIN" && { kineId: kine.id }),
-      ...(filters?.status && { status: filters.status }),
-    },
-    include: {
-      bikeType: true,
-      patient: { select: { id: true, firstName: true, lastName: true, isAnonymized: true } },
-      kine: { select: { name: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const where: Prisma.StudyWhereInput = {
+    ...(kine.role !== "ADMIN" && { kineId: kine.id }),
+    ...(filters?.status && { status: filters.status }),
+    ...(filters?.search && {
+      patient: {
+        OR: [
+          { firstName: { contains: filters.search, mode: "insensitive" } },
+          { lastName: { contains: filters.search, mode: "insensitive" } },
+        ],
+      },
+    }),
+  };
+
+  const page = filters?.page;
+  const [items, total] = await Promise.all([
+    prisma.study.findMany({
+      where,
+      include: {
+        bikeType: true,
+        patient: { select: { id: true, firstName: true, lastName: true, isAnonymized: true } },
+        kine: { select: { name: true } },
+      },
+      orderBy: page ? studyOrderBy(page.sort, page.dir) : { createdAt: "desc" },
+      ...(page ? toSkipTake(page) : {}),
+    }),
+    prisma.study.count({ where }),
+  ]);
+
+  return { items, total };
 }
 
 // ─── Mutations ────────────────────────────────────────────────────────────────

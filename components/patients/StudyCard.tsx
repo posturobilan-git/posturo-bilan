@@ -23,11 +23,11 @@ export function StudyCard({
   measurementsById: Record<string, MeasurementInfo>;
 }) {
   const values = (study.measureValues as StudyMeasureValue[] | null) ?? [];
-  // Keep only côtes we can label, ordered by the measurement's display order.
+  // Keep only côtes we can label, ordered alphabetically by name.
   const rows = values
     .map((v) => ({ value: v, info: measurementsById[v.measurementId] }))
     .filter((r): r is { value: StudyMeasureValue; info: MeasurementInfo } => Boolean(r.info))
-    .sort((a, b) => a.info.order - b.info.order || a.info.name.localeCompare(b.info.name));
+    .sort((a, b) => a.info.name.localeCompare(b.info.name));
   // Reports can be generated/sent once the study is finalised.
   const reportable = study.status !== "study_pending";
 

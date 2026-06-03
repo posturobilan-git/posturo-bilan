@@ -7,33 +7,52 @@ import { requireKine, requireAdmin } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { exerciseSchema } from "@/lib/validations/exercise.schema";
 import { ExerciseCategory, Prisma, type Exercise } from "@prisma/client";
+import type { ListResult, PageQuery, SortDir } from "@/lib/pagination";
+import { toSkipTake } from "@/lib/pagination";
 import { z } from "zod";
 
 export type ExerciseWithCount = Exercise & { _count: { studies: number } };
 
 // ─── Query ────────────────────────────────────────────────────────────────────
 
+function exerciseOrderBy(sort: string, dir: SortDir): Prisma.ExerciseOrderByWithRelationInput[] {
+  const primary: Prisma.ExerciseOrderByWithRelationInput =
+    sort === "createdAt" ? { createdAt: dir } : { name: dir };
+  // Keep deactivated items at the bottom of the admin library regardless of sort.
+  return [{ isActive: "desc" }, primary];
+}
+
 export async function getExercises(filters?: {
   search?: string;
   category?: ExerciseCategory;
-}): Promise<ExerciseWithCount[]> {
+  page?: PageQuery;
+}): Promise<ListResult<ExerciseWithCount>> {
   const kine = await requireKine();
 
-  return prisma.exercise.findMany({
-    where: {
-      // Non-admins only see the active library.
-      ...(kine.role !== "ADMIN" && { isActive: true }),
-      ...(filters?.category && { category: filters.category }),
-      ...(filters?.search && {
-        OR: [
-          { name: { contains: filters.search, mode: "insensitive" } },
-          { description: { contains: filters.search, mode: "insensitive" } },
-        ],
-      }),
-    },
-    include: { _count: { select: { studies: true } } },
-    orderBy: [{ isActive: "desc" }, { name: "asc" }],
-  });
+  const where: Prisma.ExerciseWhereInput = {
+    // Non-admins only see the active library.
+    ...(kine.role !== "ADMIN" && { isActive: true }),
+    ...(filters?.category && { category: filters.category }),
+    ...(filters?.search && {
+      OR: [
+        { name: { contains: filters.search, mode: "insensitive" } },
+        { description: { contains: filters.search, mode: "insensitive" } },
+      ],
+    }),
+  };
+
+  const page = filters?.page;
+  const [items, total] = await Promise.all([
+    prisma.exercise.findMany({
+      where,
+      include: { _count: { select: { studies: true } } },
+      orderBy: page ? exerciseOrderBy(page.sort, page.dir) : [{ isActive: "desc" }, { name: "asc" }],
+      ...(page ? toSkipTake(page) : {}),
+    }),
+    prisma.exercise.count({ where }),
+  ]);
+
+  return { items, total };
 }
 
 // ─── Mutations (ADMIN only) ─────────────────────────────────────────────────────

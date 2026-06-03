@@ -147,9 +147,9 @@ model BikeType {
   name        String   // Route, VTT, Gravel, Triathlon...
   isActive    Boolean  @default(true)
 
-  studies      Study[]
-  measurements Measurement[]   @relation("BikeTypeMeasurements")
-  components   BikeComponent[] @relation("BikeTypeComponents")
+  studies          Study[]
+  measurementLinks BikeTypeMeasurement[]
+  components        BikeComponent[]       @relation("BikeTypeComponents")
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -167,17 +167,33 @@ model Measurement {
   name        String              // "Hauteur de selle", "Recul de selle"...
   unit        String              // "cm", "mm", "°"
   category    MeasurementCategory @default(AUTRE)
-  order       Int                 @default(0) // ordre d'affichage
   isCommon    Boolean             @default(false) // tronc commun (tous les vélos)
   isActive    Boolean             @default(true)
 
-  // Si non commune, liée à un ou plusieurs types de vélo
-  bikeTypes   BikeType[] @relation("BikeTypeMeasurements")
+  // Si non commune, liée à un ou plusieurs types de vélo via la table de
+  // configuration (qui porte aussi l'ordre d'affichage propre à chaque vélo).
+  bikeTypeLinks BikeTypeMeasurement[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([createdById])
+}
+
+// Configuration d'une étude par type de vélo : quelles côtes (non communes) sont
+// relevées pour ce vélo, et dans quel ordre elles s'affichent dans le formulaire.
+// Le tronc commun (Measurement.isCommon) s'applique à tous les vélos sans lien
+// explicite. L'ordre remplace l'ancien champ global `Measurement.order`.
+model BikeTypeMeasurement {
+  bikeTypeId    String
+  bikeType      BikeType    @relation(fields: [bikeTypeId], references: [id], onDelete: Cascade)
+  measurementId String
+  measurement   Measurement @relation(fields: [measurementId], references: [id], onDelete: Cascade)
+
+  order Int @default(0) // ordre d'affichage de cette côte pour ce type de vélo
+
+  @@id([bikeTypeId, measurementId])
+  @@index([measurementId])
 }
 
 model Study {

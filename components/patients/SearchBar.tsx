@@ -3,7 +3,13 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
-export function SearchBar({ defaultValue = "" }: { defaultValue?: string }) {
+export function SearchBar({
+  defaultValue = "",
+  placeholder = "Rechercher…",
+}: {
+  defaultValue?: string;
+  placeholder?: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -17,6 +23,8 @@ export function SearchBar({ defaultValue = "" }: { defaultValue?: string }) {
     } else {
       params.delete("q");
     }
+    // Any new search resets pagination back to the first page.
+    params.delete("page");
     startTransition(() => router.replace(`${pathname}?${params.toString()}`));
   }
 
@@ -39,7 +47,7 @@ export function SearchBar({ defaultValue = "" }: { defaultValue?: string }) {
         type="search"
         defaultValue={defaultValue}
         onChange={handleChange}
-        placeholder="Rechercher par nom ou email…"
+        placeholder={placeholder}
         className="h-10 w-full rounded-lg border border-border-strong bg-surface pl-9 pr-4 text-sm text-content shadow-xs placeholder:text-content-subtle focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
       />
     </div>

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { Patient, User } from "@prisma/client";
+import { SortableHeader } from "@/components/ui/SortableHeader";
+import type { SortDir } from "@/lib/pagination";
 
 type PatientRow = Patient & {
   kine: Pick<User, "name">;
@@ -8,6 +10,8 @@ type PatientRow = Patient & {
 
 interface PatientTableProps {
   patients: PatientRow[];
+  sort?: string;
+  dir?: SortDir;
   emptyMessage?: string;
 }
 
@@ -26,7 +30,12 @@ function StudyCount({ count }: { count: number }) {
   );
 }
 
-export function PatientTable({ patients, emptyMessage = "Aucun patient trouvé." }: PatientTableProps) {
+export function PatientTable({
+  patients,
+  sort = "createdAt",
+  dir = "desc",
+  emptyMessage = "Aucun patient trouvé.",
+}: PatientTableProps) {
   if (patients.length === 0) {
     return (
       <div className="flex flex-col items-center rounded-xl border border-dashed border-border-strong bg-surface py-16 text-center">
@@ -76,15 +85,11 @@ export function PatientTable({ patients, emptyMessage = "Aucun patient trouvé."
         <table className="min-w-full">
         <thead>
           <tr className="border-b border-border bg-surface-muted">
-            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-content-subtle">
-              Patient
-            </th>
+            <SortableHeader field="name" label="Patient" activeSort={sort} activeDir={dir} />
             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-content-subtle">
               Kiné
             </th>
-            <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-content-subtle">
-              Date
-            </th>
+            <SortableHeader field="createdAt" label="Date" activeSort={sort} activeDir={dir} />
             <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-content-subtle">
               Études
             </th>

@@ -1,10 +1,11 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
-import { MEASUREMENT_CATEGORY_LABELS } from "@/lib/labels";
-import type { Measurement, MeasurementCategory } from "@prisma/client";
+import type { Measurement } from "@prisma/client";
 
-export type MeasurementForStudy = Measurement & { bikeTypes: { id: string }[] };
+export type MeasurementForStudy = Measurement & {
+  bikeTypeLinks: { bikeTypeId: string; order: number }[];
+};
 
 interface MeasureValue {
   before: number | null;
@@ -60,18 +61,23 @@ export function MeasuresForm({
   onSaveDraft,
   saving,
 }: Props) {
-  // Côtes applicables : tronc commun + celles liées au vélo sélectionné.
-  const applicable = measurements.filter(
-    (m) => m.isCommon || (bikeTypeId != null && m.bikeTypes.some((b) => b.id === bikeTypeId))
-  );
-
-  // Regroupées par catégorie pour l'affichage (déjà triées par `order`).
-  const byCategory = new Map<MeasurementCategory, MeasurementForStudy[]>();
-  for (const m of applicable) {
-    const list = byCategory.get(m.category) ?? [];
-    list.push(m);
-    byCategory.set(m.category, list);
-  }
+  // Côtes applicables, dans l'ordre configuré pour ce type de vélo :
+  // tronc commun d'abord (alphabétique), puis les côtes propres au vélo selon
+  // l'ordre défini dans la configuration de l'étude.
+  const applicable = measurements
+    .map((m) => {
+      const link = bikeTypeId != null ? m.bikeTypeLinks.find((b) => b.bikeTypeId === bikeTypeId) : undefined;
+      if (m.isCommon) return { m, common: true, order: 0 };
+      if (link) return { m, common: false, order: link.order };
+      return null;
+    })
+    .filter((x): x is { m: MeasurementForStudy; common: boolean; order: number } => x !== null)
+    .sort((a, b) => {
+      if (a.common !== b.common) return a.common ? -1 : 1;
+      if (a.common) return a.m.name.localeCompare(b.m.name);
+      return a.order - b.order || a.m.name.localeCompare(b.m.name);
+    })
+    .map((x) => x.m);
 
   return (
     <div className="space-y-5">
@@ -83,44 +89,38 @@ export function MeasuresForm({
         <div className="rounded-lg border border-dashed border-gray-300 py-8 text-center">
           <p className="text-sm text-gray-400">Aucune côte définie pour ce type de vélo.</p>
           <p className="mt-1 text-xs text-gray-400">
-            Un administrateur peut en ajouter depuis la Bibliothèque (onglet Côtes).
+            Un administrateur peut en ajouter depuis la configuration de l&apos;étude.
           </p>
         </div>
       ) : (
-        [...byCategory.entries()].map(([category, items]) => (
-          <fieldset key={category} className="space-y-3 rounded-lg border border-gray-200 p-5">
-            <legend className="px-1 text-sm font-semibold text-gray-700">
-              {MEASUREMENT_CATEGORY_LABELS[category]}
-            </legend>
+        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-5">
+          {/* Column headers */}
+          <div className="hidden grid-cols-[1fr_auto_auto] items-center gap-3 sm:grid">
+            <span />
+            <span className="w-28 text-center text-xs font-medium uppercase tracking-wide text-gray-400">Avant</span>
+            <span className="w-28 text-center text-xs font-medium uppercase tracking-wide text-gray-400">Après</span>
+          </div>
 
-            {/* Column headers */}
-            <div className="hidden grid-cols-[1fr_auto_auto] items-center gap-3 sm:grid">
-              <span />
-              <span className="w-28 text-center text-xs font-medium uppercase tracking-wide text-gray-400">Avant</span>
-              <span className="w-28 text-center text-xs font-medium uppercase tracking-wide text-gray-400">Après</span>
-            </div>
-
-            {items.map((m) => {
-              const v = values[m.id] ?? { before: null, after: null };
-              return (
-                <div key={m.id} className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[1fr_auto_auto]">
-                  <span className="col-span-2 text-sm text-gray-700 sm:col-span-1">
-                    {m.name}
-                    <span className="ml-1 text-gray-400">({m.unit})</span>
-                  </span>
-                  <div className="sm:w-28">
-                    <span className="mb-1 block text-xs text-gray-400 sm:hidden">Avant</span>
-                    <NumberInput value={v.before} placeholder="—" onChange={(val) => onSetValue(m.id, "before", val)} />
-                  </div>
-                  <div className="sm:w-28">
-                    <span className="mb-1 block text-xs text-gray-400 sm:hidden">Après</span>
-                    <NumberInput value={v.after} placeholder="—" onChange={(val) => onSetValue(m.id, "after", val)} />
-                  </div>
+          {applicable.map((m) => {
+            const v = values[m.id] ?? { before: null, after: null };
+            return (
+              <div key={m.id} className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[1fr_auto_auto]">
+                <span className="col-span-2 text-sm text-gray-700 sm:col-span-1">
+                  {m.name}
+                  <span className="ml-1 text-gray-400">({m.unit})</span>
+                </span>
+                <div className="sm:w-28">
+                  <span className="mb-1 block text-xs text-gray-400 sm:hidden">Avant</span>
+                  <NumberInput value={v.before} placeholder="—" onChange={(val) => onSetValue(m.id, "before", val)} />
                 </div>
-              );
-            })}
-          </fieldset>
-        ))
+                <div className="sm:w-28">
+                  <span className="mb-1 block text-xs text-gray-400 sm:hidden">Après</span>
+                  <NumberInput value={v.after} placeholder="—" onChange={(val) => onSetValue(m.id, "after", val)} />
+                </div>
+              </div>
+            );
+          })}
+        </fieldset>
       )}
 
       <label className="flex flex-col gap-1">

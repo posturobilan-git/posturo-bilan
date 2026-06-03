@@ -4,82 +4,83 @@ import { Suspense } from "react";
 import { getCurrentKine } from "@/lib/auth";
 import { getExercises } from "@/actions/exercise.actions";
 import { getComponents } from "@/actions/component.actions";
-import { getBikeTypes, getActiveBikeTypes } from "@/actions/bikeType.actions";
-import { getMeasurements } from "@/actions/measurement.actions";
+import { getActiveBikeTypes } from "@/actions/bikeType.actions";
+import { EXERCISE_SORT_FIELDS, COMPONENT_SORT_FIELDS } from "@/lib/sort-fields";
+import { parsePageQuery, type RawListParams } from "@/lib/pagination";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Pagination } from "@/components/ui/Pagination";
+import { SortControl } from "@/components/ui/SortControl";
 import { SearchBar } from "@/components/patients/SearchBar";
 import { CategoryFilter } from "@/components/bibliotheque/CategoryFilter";
 import { ExerciseCard } from "@/components/bibliotheque/ExerciseCard";
 import { ComponentCard } from "@/components/bibliotheque/ComponentCard";
-import { BikeTypeCard } from "@/components/bibliotheque/BikeTypeCard";
-import { MeasurementCard } from "@/components/bibliotheque/MeasurementCard";
 import { CreateExerciseModal } from "@/components/bibliotheque/CreateExerciseModal";
 import { CreateComponentModal } from "@/components/bibliotheque/CreateComponentModal";
-import { CreateBikeTypeModal } from "@/components/bibliotheque/CreateBikeTypeModal";
-import { CreateMeasurementModal } from "@/components/bibliotheque/CreateMeasurementModal";
 import {
   EXERCISE_CATEGORY_LABELS,
   COMPONENT_CATEGORY_LABELS,
 } from "@/lib/labels";
 import type { ExerciseCategory, ComponentCategory } from "@prisma/client";
 
-type Tab = "exercices" | "composants" | "velos" | "cotes";
+type Tab = "exercices" | "composants";
 
 interface Props {
-  searchParams: Promise<{ tab?: string; q?: string; category?: string }>;
+  searchParams: Promise<{ tab?: string; q?: string; category?: string } & RawListParams>;
 }
 
 export default async function BibliothequePage({ searchParams }: Props) {
   const kine = await getCurrentKine();
   if (!kine) redirect("/sign-in");
 
-  const { tab, q, category } = await searchParams;
-  const activeTab: Tab =
-    tab === "composants"
-      ? "composants"
-      : tab === "velos"
-      ? "velos"
-      : tab === "cotes"
-      ? "cotes"
-      : "exercices";
+  const { tab, q, category, ...rest } = await searchParams;
+  const activeTab: Tab = tab === "composants" ? "composants" : "exercices";
   const isAdmin = kine.role === "ADMIN";
+
+  const page =
+    activeTab === "exercices"
+      ? parsePageQuery(rest, { sortFields: EXERCISE_SORT_FIELDS, defaultSort: "name", defaultDir: "asc" })
+      : parsePageQuery(rest, { sortFields: COMPONENT_SORT_FIELDS, defaultSort: "name", defaultDir: "asc" });
 
   const exercises =
     activeTab === "exercices"
-      ? await getExercises({ search: q, category: category as ExerciseCategory | undefined })
-      : [];
+      ? await getExercises({ search: q, category: category as ExerciseCategory | undefined, page })
+      : null;
   const components =
     activeTab === "composants"
-      ? await getComponents({ search: q, category: category as ComponentCategory | undefined })
-      : [];
-  const bikeTypes = activeTab === "velos" ? await getBikeTypes({ search: q }) : [];
-  const measurements = activeTab === "cotes" ? await getMeasurements({ search: q }) : [];
-  // The côte & component editors need the list of active bike types to associate.
-  const needsBikeTypes = activeTab === "cotes" || activeTab === "composants";
-  const activeBikeTypes = needsBikeTypes ? await getActiveBikeTypes() : [];
+      ? await getComponents({ search: q, category: category as ComponentCategory | undefined, page })
+      : null;
+
+  // The component editor needs the list of active bike types to associate.
+  const activeBikeTypes = activeTab === "composants" ? await getActiveBikeTypes() : [];
   const bikeTypeOptions = activeBikeTypes.map((b) => ({ id: b.id, name: b.name }));
 
   const categoryOptions: [string, string][] =
     activeTab === "exercices"
       ? Object.entries(EXERCISE_CATEGORY_LABELS)
-      : activeTab === "composants"
-      ? Object.entries(COMPONENT_CATEGORY_LABELS)
-      : [];
+      : Object.entries(COMPONENT_CATEGORY_LABELS);
+
+  const sortOptions =
+    activeTab === "exercices"
+      ? [
+          { field: "name", label: "Nom" },
+          { field: "createdAt", label: "Date de création" },
+        ]
+      : [
+          { field: "name", label: "Nom" },
+          { field: "category", label: "Catégorie" },
+          { field: "createdAt", label: "Date de création" },
+        ];
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Bibliothèque"
-        description="Exercices, composants et types de vélo"
+        description="Exercices et composants prescrits pendant les études"
         action={
           isAdmin
             ? activeTab === "exercices"
               ? <CreateExerciseModal />
-              : activeTab === "composants"
-              ? <CreateComponentModal bikeTypes={bikeTypeOptions} />
-              : activeTab === "velos"
-              ? <CreateBikeTypeModal />
-              : <CreateMeasurementModal bikeTypes={bikeTypeOptions} />
+              : <CreateComponentModal bikeTypes={bikeTypeOptions} />
             : undefined
         }
       />
@@ -88,63 +89,55 @@ export default async function BibliothequePage({ searchParams }: Props) {
       <div className="flex gap-1 border-b border-gray-200">
         <TabLink label="Exercices" tab="exercices" active={activeTab === "exercices"} />
         <TabLink label="Composants" tab="composants" active={activeTab === "composants"} />
-        <TabLink label="Types de vélo" tab="velos" active={activeTab === "velos"} />
-        <TabLink label="Côtes" tab="cotes" active={activeTab === "cotes"} />
       </div>
 
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="flex-1">
           <Suspense>
-            <SearchBar defaultValue={q} />
+            <SearchBar
+              defaultValue={q}
+              placeholder={activeTab === "exercices" ? "Rechercher un exercice…" : "Rechercher un composant…"}
+            />
           </Suspense>
         </div>
-        {(activeTab === "exercices" || activeTab === "composants") && (
-          <Suspense>
-            <CategoryFilter options={categoryOptions} defaultValue={category} />
-          </Suspense>
-        )}
+        <Suspense>
+          <CategoryFilter options={categoryOptions} defaultValue={category} />
+        </Suspense>
+        <Suspense>
+          <SortControl options={sortOptions} activeSort={page.sort} activeDir={page.dir} />
+        </Suspense>
       </div>
 
-      {/* Grid */}
+      {/* Content */}
       {activeTab === "exercices" ? (
-        exercises.length === 0 ? (
+        exercises!.items.length === 0 ? (
           <EmptyState label="exercice" />
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {exercises.map((e) => (
-              <ExerciseCard key={e.id} exercise={e} isAdmin={isAdmin} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {exercises!.items.map((e) => (
+                <ExerciseCard key={e.id} exercise={e} isAdmin={isAdmin} />
+              ))}
+            </div>
+            <Suspense>
+              <Pagination total={exercises!.total} page={page.page} perPage={page.perPage} />
+            </Suspense>
+          </>
         )
-      ) : activeTab === "composants" ? (
-        components.length === 0 ? (
-          <EmptyState label="composant" />
-        ) : (
+      ) : components!.items.length === 0 ? (
+        <EmptyState label="composant" />
+      ) : (
+        <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {components.map((c) => (
+            {components!.items.map((c) => (
               <ComponentCard key={c.id} component={c} bikeTypes={bikeTypeOptions} isAdmin={isAdmin} />
             ))}
           </div>
-        )
-      ) : activeTab === "velos" ? (
-        bikeTypes.length === 0 ? (
-          <EmptyState label="type de vélo" />
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {bikeTypes.map((bt) => (
-              <BikeTypeCard key={bt.id} bikeType={bt} isAdmin={isAdmin} />
-            ))}
-          </div>
-        )
-      ) : measurements.length === 0 ? (
-        <EmptyState label="côte" />
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {measurements.map((m) => (
-            <MeasurementCard key={m.id} measurement={m} bikeTypes={bikeTypeOptions} isAdmin={isAdmin} />
-          ))}
-        </div>
+          <Suspense>
+            <Pagination total={components!.total} page={page.page} perPage={page.perPage} />
+          </Suspense>
+        </>
       )}
     </div>
   );

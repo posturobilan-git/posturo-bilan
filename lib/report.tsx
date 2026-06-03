@@ -39,14 +39,14 @@ async function buildMeasureRows(study: StudyForReport): Promise<ReportMeasureRow
 
   const measurements = await prisma.measurement.findMany({
     where: { id: { in: values.map((v) => v.measurementId) } },
-    select: { id: true, name: true, unit: true, order: true },
+    select: { id: true, name: true, unit: true },
   });
   const byId = new Map(measurements.map((m) => [m.id, m]));
 
   return values
     .map((v) => ({ v, m: byId.get(v.measurementId) }))
     .filter((r): r is { v: StudyMeasureValue; m: (typeof measurements)[number] } => Boolean(r.m))
-    .sort((a, b) => a.m.order - b.m.order || a.m.name.localeCompare(b.m.name))
+    .sort((a, b) => a.m.name.localeCompare(b.m.name))
     .map(({ v, m }) => ({ name: m.name, unit: m.unit, before: v.before ?? null, after: v.after ?? null }));
 }
 

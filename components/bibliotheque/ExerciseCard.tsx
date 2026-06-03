@@ -5,6 +5,8 @@ import { toggleExercise, deleteExercise, type ExerciseWithCount } from "@/action
 import { toast } from "@/lib/stores/toastStore";
 import { EXERCISE_CATEGORY_LABELS } from "@/lib/labels";
 import { DeleteButton } from "@/components/ui/DeleteButton";
+import { IconButton } from "@/components/ui/IconButton";
+import { EyeIcon, EyeOffIcon } from "@/components/ui/icons";
 import { CreateExerciseModal } from "./CreateExerciseModal";
 
 export function ExerciseCard({ exercise, isAdmin }: { exercise: ExerciseWithCount; isAdmin: boolean }) {
@@ -57,15 +59,14 @@ export function ExerciseCard({ exercise, isAdmin }: { exercise: ExerciseWithCoun
           Utilisé {exercise._count.studies} fois
         </span>
         {isAdmin && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
             <CreateExerciseModal exercise={exercise} />
-            <button
+            <IconButton
+              icon={exercise.isActive ? <EyeOffIcon /> : <EyeIcon />}
+              label={exercise.isActive ? "Désactiver" : "Activer"}
               onClick={handleToggle}
               disabled={pending}
-              className="text-sm font-medium text-content-muted transition-colors hover:text-content disabled:opacity-50"
-            >
-              {exercise.isActive ? "Désactiver" : "Activer"}
-            </button>
+            />
             <DeleteButton
               onConfirm={() => deleteExercise(exercise.id)}
               successMessage="Exercice supprimé."

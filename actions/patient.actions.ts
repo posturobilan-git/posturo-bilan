@@ -12,26 +12,50 @@ import { logAudit } from "@/lib/audit";
 import { requireKine, requirePatientOwnership } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { Prisma, type Patient } from "@prisma/client";
+import type { ListResult, PageQuery, SortDir } from "@/lib/pagination";
+import { toSkipTake } from "@/lib/pagination";
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
-export async function getPatients(filters?: { search?: string }) {
+function patientOrderBy(sort: string, dir: SortDir): Prisma.PatientOrderByWithRelationInput[] {
+  switch (sort) {
+    case "name":
+      return [{ lastName: dir }, { firstName: dir }];
+    case "createdAt":
+    default:
+      return [{ createdAt: dir }];
+  }
+}
+
+export async function getPatients(filters?: {
+  search?: string;
+  page?: PageQuery;
+}) {
   const kine = await requireKine();
 
-  return prisma.patient.findMany({
-    where: {
-      ...(kine.role !== "ADMIN" && { kineId: kine.id }),
-      ...(filters?.search && {
-        OR: [
-          { firstName: { contains: filters.search, mode: "insensitive" } },
-          { lastName: { contains: filters.search, mode: "insensitive" } },
-          { email: { contains: filters.search, mode: "insensitive" } },
-        ],
-      }),
-    },
-    include: { kine: { select: { name: true } }, _count: { select: { studies: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const where: Prisma.PatientWhereInput = {
+    ...(kine.role !== "ADMIN" && { kineId: kine.id }),
+    ...(filters?.search && {
+      OR: [
+        { firstName: { contains: filters.search, mode: "insensitive" } },
+        { lastName: { contains: filters.search, mode: "insensitive" } },
+        { email: { contains: filters.search, mode: "insensitive" } },
+      ],
+    }),
+  };
+
+  const page = filters?.page;
+  const [items, total] = await Promise.all([
+    prisma.patient.findMany({
+      where,
+      include: { kine: { select: { name: true } }, _count: { select: { studies: true } } },
+      orderBy: page ? patientOrderBy(page.sort, page.dir) : { createdAt: "desc" },
+      ...(page ? toSkipTake(page) : {}),
+    }),
+    prisma.patient.count({ where }),
+  ]);
+
+  return { items, total } satisfies ListResult<(typeof items)[number]>;
 }
 
 export async function getPatientDossier(id: string) {

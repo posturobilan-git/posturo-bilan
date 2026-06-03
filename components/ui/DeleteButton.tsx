@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "@/lib/stores/toastStore";
+import { IconButton } from "@/components/ui/IconButton";
+import { TrashIcon, CheckIcon, XIcon } from "@/components/ui/icons";
 import type { ActionResult } from "@/lib/action-result";
 
 interface Props {
@@ -36,32 +38,33 @@ export function DeleteButton({ onConfirm, successMessage, warning }: Props) {
 
   if (!confirming) {
     return (
-      <button
+      <IconButton
+        icon={<TrashIcon />}
+        label="Supprimer"
+        variant="danger"
         onClick={() => setConfirming(true)}
-        className="text-sm font-medium text-danger-600 transition-colors hover:text-danger-700"
-      >
-        Supprimer
-      </button>
+      />
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-2">
-      {warning && <span className="text-xs text-content-subtle">{warning}</span>}
-      <button
+    <span className="inline-flex items-center gap-1">
+      {warning && <span className="mr-1 text-xs text-content-subtle">{warning}</span>}
+      <IconButton
+        icon={<CheckIcon />}
+        label={pending ? "Suppression…" : "Confirmer la suppression"}
+        variant="danger"
+        active
+        disabled={pending}
         onClick={handleDelete}
+      />
+      <IconButton
+        icon={<XIcon />}
+        label="Annuler"
+        variant="neutral"
         disabled={pending}
-        className="text-sm font-medium text-danger-600 transition-colors hover:text-danger-700 disabled:opacity-50"
-      >
-        {pending ? "Suppression…" : "Confirmer"}
-      </button>
-      <button
         onClick={() => setConfirming(false)}
-        disabled={pending}
-        className="text-sm font-medium text-content-muted transition-colors hover:text-content disabled:opacity-50"
-      >
-        Annuler
-      </button>
+      />
     </span>
   );
 }

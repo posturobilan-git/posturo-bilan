@@ -22,11 +22,11 @@ export default async function PatientPage(props: PageProps<"/patients/[id]">) {
 
   // Resolve measurement metadata so study cards can label their côte values.
   const measurements = await prisma.measurement.findMany({
-    select: { id: true, name: true, unit: true, order: true },
+    select: { id: true, name: true, unit: true },
   });
   const measurementsById: Record<string, MeasurementInfo> = {};
   for (const m of measurements) {
-    measurementsById[m.id] = { name: m.name, unit: m.unit, order: m.order };
+    measurementsById[m.id] = { name: m.name, unit: m.unit };
   }
 
   // KINE only sees their own patients (query is scoped), so anything visible
