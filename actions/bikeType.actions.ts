@@ -6,7 +6,7 @@ import { logAudit } from "@/lib/audit";
 import { requireKine, requireAdmin } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { bikeTypeSchema, type BikeTypeInput } from "@/lib/validations/bikeType.schema";
-import type { BikeType } from "@prisma/client";
+import { Prisma, type BikeType } from "@prisma/client";
 
 export type BikeTypeWithCount = BikeType & { _count: { studies: number } };
 
@@ -77,6 +77,34 @@ export async function updateBikeType(
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
     console.error("updateBikeType failed:", e);
     return fail("Impossible de modifier le type de vélo. Réessayez.");
+  }
+}
+
+export async function deleteBikeType(id: string): Promise<ActionResult<void>> {
+  try {
+    const admin = await requireAdmin();
+
+    // A study's bikeType is a required relation — refuse to delete a type that
+    // is still in use (that would corrupt those studies). Suggest deactivation.
+    const studyCount = await prisma.study.count({ where: { bikeTypeId: id } });
+    if (studyCount > 0) {
+      return fail(
+        `Impossible de supprimer : ${studyCount} étude(s) utilisent ce type de vélo. Désactivez-le plutôt.`
+      );
+    }
+
+    // No study references it; côte/component links cascade via the join tables.
+    await prisma.bikeType.delete({ where: { id } });
+    await logAudit({ userId: admin.id, action: "DELETE", entity: "bikeType", entityId: id });
+    revalidatePath("/bibliotheque");
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
+      return fail("Type de vélo introuvable.");
+    }
+    console.error("deleteBikeType failed:", e);
+    return fail("Impossible de supprimer le type de vélo. Réessayez.");
   }
 }
 

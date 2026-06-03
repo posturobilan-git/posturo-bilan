@@ -1,8 +1,9 @@
 "use client";
 
 import { useTransition } from "react";
-import { toggleBikeType, type BikeTypeWithCount } from "@/actions/bikeType.actions";
+import { toggleBikeType, deleteBikeType, type BikeTypeWithCount } from "@/actions/bikeType.actions";
 import { toast } from "@/lib/stores/toastStore";
+import { DeleteButton } from "@/components/ui/DeleteButton";
 import { CreateBikeTypeModal } from "./CreateBikeTypeModal";
 
 export function BikeTypeCard({ bikeType, isAdmin }: { bikeType: BikeTypeWithCount; isAdmin: boolean }) {
@@ -48,6 +49,15 @@ export function BikeTypeCard({ bikeType, isAdmin }: { bikeType: BikeTypeWithCoun
             >
               {bikeType.isActive ? "Désactiver" : "Activer"}
             </button>
+            <DeleteButton
+              onConfirm={() => deleteBikeType(bikeType.id)}
+              successMessage="Type de vélo supprimé."
+              warning={
+                bikeType._count.studies > 0
+                  ? `${bikeType._count.studies} étude(s) — désactivez plutôt.`
+                  : undefined
+              }
+            />
           </div>
         )}
       </div>

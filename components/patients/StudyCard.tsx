@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ReportActions } from "@/components/patients/ReportActions";
+import { StudyDeleteButton } from "@/components/patients/StudyDeleteButton";
 import type { StudyWithLibrary, StudyMeasureValue, MeasurementInfo } from "@/types";
 
 function fmt(value: number | null | undefined, unit: string): string {
@@ -124,6 +125,11 @@ export function StudyCard({
             hasReport={Boolean(study.reportUrl)}
             alreadySent={Boolean(study.reportSentAt)}
           />
+        )}
+        {canEdit && (
+          <span className="ml-auto">
+            <StudyDeleteButton studyId={study.id} />
+          </span>
         )}
       </div>
     </Card>

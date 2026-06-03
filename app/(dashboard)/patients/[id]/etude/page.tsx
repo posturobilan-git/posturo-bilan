@@ -30,6 +30,7 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
     }),
     prisma.bikeComponent.findMany({
       where: { isActive: true },
+      include: { bikeTypes: { select: { id: true } } },
       orderBy: [{ category: "asc" }, { name: "asc" }],
     }),
     prisma.exercise.findMany({
@@ -53,6 +54,15 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
     : null;
 
   if (editStudyId && !study) redirect(`/patients/${id}`);
+
+  // Editing gently: if the study's bike type has since been deactivated, it's
+  // missing from the active list above — re-include it so it stays selectable
+  // and the original choice isn't silently lost.
+  const bikeTypeOptions = [...bikeTypes];
+  if (study && !bikeTypeOptions.some((b) => b.id === study.bikeTypeId)) {
+    const current = await prisma.bikeType.findUnique({ where: { id: study.bikeTypeId } });
+    if (current) bikeTypeOptions.push(current);
+  }
 
   // Convert the stored measure-values array into the keyed map the form uses.
   const measureValues: Record<string, { before: number | null; after: number | null }> = {};
@@ -88,7 +98,7 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
         <div className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
           <StudyForm
             patient={patient}
-            bikeTypes={bikeTypes}
+            bikeTypes={bikeTypeOptions}
             measurements={measurements}
             components={components}
             exercises={exercises}

@@ -42,17 +42,18 @@ const COMPONENTS: Array<{
   model?: string;
   category: ComponentCategory;
   notes?: string;
+  bikeTypes?: string[]; // types compatibles ; vide = universel
 }> = [
-  { name: "Selle Arione R3", brand: "Fizik", model: "Arione R3", category: "SELLE", notes: "Selle longue, bassin peu mobile." },
-  { name: "Selle Antares R3", brand: "Fizik", model: "Antares R3", category: "SELLE", notes: "Bassin à mobilité moyenne." },
-  { name: "Selle SR", brand: "Ergon", model: "SR Pro", category: "SELLE", notes: "Canal central, confort périnéal." },
-  { name: "Potence SL-K", brand: "FSA", model: "SL-K", category: "POTENCE", notes: "Disponible 90–120 mm." },
-  { name: "Potence Pro PLT", brand: "Pro", model: "PLT", category: "POTENCE" },
-  { name: "Cintre Compact", brand: "Deda", model: "Zero100", category: "CINTRE", notes: "Drop court, reach 75 mm." },
-  { name: "Cales SPD-SL", brand: "Shimano", model: "SM-SH11", category: "CALE_PIEDS", notes: "Jeu 6°, jaune." },
-  { name: "Cales SPD-SL fixes", brand: "Shimano", model: "SM-SH10", category: "CALE_PIEDS", notes: "Jeu 0°, rouge." },
-  { name: "Manivelles 170 mm", brand: "Shimano", model: "Ultegra R8000", category: "MANIVELLES", notes: "Pour petits gabarits." },
-  { name: "Pédales Keo", brand: "Look", model: "Keo 2 Max", category: "PEDALES" },
+  { name: "Selle Arione R3", brand: "Fizik", model: "Arione R3", category: "SELLE", notes: "Selle longue, bassin peu mobile.", bikeTypes: ["Route", "Triathlon"] },
+  { name: "Selle Antares R3", brand: "Fizik", model: "Antares R3", category: "SELLE", notes: "Bassin à mobilité moyenne.", bikeTypes: ["Route", "Gravel"] },
+  { name: "Selle SR", brand: "Ergon", model: "SR Pro", category: "SELLE", notes: "Canal central, confort périnéal.", bikeTypes: ["Gravel", "VTT"] },
+  { name: "Potence SL-K", brand: "FSA", model: "SL-K", category: "POTENCE", notes: "Disponible 90–120 mm.", bikeTypes: ["Route", "Gravel"] },
+  { name: "Potence Pro PLT", brand: "Pro", model: "PLT", category: "POTENCE", bikeTypes: ["Route", "Triathlon"] },
+  { name: "Cintre Compact", brand: "Deda", model: "Zero100", category: "CINTRE", notes: "Drop court, reach 75 mm.", bikeTypes: ["Route"] },
+  { name: "Cales SPD-SL", brand: "Shimano", model: "SM-SH11", category: "CALE_PIEDS", notes: "Jeu 6°, jaune.", bikeTypes: ["Route", "Triathlon"] },
+  { name: "Cales SPD-SL fixes", brand: "Shimano", model: "SM-SH10", category: "CALE_PIEDS", notes: "Jeu 0°, rouge.", bikeTypes: ["Route"] },
+  { name: "Manivelles 170 mm", brand: "Shimano", model: "Ultegra R8000", category: "MANIVELLES", notes: "Pour petits gabarits." }, // universel
+  { name: "Pédales Keo", brand: "Look", model: "Keo 2 Max", category: "PEDALES", bikeTypes: ["Route", "Gravel"] },
 ];
 
 // ─── Côtes (mesures dynamiques) ──────────────────────────────────────────────────
@@ -212,6 +213,11 @@ async function main() {
     btCreated++;
   }
 
+  const bikeTypes = await prisma.bikeType.findMany();
+  const bikeTypeByName = new Map(bikeTypes.map((b) => [b.name, b.id]));
+  const idsForNames = (names: string[] = []) =>
+    names.map((n) => bikeTypeByName.get(n)).filter((id): id is string => Boolean(id));
+
   // ── Exercices ──
   let exCreated = 0;
   for (const ex of EXERCISES) {
@@ -226,13 +232,34 @@ async function main() {
   for (const comp of COMPONENTS) {
     const exists = await prisma.bikeComponent.findFirst({ where: { name: comp.name } });
     if (exists) continue;
-    await prisma.bikeComponent.create({ data: { ...comp, createdById: admin.id } });
+    const { bikeTypes: compTypes, ...fields } = comp;
+    await prisma.bikeComponent.create({
+      data: {
+        ...fields,
+        createdById: admin.id,
+        bikeTypes: { connect: idsForNames(compTypes).map((id) => ({ id })) },
+      },
+    });
     compCreated++;
   }
 
+  // Backfill : associe les types de vélo aux composants existants encore sans type.
+  let compTypesLinked = 0;
+  for (const comp of COMPONENTS) {
+    if (!comp.bikeTypes || comp.bikeTypes.length === 0) continue;
+    const existing = await prisma.bikeComponent.findFirst({
+      where: { name: comp.name },
+      select: { id: true, _count: { select: { bikeTypes: true } } },
+    });
+    if (!existing || existing._count.bikeTypes > 0) continue;
+    await prisma.bikeComponent.update({
+      where: { id: existing.id },
+      data: { bikeTypes: { connect: idsForNames(comp.bikeTypes).map((id) => ({ id })) } },
+    });
+    compTypesLinked++;
+  }
+
   // Resolve lookups once for the studies.
-  const bikeTypes = await prisma.bikeType.findMany();
-  const bikeTypeByName = new Map(bikeTypes.map((b) => [b.name, b.id]));
   const components = await prisma.bikeComponent.findMany({ select: { id: true, name: true } });
   const componentByName = new Map(components.map((c) => [c.name, c.id]));
   const exercises = await prisma.exercise.findMany({ select: { id: true, name: true } });
@@ -360,7 +387,8 @@ async function main() {
 
   console.log(
     `Seed terminé : ${btCreated}/${BIKE_TYPES.length} types de vélo, ${measCreated}/${MEASUREMENTS.length} côtes, ` +
-      `${exCreated}/${EXERCISES.length} exercices, ${compCreated}/${COMPONENTS.length} composants, ` +
+      `${exCreated}/${EXERCISES.length} exercices, ${compCreated}/${COMPONENTS.length} composants ` +
+      `(${compTypesLinked} associés à des types de vélo), ` +
       `${patientsCreated}/${PATIENTS.length} patients, ${studiesCreated} études créées, ` +
       `${backfilled} études migrées vers les côtes dynamiques (attribués à ${admin.email}).`
   );

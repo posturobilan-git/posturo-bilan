@@ -54,8 +54,9 @@ export default async function BibliothequePage({ searchParams }: Props) {
       : [];
   const bikeTypes = activeTab === "velos" ? await getBikeTypes({ search: q }) : [];
   const measurements = activeTab === "cotes" ? await getMeasurements({ search: q }) : [];
-  // The côte editor needs the list of active bike types to associate.
-  const activeBikeTypes = activeTab === "cotes" ? await getActiveBikeTypes() : [];
+  // The côte & component editors need the list of active bike types to associate.
+  const needsBikeTypes = activeTab === "cotes" || activeTab === "composants";
+  const activeBikeTypes = needsBikeTypes ? await getActiveBikeTypes() : [];
   const bikeTypeOptions = activeBikeTypes.map((b) => ({ id: b.id, name: b.name }));
 
   const categoryOptions: [string, string][] =
@@ -75,7 +76,7 @@ export default async function BibliothequePage({ searchParams }: Props) {
             ? activeTab === "exercices"
               ? <CreateExerciseModal />
               : activeTab === "composants"
-              ? <CreateComponentModal />
+              ? <CreateComponentModal bikeTypes={bikeTypeOptions} />
               : activeTab === "velos"
               ? <CreateBikeTypeModal />
               : <CreateMeasurementModal bikeTypes={bikeTypeOptions} />
@@ -122,7 +123,7 @@ export default async function BibliothequePage({ searchParams }: Props) {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {components.map((c) => (
-              <ComponentCard key={c.id} component={c} isAdmin={isAdmin} />
+              <ComponentCard key={c.id} component={c} bikeTypes={bikeTypeOptions} isAdmin={isAdmin} />
             ))}
           </div>
         )

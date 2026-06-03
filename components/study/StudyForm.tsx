@@ -8,15 +8,15 @@ import { saveDraftStudy, submitStudy } from "@/actions/study.actions";
 import { StudyStepper } from "./StudyStepper";
 import { BikeTypeStep } from "./BikeTypeStep";
 import { MeasuresForm, type MeasurementForStudy } from "./MeasuresForm";
-import { ComponentPicker } from "./ComponentPicker";
+import { ComponentPicker, type ComponentForStudy } from "./ComponentPicker";
 import { ExercisePicker } from "./ExercisePicker";
-import type { BikeComponent, BikeType, Exercise, Patient, PatientIntake } from "@prisma/client";
+import type { BikeType, Exercise, Patient, PatientIntake } from "@prisma/client";
 
 interface Props {
   patient: Patient & { intake: PatientIntake | null };
   bikeTypes: BikeType[];
   measurements: MeasurementForStudy[];
-  components: BikeComponent[];
+  components: ComponentForStudy[];
   exercises: Exercise[];
   /** Pre-filled from an existing study, if any */
   initial?: {
@@ -147,6 +147,7 @@ export function StudyForm({ patient, bikeTypes, measurements, components, exerci
       {store.step === 3 && (
         <ComponentPicker
           components={components}
+          bikeTypeId={store.bikeTypeId}
           selected={store.selectedComponentIds}
           onToggle={store.toggleComponent}
           onBack={() => store.setStep(2)}
