@@ -7,6 +7,8 @@ import { requireKine, requireAdmin } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { componentSchema } from "@/lib/validations/component.schema";
 import { ComponentCategory, Prisma, type BikeComponent, type BikeType } from "@prisma/client";
+import type { ListResult, PageQuery, SortDir } from "@/lib/pagination";
+import { toSkipTake } from "@/lib/pagination";
 import { z } from "zod";
 
 export type ComponentWithCount = BikeComponent & {
@@ -16,30 +18,46 @@ export type ComponentWithCount = BikeComponent & {
 
 // ─── Query ────────────────────────────────────────────────────────────────────
 
+function componentOrderBy(sort: string, dir: SortDir): Prisma.BikeComponentOrderByWithRelationInput[] {
+  const primary: Prisma.BikeComponentOrderByWithRelationInput =
+    sort === "createdAt" ? { createdAt: dir } : sort === "category" ? { category: dir } : { name: dir };
+  return [{ isActive: "desc" }, primary];
+}
+
 export async function getComponents(filters?: {
   search?: string;
   category?: ComponentCategory;
-}): Promise<ComponentWithCount[]> {
+  page?: PageQuery;
+}): Promise<ListResult<ComponentWithCount>> {
   const kine = await requireKine();
 
-  return prisma.bikeComponent.findMany({
-    where: {
-      ...(kine.role !== "ADMIN" && { isActive: true }),
-      ...(filters?.category && { category: filters.category }),
-      ...(filters?.search && {
-        OR: [
-          { name: { contains: filters.search, mode: "insensitive" } },
-          { brand: { contains: filters.search, mode: "insensitive" } },
-          { model: { contains: filters.search, mode: "insensitive" } },
-        ],
-      }),
-    },
-    include: {
-      _count: { select: { studies: true } },
-      bikeTypes: { select: { id: true, name: true } },
-    },
-    orderBy: [{ isActive: "desc" }, { name: "asc" }],
-  });
+  const where: Prisma.BikeComponentWhereInput = {
+    ...(kine.role !== "ADMIN" && { isActive: true }),
+    ...(filters?.category && { category: filters.category }),
+    ...(filters?.search && {
+      OR: [
+        { name: { contains: filters.search, mode: "insensitive" } },
+        { brand: { contains: filters.search, mode: "insensitive" } },
+        { model: { contains: filters.search, mode: "insensitive" } },
+      ],
+    }),
+  };
+
+  const page = filters?.page;
+  const [items, total] = await Promise.all([
+    prisma.bikeComponent.findMany({
+      where,
+      include: {
+        _count: { select: { studies: true } },
+        bikeTypes: { select: { id: true, name: true } },
+      },
+      orderBy: page ? componentOrderBy(page.sort, page.dir) : [{ isActive: "desc" }, { name: "asc" }],
+      ...(page ? toSkipTake(page) : {}),
+    }),
+    prisma.bikeComponent.count({ where }),
+  ]);
+
+  return { items, total };
 }
 
 // ─── Mutations (ADMIN only) ─────────────────────────────────────────────────────

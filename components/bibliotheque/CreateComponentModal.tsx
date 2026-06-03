@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
+import { PencilIcon } from "@/components/ui/icons";
 import { createComponent, updateComponent } from "@/actions/component.actions";
 import { toast } from "@/lib/stores/toastStore";
 import { COMPONENT_CATEGORIES, COMPONENT_CATEGORY_LABELS } from "@/lib/labels";
@@ -71,12 +73,7 @@ export function CreateComponentModal({
   return (
     <>
       {isEdit ? (
-        <button
-          onClick={openModal}
-          className="text-sm font-medium text-brand-600 hover:text-brand-800"
-        >
-          Éditer
-        </button>
+        <IconButton icon={<PencilIcon />} label="Modifier" variant="brand" onClick={openModal} />
       ) : (
         <Button className="w-full sm:w-auto" onClick={openModal}>+ Nouveau composant</Button>
       )}

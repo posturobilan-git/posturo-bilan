@@ -275,16 +275,17 @@ async function main() {
         name: m.name,
         unit: m.unit,
         category: m.category,
-        order: m.order,
         isCommon: m.isCommon,
         createdById: admin.id,
-        bikeTypes: m.isCommon
+        // Non-common côtes are linked to their bike types with a per-bike-type
+        // display order (the old global `order` becomes this link order).
+        bikeTypeLinks: m.isCommon
           ? undefined
           : {
-              connect: (m.bikeTypes ?? [])
+              create: (m.bikeTypes ?? [])
                 .map((n) => bikeTypeByName.get(n))
                 .filter((id): id is string => Boolean(id))
-                .map((id) => ({ id })),
+                .map((bikeTypeId) => ({ bikeTypeId, order: m.order })),
             },
       },
     });

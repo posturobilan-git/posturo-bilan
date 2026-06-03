@@ -26,7 +26,6 @@ export interface StudyMeasureValue {
 export interface MeasurementInfo {
   name: string;
   unit: string;
-  order: number;
 }
 
 /** Legacy fixed-field measures (études antérieures à la refacto des côtes). */

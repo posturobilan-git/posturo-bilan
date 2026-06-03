@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
+import { PencilIcon } from "@/components/ui/icons";
 import { createMeasurement, updateMeasurement } from "@/actions/measurement.actions";
 import { toast } from "@/lib/stores/toastStore";
 import { MEASUREMENT_CATEGORIES, MEASUREMENT_CATEGORY_LABELS } from "@/lib/labels";
@@ -17,7 +19,6 @@ interface MeasurementValue {
   name: string;
   unit: string;
   category: MeasurementCategory;
-  order: number;
   isCommon: boolean;
   bikeTypes: { id: string; name: string }[];
 }
@@ -58,7 +59,6 @@ export function CreateMeasurementModal({
       name: String(fd.get("name") ?? "").trim(),
       unit: String(fd.get("unit") ?? "").trim(),
       category: String(fd.get("category") ?? "AUTRE") as MeasurementCategory,
-      order: Number(fd.get("order") ?? 0),
       isCommon,
       bikeTypeIds: isCommon ? [] : selectedTypes,
     };
@@ -80,12 +80,12 @@ export function CreateMeasurementModal({
   return (
     <>
       {isEdit ? (
-        <button
+        <IconButton
+          icon={<PencilIcon />}
+          label="Modifier"
+          variant="brand"
           onClick={() => { reset(); setOpen(true); }}
-          className="text-sm font-medium text-brand-600 hover:text-brand-800"
-        >
-          Éditer
-        </button>
+        />
       ) : (
         <Button className="w-full sm:w-auto" onClick={() => { reset(); setOpen(true); }}>+ Nouvelle côte</Button>
       )}
@@ -114,7 +114,7 @@ export function CreateMeasurementModal({
                   className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
               </label>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <label className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-gray-700">Unité <span className="text-red-500">*</span></span>
                   <input name="unit" required defaultValue={measurement?.unit} placeholder="cm, mm, °"
@@ -128,11 +128,6 @@ export function CreateMeasurementModal({
                       <option key={c} value={c}>{MEASUREMENT_CATEGORY_LABELS[c]}</option>
                     ))}
                   </select>
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-gray-700">Ordre</span>
-                  <input name="order" type="number" min={0} defaultValue={measurement?.order ?? 0}
-                    className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
                 </label>
               </div>
 

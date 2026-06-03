@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
+import { SortableHeader } from "@/components/ui/SortableHeader";
 import type { StudyListItem } from "@/types";
+import type { SortDir } from "@/lib/pagination";
 
 interface StudiesTableProps {
   studies: StudyListItem[];
+  sort?: string;
+  dir?: SortDir;
   emptyMessage?: string;
 }
 
@@ -11,7 +15,12 @@ function patientName(p: StudyListItem["patient"]) {
   return p.isAnonymized ? "Patient anonymisé" : `${p.firstName} ${p.lastName}`;
 }
 
-export function StudiesTable({ studies, emptyMessage = "Aucune étude trouvée." }: StudiesTableProps) {
+export function StudiesTable({
+  studies,
+  sort = "createdAt",
+  dir = "desc",
+  emptyMessage = "Aucune étude trouvée.",
+}: StudiesTableProps) {
   if (studies.length === 0) {
     return (
       <div className="flex flex-col items-center rounded-xl border border-dashed border-border-strong bg-surface py-16 text-center">
@@ -53,11 +62,11 @@ export function StudiesTable({ studies, emptyMessage = "Aucune étude trouvée."
         <table className="min-w-full">
           <thead>
             <tr className="border-b border-border bg-surface-muted">
-              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-content-subtle">Patient</th>
+              <SortableHeader field="patient" label="Patient" activeSort={sort} activeDir={dir} />
               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-content-subtle">Type de vélo</th>
               <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-content-subtle">Kiné</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-content-subtle">Date</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-content-subtle">Statut</th>
+              <SortableHeader field="createdAt" label="Date" activeSort={sort} activeDir={dir} />
+              <SortableHeader field="status" label="Statut" activeSort={sort} activeDir={dir} />
               <th className="relative px-6 py-3"><span className="sr-only">Voir</span></th>
             </tr>
           </thead>

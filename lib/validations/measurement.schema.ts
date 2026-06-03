@@ -7,7 +7,6 @@ export const measurementSchema = z
     category: z
       .enum(["SELLE", "CINTRE", "POTENCE", "POSITION", "CALE_PIEDS", "MANIVELLES", "AUTRE"])
       .default("AUTRE"),
-    order: z.number().int().min(0).max(999).default(0),
     isCommon: z.boolean().default(false),
     bikeTypeIds: z.array(z.string().uuid()).default([]),
   })

@@ -5,6 +5,8 @@ import { toggleComponent, deleteComponent, type ComponentWithCount } from "@/act
 import { toast } from "@/lib/stores/toastStore";
 import { COMPONENT_CATEGORY_LABELS } from "@/lib/labels";
 import { DeleteButton } from "@/components/ui/DeleteButton";
+import { IconButton } from "@/components/ui/IconButton";
+import { EyeIcon, EyeOffIcon } from "@/components/ui/icons";
 import { CreateComponentModal } from "./CreateComponentModal";
 
 export function ComponentCard({
@@ -65,15 +67,14 @@ export function ComponentCard({
           Utilisé {component._count.studies} fois
         </span>
         {isAdmin && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
             <CreateComponentModal component={component} bikeTypes={bikeTypes} />
-            <button
+            <IconButton
+              icon={component.isActive ? <EyeOffIcon /> : <EyeIcon />}
+              label={component.isActive ? "Désactiver" : "Activer"}
               onClick={handleToggle}
               disabled={pending}
-              className="text-sm font-medium text-gray-500 hover:text-gray-800 disabled:opacity-50"
-            >
-              {component.isActive ? "Désactiver" : "Activer"}
-            </button>
+            />
             <DeleteButton
               onConfirm={() => deleteComponent(component.id)}
               successMessage="Composant supprimé."

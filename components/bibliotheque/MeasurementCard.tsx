@@ -5,6 +5,8 @@ import { toggleMeasurement, deleteMeasurement, type MeasurementWithTypes } from 
 import { toast } from "@/lib/stores/toastStore";
 import { MEASUREMENT_CATEGORY_LABELS } from "@/lib/labels";
 import { DeleteButton } from "@/components/ui/DeleteButton";
+import { IconButton } from "@/components/ui/IconButton";
+import { EyeIcon, EyeOffIcon } from "@/components/ui/icons";
 import { CreateMeasurementModal } from "./CreateMeasurementModal";
 
 export function MeasurementCard({
@@ -35,7 +37,7 @@ export function MeasurementCard({
             <span className="ml-1.5 text-sm font-normal text-content-subtle">({measurement.unit})</span>
           </h3>
           <p className="mt-0.5 text-xs text-content-subtle">
-            {MEASUREMENT_CATEGORY_LABELS[measurement.category]} · ordre {measurement.order}
+            {MEASUREMENT_CATEGORY_LABELS[measurement.category]}
           </p>
         </div>
         {!measurement.isActive && (
@@ -62,15 +64,14 @@ export function MeasurementCard({
       </div>
 
       {isAdmin && (
-        <div className="mt-4 flex items-center justify-end gap-3 border-t border-border pt-3">
+        <div className="mt-4 flex items-center justify-end gap-1 border-t border-border pt-3">
           <CreateMeasurementModal measurement={measurement} bikeTypes={bikeTypes} />
-          <button
+          <IconButton
+            icon={measurement.isActive ? <EyeOffIcon /> : <EyeIcon />}
+            label={measurement.isActive ? "Désactiver" : "Activer"}
             onClick={handleToggle}
             disabled={pending}
-            className="text-sm font-medium text-content-muted transition-colors hover:text-content disabled:opacity-50"
-          >
-            {measurement.isActive ? "Désactiver" : "Activer"}
-          </button>
+          />
           <DeleteButton
             onConfirm={() => deleteMeasurement(measurement.id)}
             successMessage="Côte supprimée."

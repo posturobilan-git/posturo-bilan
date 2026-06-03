@@ -25,8 +25,8 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
     prisma.bikeType.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.measurement.findMany({
       where: { isActive: true },
-      include: { bikeTypes: { select: { id: true } } },
-      orderBy: [{ order: "asc" }, { name: "asc" }],
+      include: { bikeTypeLinks: { select: { bikeTypeId: true, order: true } } },
+      orderBy: { name: "asc" },
     }),
     prisma.bikeComponent.findMany({
       where: { isActive: true },

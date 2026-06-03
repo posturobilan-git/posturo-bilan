@@ -56,7 +56,7 @@ export default async function RgpdPage({ searchParams }: Props) {
       {/* Patient search + actions */}
       <div className="space-y-4">
         <Suspense>
-          <SearchBar defaultValue={q} />
+          <SearchBar defaultValue={q} placeholder="Rechercher un patient…" />
         </Suspense>
 
         {patients.length === 0 ? (

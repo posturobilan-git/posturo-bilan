@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
+import { PencilIcon } from "@/components/ui/icons";
 import { createExercise, updateExercise } from "@/actions/exercise.actions";
 import { toast } from "@/lib/stores/toastStore";
 import { EXERCISE_CATEGORIES, EXERCISE_CATEGORY_LABELS } from "@/lib/labels";
@@ -42,12 +44,12 @@ export function CreateExerciseModal({ exercise }: { exercise?: Exercise }) {
   return (
     <>
       {isEdit ? (
-        <button
+        <IconButton
+          icon={<PencilIcon />}
+          label="Modifier"
+          variant="brand"
           onClick={() => { setError(null); setOpen(true); }}
-          className="text-sm font-medium text-brand-600 hover:text-brand-800"
-        >
-          Éditer
-        </button>
+        />
       ) : (
         <Button className="w-full sm:w-auto" onClick={() => { setError(null); setOpen(true); }}>+ Nouvel exercice</Button>
       )}

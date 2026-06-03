@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useTransition } from "react";
 import { toggleBikeType, deleteBikeType, type BikeTypeWithCount } from "@/actions/bikeType.actions";
 import { toast } from "@/lib/stores/toastStore";
 import { DeleteButton } from "@/components/ui/DeleteButton";
+import { IconButton } from "@/components/ui/IconButton";
+import { EyeIcon, EyeOffIcon } from "@/components/ui/icons";
 import { CreateBikeTypeModal } from "./CreateBikeTypeModal";
 
 export function BikeTypeCard({ bikeType, isAdmin }: { bikeType: BikeTypeWithCount; isAdmin: boolean }) {
@@ -35,20 +38,29 @@ export function BikeTypeCard({ bikeType, isAdmin }: { bikeType: BikeTypeWithCoun
         )}
       </div>
 
+      <Link
+        href={`/configuration/${bikeType.id}`}
+        className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-brand-600 transition-colors hover:text-brand-800"
+      >
+        Configurer les côtes
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </Link>
+
       <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
         <span className="text-xs text-content-subtle">
           {bikeType._count.studies} étude{bikeType._count.studies !== 1 ? "s" : ""}
         </span>
         {isAdmin && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
             <CreateBikeTypeModal bikeType={bikeType} />
-            <button
+            <IconButton
+              icon={bikeType.isActive ? <EyeOffIcon /> : <EyeIcon />}
+              label={bikeType.isActive ? "Désactiver" : "Activer"}
               onClick={handleToggle}
               disabled={pending}
-              className="text-sm font-medium text-content-muted transition-colors hover:text-content disabled:opacity-50"
-            >
-              {bikeType.isActive ? "Désactiver" : "Activer"}
-            </button>
+            />
             <DeleteButton
               onConfirm={() => deleteBikeType(bikeType.id)}
               successMessage="Type de vélo supprimé."
