@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
-import type { PatientWithRelations, StudyMeasures } from "@/types";
+import { Button } from "@/components/ui/Button";
+import { StudyCard } from "@/components/patients/StudyCard";
+import type { PatientWithRelations, MeasurementInfo } from "@/types";
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
@@ -98,63 +100,55 @@ function PanelAmont({
   );
 }
 
-// ─── Panel Bilan (dernière étude) ─────────────────────────────────────────────
+// ─── Section Études (une carte par étude) ─────────────────────────────────────
 
-function PanelBilan({ study }: { study: PatientWithRelations["studies"][number] | undefined }) {
-  if (!study) {
-    return (
-      <Card>
-        <SectionTitle>Bilan — Étude posturale</SectionTitle>
-        <p className="text-sm text-content-subtle italic">Aucune étude réalisée.</p>
-      </Card>
-    );
-  }
-
-  const measures = study.measures as StudyMeasures;
+function StudiesSection({
+  patient,
+  canEdit,
+  measurementsById,
+}: {
+  patient: PatientWithRelations;
+  canEdit: boolean;
+  measurementsById: Record<string, MeasurementInfo>;
+}) {
+  const { studies } = patient;
 
   return (
-    <Card>
-      <SectionTitle>Bilan — Étude posturale</SectionTitle>
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
-        <Field label="Hauteur selle" value={measures.saddleHeight ? `${measures.saddleHeight} mm` : undefined} />
-        <Field label="Recul selle" value={measures.saddleSetback ? `${measures.saddleSetback} mm` : undefined} />
-        <Field label="Hauteur cintre" value={measures.handlebarHeight ? `${measures.handlebarHeight} mm` : undefined} />
-        <Field label="Longueur potence" value={measures.stemLength ? `${measures.stemLength} mm` : undefined} />
-        <Field label="Reach effectif" value={measures.effectiveReach ? `${measures.effectiveReach} mm` : undefined} />
-        <Field label="Angle cale" value={measures.cleatAngle !== undefined ? `${measures.cleatAngle}°` : undefined} />
-      </dl>
-      {measures.observations && (
-        <div className="mt-4">
-          <dt className="text-xs font-medium uppercase tracking-wide text-content-subtle">Observations</dt>
-          <dd className="mt-0.5 text-sm text-content">{measures.observations}</dd>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-base font-semibold text-content">
+          Études posturales
+          <span className="ml-2 text-sm font-normal text-content-subtle">
+            ({studies.length})
+          </span>
+        </h3>
+        {canEdit && (
+          <Link href={`/patients/${patient.id}/etude`}>
+            <Button size="sm">+ Nouvelle étude</Button>
+          </Link>
+        )}
+      </div>
+
+      {studies.length === 0 ? (
+        <Card>
+          <p className="text-sm text-content-subtle italic">
+            Aucune étude réalisée. {canEdit && "Démarrez la première avec « Nouvelle étude »."}
+          </p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {studies.map((study) => (
+            <StudyCard
+              key={study.id}
+              study={study}
+              patientId={patient.id}
+              canEdit={canEdit}
+              measurementsById={measurementsById}
+            />
+          ))}
         </div>
       )}
-      {study.componentsUsed.length > 0 && (
-        <div className="mt-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-content-subtle">Composants changés</p>
-          <ul className="mt-1 space-y-0.5">
-            {study.componentsUsed.map((c) => (
-              <li key={c.id} className="text-sm text-content">
-                {c.category} — {c.name} {c.brand ? `(${c.brand})` : ""}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {study.exercisesPrescribed.length > 0 && (
-        <div className="mt-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-content-subtle">Exercices prescrits</p>
-          <ul className="mt-1 space-y-0.5">
-            {study.exercisesPrescribed.map((e) => (
-              <li key={e.id} className="text-sm text-content">
-                {e.name}
-                {e.frequency ? ` — ${e.frequency}` : ""}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </Card>
+    </div>
   );
 }
 
@@ -248,17 +242,24 @@ function EvolutionTable({ patient }: { patient: PatientWithRelations }) {
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export function PatientDossier({ patient }: { patient: PatientWithRelations }) {
-  const latestStudy = patient.studies[0];
+export function PatientDossier({
+  patient,
+  canEdit = false,
+  measurementsById = {},
+}: {
+  patient: PatientWithRelations;
+  canEdit?: boolean;
+  measurementsById?: Record<string, MeasurementInfo>;
+}) {
   const latestFollowup = patient.followups.at(-1);
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <PanelAmont intake={patient.intake} patientId={patient.id} />
-        <PanelBilan study={latestStudy} />
         <PanelSuivi followup={latestFollowup} />
       </div>
+      <StudiesSection patient={patient} canEdit={canEdit} measurementsById={measurementsById} />
       <EvolutionTable patient={patient} />
     </div>
   );

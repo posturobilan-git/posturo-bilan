@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { Exercise, ExerciseCategory, BikeComponent } from "@prisma/client";
-import type { StudyMeasures } from "@/types";
 
 const CATEGORY_LABELS: Record<ExerciseCategory, string> = {
   SOUPLESSE: "Souplesse",
@@ -16,13 +15,13 @@ const CATEGORY_LABELS: Record<ExerciseCategory, string> = {
 // ─── Summary block shown before final submit ──────────────────────────────────
 
 function StudySummary({
-  measures,
+  measureCount,
   components,
   exercises,
   selectedComponentIds,
   selectedExerciseIds,
 }: {
-  measures: StudyMeasures;
+  measureCount: number;
   components: BikeComponent[];
   exercises: Exercise[];
   selectedComponentIds: string[];
@@ -34,13 +33,9 @@ function StudySummary({
   return (
     <div className="rounded-lg border border-brand-100 bg-brand-50 p-4 space-y-3 text-sm">
       <p className="font-semibold text-brand-900">Récapitulatif de l'étude</p>
-      <div className="grid grid-cols-1 gap-x-6 gap-y-1 text-brand-800 md:grid-cols-2">
-        {measures.saddleHeight && <span>Selle : {measures.saddleHeight} cm</span>}
-        {measures.saddleSetback !== undefined && <span>Recul : {measures.saddleSetback} mm</span>}
-        {measures.stemLength && <span>Potence : {measures.stemLength} mm</span>}
-        {measures.effectiveReach && <span>Reach : {measures.effectiveReach} mm</span>}
-        {measures.crankLength && <span>Manivelles : {measures.crankLength} mm</span>}
-      </div>
+      <p className="text-brand-800">
+        {measureCount} côte{measureCount !== 1 ? "s" : ""} renseignée{measureCount !== 1 ? "s" : ""}
+      </p>
       {selectedComponents.length > 0 && (
         <div>
           <p className="font-medium text-brand-900">Composants ({selectedComponents.length}) :</p>
@@ -64,7 +59,7 @@ interface Props {
   components: BikeComponent[];
   selected: string[];
   selectedComponentIds: string[];
-  measures: StudyMeasures;
+  measureCount: number;
   onToggle: (id: string) => void;
   onBack: () => void;
   onSubmit: () => void;
@@ -76,7 +71,7 @@ export function ExercisePicker({
   components,
   selected,
   selectedComponentIds,
-  measures,
+  measureCount,
   onToggle,
   onBack,
   onSubmit,
@@ -161,7 +156,7 @@ export function ExercisePicker({
 
       {/* Summary before submit */}
       <StudySummary
-        measures={measures}
+        measureCount={measureCount}
         components={components}
         exercises={exercises}
         selectedComponentIds={selectedComponentIds}

@@ -41,10 +41,22 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    await prisma.patient.update({
-      where: { id: data.patientId },
-      data: { status: "followup_completed" },
+    // The lifecycle lives on studies now: mark the patient's most recent study
+    // that reached the report/follow-up phase as followup_completed.
+    const latestStudy = await prisma.study.findFirst({
+      where: {
+        patientId: data.patientId,
+        status: { in: ["report_sent", "followup_pending"] },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
     });
+    if (latestStudy) {
+      await prisma.study.update({
+        where: { id: latestStudy.id },
+        data: { status: "followup_completed" },
+      });
+    }
 
     return NextResponse.json({ success: true, followupId: followup.id });
   } catch {

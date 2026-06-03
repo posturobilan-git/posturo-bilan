@@ -35,25 +35,26 @@ export async function getActivityStats(): Promise<ActivityStats> {
       where: { createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
     }),
 
-    prisma.postureStudy.count({ where: { createdAt: { gte: startOfMonth } } }),
+    prisma.study.count({ where: { createdAt: { gte: startOfMonth } } }),
 
-    prisma.postureStudy.count({
+    prisma.study.count({
       where: { createdAt: { gte: startOfLastMonth, lt: startOfMonth } },
     }),
 
-    prisma.postureStudy.count({
+    prisma.study.count({
       where: { reportSentAt: { gte: startOfMonth } },
     }),
 
-    // J+30 response rate = followups received / eligible patients.
+    // J+30 response rate = studies that received their follow-up (status
+    // followup_completed) over studies that reached the follow-up phase.
     prisma.$queryRaw<[{ rate: number | null }]>`
       SELECT
         ROUND(
-          COUNT(f.id)::decimal / NULLIF(COUNT(DISTINCT p.id), 0) * 100, 1
+          COUNT(*) FILTER (WHERE status = 'followup_completed')::decimal
+            / NULLIF(COUNT(*) FILTER (WHERE status IN ('report_sent', 'followup_pending', 'followup_completed')), 0)
+            * 100, 1
         )::float as rate
-      FROM "Patient" p
-      LEFT JOIN "Followup" f ON f."patientId" = p.id
-      WHERE p.status IN ('followup_pending', 'followup_completed')
+      FROM "Study"
     `,
   ]);
 

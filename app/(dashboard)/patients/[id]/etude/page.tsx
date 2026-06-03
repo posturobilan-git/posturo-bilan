@@ -4,21 +4,29 @@ import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PatientSidebar } from "@/components/study/PatientSidebar";
 import { StudyForm } from "@/components/study/StudyForm";
-import type { StudyMeasures } from "@/types";
+import type { StudyMeasureValue } from "@/types";
 
 export default async function EtudePage(props: PageProps<"/patients/[id]/etude">) {
   const kine = await getCurrentKine();
   if (!kine) redirect("/sign-in");
 
   const { id } = await props.params;
+  const { studyId } = await props.searchParams;
+  const editStudyId = typeof studyId === "string" ? studyId : undefined;
 
-  const [patient, components, exercises] = await Promise.all([
+  const [patient, bikeTypes, measurements, components, exercises] = await Promise.all([
     prisma.patient.findUnique({
       where: {
         id,
         ...(kine.role !== "ADMIN" && { kineId: kine.id }),
       },
       include: { intake: true },
+    }),
+    prisma.bikeType.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+    prisma.measurement.findMany({
+      where: { isActive: true },
+      include: { bikeTypes: { select: { id: true } } },
+      orderBy: [{ order: "asc" }, { name: "asc" }],
     }),
     prisma.bikeComponent.findMany({
       where: { isActive: true },
@@ -32,26 +40,41 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
 
   if (!patient) redirect("/patients");
 
-  // Pre-fill from most recent study if editing
-  const latestStudy = await prisma.postureStudy.findFirst({
-    where: { patientId: id },
-    include: { componentsUsed: true, exercisesPrescribed: true },
-    orderBy: { createdAt: "desc" },
-  });
+  // Editing: load the specific study (scoped). Creating: no initial data.
+  const study = editStudyId
+    ? await prisma.study.findUnique({
+        where: {
+          id: editStudyId,
+          patientId: id,
+          ...(kine.role !== "ADMIN" && { kineId: kine.id }),
+        },
+        include: { componentsUsed: true, exercisesPrescribed: true },
+      })
+    : null;
 
-  const initial = latestStudy
+  if (editStudyId && !study) redirect(`/patients/${id}`);
+
+  // Convert the stored measure-values array into the keyed map the form uses.
+  const measureValues: Record<string, { before: number | null; after: number | null }> = {};
+  for (const v of (study?.measureValues as StudyMeasureValue[] | null) ?? []) {
+    measureValues[v.measurementId] = { before: v.before ?? null, after: v.after ?? null };
+  }
+
+  const initial = study
     ? {
-        studyId: latestStudy.id,
-        measures: latestStudy.measures as StudyMeasures,
-        componentIds: latestStudy.componentsUsed.map((c) => c.id),
-        exerciseIds: latestStudy.exercisesPrescribed.map((e) => e.id),
+        studyId: study.id,
+        bikeTypeId: study.bikeTypeId,
+        measureValues,
+        observations: study.observations ?? "",
+        componentIds: study.componentsUsed.map((c) => c.id),
+        exerciseIds: study.exercisesPrescribed.map((e) => e.id),
       }
     : undefined;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Étude posturale"
+        title={study ? "Modifier l'étude" : "Nouvelle étude"}
         description={`${patient.firstName} ${patient.lastName}`}
       />
 
@@ -65,6 +88,8 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
         <div className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
           <StudyForm
             patient={patient}
+            bikeTypes={bikeTypes}
+            measurements={measurements}
             components={components}
             exercises={exercises}
             initial={initial}

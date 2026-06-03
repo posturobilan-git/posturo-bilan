@@ -13,7 +13,7 @@ type AuthzResult =
 /** Verifies the study exists and the kiné may act on it. */
 async function authorizeStudy(studyId: string): Promise<AuthzResult> {
   const kine = await requireKine();
-  const study = await prisma.postureStudy.findUnique({
+  const study = await prisma.study.findUnique({
     where: { id: studyId },
     select: { patientId: true, patient: { select: { kineId: true } } },
   });
@@ -40,8 +40,8 @@ export async function generateReport(
 }
 
 /**
- * Emails the already-generated report to the patient and advances them
- * to report_sent.
+ * Emails the already-generated report to the patient and advances the
+ * study to report_sent.
  */
 export async function sendReport(
   studyId: string
@@ -50,6 +50,9 @@ export async function sendReport(
   if (!auth.ok) return fail(auth.error);
 
   const result = await sendReportForStudy(studyId, auth.kineId);
-  if (result.ok) revalidatePath(`/patients/${auth.patientId}`);
+  if (result.ok) {
+    revalidatePath(`/patients/${auth.patientId}`);
+    revalidatePath("/etudes");
+  }
   return result;
 }

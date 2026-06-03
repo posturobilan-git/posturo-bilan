@@ -21,7 +21,7 @@ export async function GET(
     return new NextResponse("Non authentifié", { status: 401 });
   }
 
-  const study = await prisma.postureStudy.findUnique({
+  const study = await prisma.study.findUnique({
     where: { id: studyId },
     select: { reportUrl: true, patient: { select: { kineId: true } } },
   });

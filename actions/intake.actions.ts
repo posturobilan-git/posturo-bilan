@@ -11,9 +11,9 @@ import { z } from "zod";
 type ManualIntakeInput = z.infer<typeof manualIntakeSchema>;
 
 /**
- * Saves intake data entered manually by the kiné and advances the patient
- * from intake_pending to intake_completed (only on the first completion —
- * never downgrades a patient already further along the pipeline).
+ * Saves intake data entered manually by the kiné. The intake is the
+ * patient-level information collected once; the lifecycle now lives on each
+ * study, so saving the intake no longer touches any patient status.
  */
 export async function saveIntake(
   patientId: string,
@@ -32,7 +32,7 @@ export async function saveIntake(
         id: patientId,
         ...(kine.role !== "ADMIN" && { kineId: kine.id }),
       },
-      select: { status: true },
+      select: { id: true },
     });
     if (!patient) return fail("Patient introuvable.");
 
@@ -55,20 +55,12 @@ export async function saveIntake(
       update: intakeData,
     });
 
-    // Advance status only on first completion.
-    if (patient.status === "intake_pending") {
-      await prisma.patient.update({
-        where: { id: patientId },
-        data: { status: "intake_completed" },
-      });
-    }
-
     await logAudit({
       userId: kine.id,
       action: "UPDATE",
       entity: "intake",
       entityId: patientId,
-      metadata: { source: "manual", advanced: patient.status === "intake_pending" },
+      metadata: { source: "manual" },
     });
 
     revalidatePath(`/patients/${patientId}`);
