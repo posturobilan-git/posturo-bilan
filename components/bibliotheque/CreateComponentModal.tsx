@@ -7,11 +7,40 @@ import { toast } from "@/lib/stores/toastStore";
 import { COMPONENT_CATEGORIES, COMPONENT_CATEGORY_LABELS } from "@/lib/labels";
 import type { BikeComponent, ComponentCategory } from "@prisma/client";
 
-export function CreateComponentModal({ component }: { component?: BikeComponent }) {
+interface BikeTypeOption {
+  id: string;
+  name: string;
+}
+
+type ComponentValue = BikeComponent & { bikeTypes?: { id: string; name: string }[] };
+
+export function CreateComponentModal({
+  component,
+  bikeTypes,
+}: {
+  component?: ComponentValue;
+  bikeTypes: BikeTypeOption[];
+}) {
   const isEdit = Boolean(component);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(
+    component?.bikeTypes?.map((b) => b.id) ?? []
+  );
+
+  function toggleType(id: string) {
+    setSelectedTypes((prev) =>
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+    );
+  }
+
+  function openModal() {
+    setError(null);
+    setSelectedTypes(component?.bikeTypes?.map((b) => b.id) ?? []);
+    setOpen(true);
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -22,6 +51,7 @@ export function CreateComponentModal({ component }: { component?: BikeComponent 
       model: (fd.get("model") as string) || undefined,
       category: String(fd.get("category") ?? "AUTRE") as ComponentCategory,
       notes: (fd.get("notes") as string) || undefined,
+      bikeTypeIds: selectedTypes,
     };
 
     setError(null);
@@ -42,13 +72,13 @@ export function CreateComponentModal({ component }: { component?: BikeComponent 
     <>
       {isEdit ? (
         <button
-          onClick={() => { setError(null); setOpen(true); }}
+          onClick={openModal}
           className="text-sm font-medium text-brand-600 hover:text-brand-800"
         >
           Éditer
         </button>
       ) : (
-        <Button className="w-full sm:w-auto" onClick={() => { setError(null); setOpen(true); }}>+ Nouveau composant</Button>
+        <Button className="w-full sm:w-auto" onClick={openModal}>+ Nouveau composant</Button>
       )}
 
       {open && (
@@ -103,6 +133,37 @@ export function CreateComponentModal({ component }: { component?: BikeComponent 
                 <textarea name="notes" rows={2} defaultValue={component?.notes ?? ""}
                   className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
               </label>
+
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium text-gray-700">
+                  Types de vélo compatibles
+                  <span className="ml-1 font-normal text-gray-400">(aucun = universel)</span>
+                </span>
+                {bikeTypes.length === 0 ? (
+                  <p className="text-xs text-gray-400">Aucun type de vélo actif.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {bikeTypes.map((bt) => {
+                      const active = selectedTypes.includes(bt.id);
+                      return (
+                        <button
+                          type="button"
+                          key={bt.id}
+                          onClick={() => toggleType(bt.id)}
+                          aria-pressed={active}
+                          className={`rounded-full border px-3 py-1 text-sm transition-colors ${
+                            active
+                              ? "border-brand-500 bg-brand-50 text-brand-700"
+                              : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          {bt.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
               {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 

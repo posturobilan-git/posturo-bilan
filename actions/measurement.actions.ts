@@ -6,7 +6,7 @@ import { logAudit } from "@/lib/audit";
 import { requireKine, requireAdmin } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { measurementSchema, type MeasurementInput } from "@/lib/validations/measurement.schema";
-import type { Measurement, BikeType } from "@prisma/client";
+import { Prisma, type Measurement, type BikeType } from "@prisma/client";
 
 export type MeasurementWithTypes = Measurement & {
   bikeTypes: Pick<BikeType, "id" | "name">[];
@@ -107,6 +107,25 @@ export async function updateMeasurement(
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
     console.error("updateMeasurement failed:", e);
     return fail("Impossible de modifier la côte. Réessayez.");
+  }
+}
+
+export async function deleteMeasurement(id: string): Promise<ActionResult<void>> {
+  try {
+    const admin = await requireAdmin();
+    // Studies store côte values as JSON (no FK). Any value referencing a deleted
+    // côte is simply ignored when rendering, so studies stay intact.
+    await prisma.measurement.delete({ where: { id } });
+    await logAudit({ userId: admin.id, action: "DELETE", entity: "measurement", entityId: id });
+    revalidatePath("/bibliotheque");
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
+      return fail("Côte introuvable.");
+    }
+    console.error("deleteMeasurement failed:", e);
+    return fail("Impossible de supprimer la côte. Réessayez.");
   }
 }
 

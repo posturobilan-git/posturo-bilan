@@ -1,9 +1,10 @@
 "use client";
 
 import { useTransition } from "react";
-import { toggleExercise, type ExerciseWithCount } from "@/actions/exercise.actions";
+import { toggleExercise, deleteExercise, type ExerciseWithCount } from "@/actions/exercise.actions";
 import { toast } from "@/lib/stores/toastStore";
 import { EXERCISE_CATEGORY_LABELS } from "@/lib/labels";
+import { DeleteButton } from "@/components/ui/DeleteButton";
 import { CreateExerciseModal } from "./CreateExerciseModal";
 
 export function ExerciseCard({ exercise, isAdmin }: { exercise: ExerciseWithCount; isAdmin: boolean }) {
@@ -65,6 +66,15 @@ export function ExerciseCard({ exercise, isAdmin }: { exercise: ExerciseWithCoun
             >
               {exercise.isActive ? "Désactiver" : "Activer"}
             </button>
+            <DeleteButton
+              onConfirm={() => deleteExercise(exercise.id)}
+              successMessage="Exercice supprimé."
+              warning={
+                exercise._count.studies > 0
+                  ? `Retiré de ${exercise._count.studies} étude(s).`
+                  : undefined
+              }
+            />
           </div>
         )}
       </div>

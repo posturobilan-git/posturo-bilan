@@ -1,9 +1,10 @@
 "use client";
 
 import { useTransition } from "react";
-import { toggleMeasurement, type MeasurementWithTypes } from "@/actions/measurement.actions";
+import { toggleMeasurement, deleteMeasurement, type MeasurementWithTypes } from "@/actions/measurement.actions";
 import { toast } from "@/lib/stores/toastStore";
 import { MEASUREMENT_CATEGORY_LABELS } from "@/lib/labels";
+import { DeleteButton } from "@/components/ui/DeleteButton";
 import { CreateMeasurementModal } from "./CreateMeasurementModal";
 
 export function MeasurementCard({
@@ -70,6 +71,10 @@ export function MeasurementCard({
           >
             {measurement.isActive ? "Désactiver" : "Activer"}
           </button>
+          <DeleteButton
+            onConfirm={() => deleteMeasurement(measurement.id)}
+            successMessage="Côte supprimée."
+          />
         </div>
       )}
     </div>

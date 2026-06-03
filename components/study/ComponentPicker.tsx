@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { BikeComponent, ComponentCategory } from "@prisma/client";
 
+export type ComponentForStudy = BikeComponent & { bikeTypes: { id: string }[] };
+
 const CATEGORY_LABELS: Record<ComponentCategory, string> = {
   SELLE: "Selle",
   POTENCE: "Potence",
@@ -15,20 +17,27 @@ const CATEGORY_LABELS: Record<ComponentCategory, string> = {
 };
 
 interface Props {
-  components: BikeComponent[];
+  components: ComponentForStudy[];
+  /** Selected bike type — only compatible (or universal) components are shown. */
+  bikeTypeId: string | null;
   selected: string[];
   onToggle: (id: string) => void;
   onBack: () => void;
   onNext: () => void;
 }
 
-export function ComponentPicker({ components, selected, onToggle, onBack, onNext }: Props) {
+export function ComponentPicker({ components, bikeTypeId, selected, onToggle, onBack, onNext }: Props) {
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState<ComponentCategory | "">("");
 
-  const categories = [...new Set(components.map((c) => c.category))] as ComponentCategory[];
+  // Only components compatible with the study's bike type (no types = universal).
+  const compatible = components.filter(
+    (c) => c.bikeTypes.length === 0 || (bikeTypeId != null && c.bikeTypes.some((b) => b.id === bikeTypeId))
+  );
 
-  const filtered = components.filter((c) => {
+  const categories = [...new Set(compatible.map((c) => c.category))] as ComponentCategory[];
+
+  const filtered = compatible.filter((c) => {
     const matchesSearch =
       !search ||
       c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -40,7 +49,7 @@ export function ComponentPicker({ components, selected, onToggle, onBack, onNext
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-600">
-        Sélectionnez les composants modifiés ou essayés pendant l'étude.
+        Sélectionnez les composants modifiés ou essayés pendant l&apos;étude.
       </p>
 
       {/* Filters */}
@@ -74,8 +83,10 @@ export function ComponentPicker({ components, selected, onToggle, onBack, onNext
       {/* List */}
       {filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-300 py-8 text-center">
-          <p className="text-sm text-gray-400">Aucun composant dans la bibliothèque.</p>
-          <p className="mt-1 text-xs text-gray-400">Ajoutez-en depuis la section Bibliothèque.</p>
+          <p className="text-sm text-gray-400">Aucun composant compatible avec ce type de vélo.</p>
+          <p className="mt-1 text-xs text-gray-400">
+            Associez des composants à ce vélo depuis la Bibliothèque.
+          </p>
         </div>
       ) : (
         <div className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">

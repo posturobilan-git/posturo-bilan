@@ -1,6 +1,6 @@
 import "server-only";
-import { put, get } from "@vercel/blob";
-import { writeFile, mkdir, readFile } from "node:fs/promises";
+import { put, get, del } from "@vercel/blob";
+import { writeFile, mkdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 
 /**
@@ -47,6 +47,22 @@ export async function readReport(key: string): Promise<Buffer | null> {
     return await readFile(path.join(process.cwd(), "public", key));
   } catch {
     return null;
+  }
+}
+
+/**
+ * Best-effort removal of a stored report PDF (called when its study is deleted).
+ * Never throws — an orphaned file is harmless and must not block deletion.
+ */
+export async function deleteReport(key: string): Promise<void> {
+  try {
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      await del(key);
+      return;
+    }
+    await unlink(path.join(process.cwd(), "public", key));
+  } catch {
+    // Ignore: file already gone, or storage unavailable.
   }
 }
 

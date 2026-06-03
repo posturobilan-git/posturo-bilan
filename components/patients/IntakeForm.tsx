@@ -189,7 +189,7 @@ export function IntakeForm({ patientId, intake }: Props) {
         <legend className="px-1 text-sm font-semibold text-gray-700">Douleurs & objectifs</legend>
         <InjuriesInput injuries={form.injuries} onChange={(next) => set("injuries", next)} />
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-600">Objectifs de l'étude</span>
+          <span className="text-xs font-medium text-gray-600">Objectifs de l&apos;étude</span>
           <textarea
             rows={3} maxLength={2000}
             value={form.goals ?? ""}
@@ -214,7 +214,7 @@ export function IntakeForm({ patientId, intake }: Props) {
           Annuler
         </Button>
         <Button type="submit" loading={pending}>
-          Enregistrer l'intake
+          Enregistrer l&apos;intake
         </Button>
       </div>
     </form>

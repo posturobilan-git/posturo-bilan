@@ -6,10 +6,13 @@ import { logAudit } from "@/lib/audit";
 import { requireKine, requireAdmin } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { componentSchema } from "@/lib/validations/component.schema";
-import { ComponentCategory, type BikeComponent } from "@prisma/client";
+import { ComponentCategory, Prisma, type BikeComponent, type BikeType } from "@prisma/client";
 import { z } from "zod";
 
-export type ComponentWithCount = BikeComponent & { _count: { studies: number } };
+export type ComponentWithCount = BikeComponent & {
+  _count: { studies: number };
+  bikeTypes: Pick<BikeType, "id" | "name">[];
+};
 
 // ─── Query ────────────────────────────────────────────────────────────────────
 
@@ -31,7 +34,10 @@ export async function getComponents(filters?: {
         ],
       }),
     },
-    include: { _count: { select: { studies: true } } },
+    include: {
+      _count: { select: { studies: true } },
+      bikeTypes: { select: { id: true, name: true } },
+    },
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
   });
 }
@@ -46,8 +52,13 @@ export async function createComponent(
 
   try {
     const admin = await requireAdmin();
+    const { bikeTypeIds, ...fields } = parsed.data;
     const component = await prisma.bikeComponent.create({
-      data: { ...parsed.data, createdById: admin.id },
+      data: {
+        ...fields,
+        createdById: admin.id,
+        bikeTypes: { connect: bikeTypeIds.map((id) => ({ id })) },
+      },
     });
     await logAudit({ userId: admin.id, action: "CREATE", entity: "component", entityId: component.id });
     revalidatePath("/bibliotheque");
@@ -68,7 +79,11 @@ export async function updateComponent(
 
   try {
     const admin = await requireAdmin();
-    await prisma.bikeComponent.update({ where: { id }, data: parsed.data });
+    const { bikeTypeIds, ...fields } = parsed.data;
+    await prisma.bikeComponent.update({
+      where: { id },
+      data: { ...fields, bikeTypes: { set: bikeTypeIds.map((bid) => ({ id: bid })) } },
+    });
     await logAudit({ userId: admin.id, action: "UPDATE", entity: "component", entityId: id });
     revalidatePath("/bibliotheque");
     return ok({ id });
@@ -76,6 +91,25 @@ export async function updateComponent(
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
     console.error("updateComponent failed:", e);
     return fail("Impossible de modifier le composant. Réessayez.");
+  }
+}
+
+export async function deleteComponent(id: string): Promise<ActionResult<void>> {
+  try {
+    const admin = await requireAdmin();
+    // The implicit Study↔Component relation cascades, so the component is simply
+    // removed from any studies that used it — those studies are preserved.
+    await prisma.bikeComponent.delete({ where: { id } });
+    await logAudit({ userId: admin.id, action: "DELETE", entity: "component", entityId: id });
+    revalidatePath("/bibliotheque");
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
+      return fail("Composant introuvable.");
+    }
+    console.error("deleteComponent failed:", e);
+    return fail("Impossible de supprimer le composant. Réessayez.");
   }
 }
 

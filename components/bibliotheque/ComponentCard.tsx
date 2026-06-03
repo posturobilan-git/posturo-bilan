@@ -1,12 +1,21 @@
 "use client";
 
 import { useTransition } from "react";
-import { toggleComponent, type ComponentWithCount } from "@/actions/component.actions";
+import { toggleComponent, deleteComponent, type ComponentWithCount } from "@/actions/component.actions";
 import { toast } from "@/lib/stores/toastStore";
 import { COMPONENT_CATEGORY_LABELS } from "@/lib/labels";
+import { DeleteButton } from "@/components/ui/DeleteButton";
 import { CreateComponentModal } from "./CreateComponentModal";
 
-export function ComponentCard({ component, isAdmin }: { component: ComponentWithCount; isAdmin: boolean }) {
+export function ComponentCard({
+  component,
+  bikeTypes,
+  isAdmin,
+}: {
+  component: ComponentWithCount;
+  bikeTypes: { id: string; name: string }[];
+  isAdmin: boolean;
+}) {
   const [pending, startTransition] = useTransition();
 
   function handleToggle() {
@@ -37,13 +46,27 @@ export function ComponentCard({ component, isAdmin }: { component: ComponentWith
       )}
       {component.notes && <p className="mt-1 line-clamp-2 text-xs text-gray-500">{component.notes}</p>}
 
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {component.bikeTypes.length === 0 ? (
+          <span className="rounded-full bg-accent-50 px-2.5 py-0.5 text-xs font-medium text-accent-700">
+            Universel
+          </span>
+        ) : (
+          component.bikeTypes.map((bt) => (
+            <span key={bt.id} className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700">
+              {bt.name}
+            </span>
+          ))
+        )}
+      </div>
+
       <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
         <span className="text-xs text-gray-400">
           Utilisé {component._count.studies} fois
         </span>
         {isAdmin && (
           <div className="flex items-center gap-3">
-            <CreateComponentModal component={component} />
+            <CreateComponentModal component={component} bikeTypes={bikeTypes} />
             <button
               onClick={handleToggle}
               disabled={pending}
@@ -51,6 +74,15 @@ export function ComponentCard({ component, isAdmin }: { component: ComponentWith
             >
               {component.isActive ? "Désactiver" : "Activer"}
             </button>
+            <DeleteButton
+              onConfirm={() => deleteComponent(component.id)}
+              successMessage="Composant supprimé."
+              warning={
+                component._count.studies > 0
+                  ? `Retiré de ${component._count.studies} étude(s).`
+                  : undefined
+              }
+            />
           </div>
         )}
       </div>

@@ -6,6 +6,7 @@ import { studySchema } from "@/lib/validations/study.schema";
 import { logAudit } from "@/lib/audit";
 import { requireKine } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
+import { deleteReport } from "@/lib/storage";
 import { Prisma, StudyStatus } from "@prisma/client";
 import type { StudyListItem } from "@/types";
 import { z } from "zod";
@@ -199,6 +200,38 @@ export async function submitStudy(
   } catch (e) {
     console.error("submitStudy failed:", e);
     return fail("Impossible de soumettre l'étude. Réessayez.");
+  }
+}
+
+/**
+ * Deletes a study. Its component/exercise links drop via the implicit-relation
+ * cascade; the patient and any follow-ups (patient-level) are untouched. The
+ * stored report PDF is cleaned up best-effort.
+ */
+export async function deleteStudy(studyId: string): Promise<ActionResult<void>> {
+  try {
+    const kine = await requireKine();
+
+    const study = await prisma.study.findUnique({
+      where: { id: studyId },
+      select: { id: true, kineId: true, patientId: true, reportUrl: true },
+    });
+    if (!study) return fail("Étude introuvable.");
+    if (kine.role !== "ADMIN" && study.kineId !== kine.id) {
+      return fail("Accès refusé à cette étude.");
+    }
+
+    await prisma.study.delete({ where: { id: studyId } });
+    if (study.reportUrl) await deleteReport(study.reportUrl);
+
+    await logAudit({ userId: kine.id, action: "DELETE", entity: "study", entityId: studyId });
+    revalidatePath(`/patients/${study.patientId}`);
+    revalidatePath("/etudes");
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith("Accès refusé")) return fail(e.message);
+    console.error("deleteStudy failed:", e);
+    return fail("Impossible de supprimer l'étude. Réessayez.");
   }
 }
 

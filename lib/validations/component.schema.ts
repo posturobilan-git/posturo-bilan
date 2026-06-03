@@ -6,4 +6,6 @@ export const componentSchema = z.object({
   model: z.string().optional(),
   category: z.enum(["SELLE", "POTENCE", "CINTRE", "CALE_PIEDS", "MANIVELLES", "PEDALES", "AUTRE"]).default("AUTRE"),
   notes: z.string().optional(),
+  // Types de vélo compatibles. Vide = composant universel (tous les vélos).
+  bikeTypeIds: z.array(z.string().uuid()).default([]),
 });

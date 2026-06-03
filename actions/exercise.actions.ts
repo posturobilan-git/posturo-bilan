@@ -6,7 +6,7 @@ import { logAudit } from "@/lib/audit";
 import { requireKine, requireAdmin } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { exerciseSchema } from "@/lib/validations/exercise.schema";
-import { ExerciseCategory, type Exercise } from "@prisma/client";
+import { ExerciseCategory, Prisma, type Exercise } from "@prisma/client";
 import { z } from "zod";
 
 export type ExerciseWithCount = Exercise & { _count: { studies: number } };
@@ -76,6 +76,25 @@ export async function updateExercise(
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
     console.error("updateExercise failed:", e);
     return fail("Impossible de modifier l'exercice. Réessayez.");
+  }
+}
+
+export async function deleteExercise(id: string): Promise<ActionResult<void>> {
+  try {
+    const admin = await requireAdmin();
+    // The implicit Study↔Exercise relation cascades, so the exercise is simply
+    // removed from any studies that prescribed it — those studies are preserved.
+    await prisma.exercise.delete({ where: { id } });
+    await logAudit({ userId: admin.id, action: "DELETE", entity: "exercise", entityId: id });
+    revalidatePath("/bibliotheque");
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
+      return fail("Exercice introuvable.");
+    }
+    console.error("deleteExercise failed:", e);
+    return fail("Impossible de supprimer l'exercice. Réessayez.");
   }
 }
 

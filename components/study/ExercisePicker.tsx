@@ -32,7 +32,7 @@ function StudySummary({
 
   return (
     <div className="rounded-lg border border-brand-100 bg-brand-50 p-4 space-y-3 text-sm">
-      <p className="font-semibold text-brand-900">Récapitulatif de l'étude</p>
+      <p className="font-semibold text-brand-900">Récapitulatif de l&apos;étude</p>
       <p className="text-brand-800">
         {measureCount} côte{measureCount !== 1 ? "s" : ""} renseignée{measureCount !== 1 ? "s" : ""}
       </p>
@@ -166,7 +166,7 @@ export function ExercisePicker({
       <div className="flex justify-between pt-2">
         <Button variant="secondary" onClick={onBack}>← Étape précédente</Button>
         <Button onClick={onSubmit} loading={submitting}>
-          Soumettre l'étude ✓
+          Soumettre l&apos;étude ✓
         </Button>
       </div>
     </div>
