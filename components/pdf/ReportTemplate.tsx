@@ -8,6 +8,12 @@ export interface ReportMeasureRow {
   after: number | null;
 }
 
+/** Physio test row — the value is pre-formatted (Oui/Non, valeur + unité, texte). */
+export interface ReportPhysioRow {
+  name: string;
+  value: string;
+}
+
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 const TEAL = "#1D9E75";
@@ -168,9 +174,11 @@ function fmtVal(value: number | null, unit: string): string {
 export function ReportTemplate({
   study,
   measureRows,
+  physioRows,
 }: {
   study: StudyForReport;
   measureRows: ReportMeasureRow[];
+  physioRows: ReportPhysioRow[];
 }) {
   const { patient, kine } = study;
   const intake = patient.intake;
@@ -251,6 +259,22 @@ export function ReportTemplate({
                 <Text style={styles.tColName}>{r.name}</Text>
                 <Text style={styles.tColVal}>{fmtVal(r.before, r.unit)}</Text>
                 <Text style={styles.tColVal}>{fmtVal(r.after, r.unit)}</Text>
+              </View>
+            ))}
+          </>
+        )}
+
+        {physioRows.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Tests physiologiques</Text>
+            <View style={styles.tHead}>
+              <Text style={styles.tColNameHead}>Test</Text>
+              <Text style={[styles.tColValHead, { width: "50%" }]}>Résultat</Text>
+            </View>
+            {physioRows.map((r, i) => (
+              <View key={i} style={styles.tRow}>
+                <Text style={styles.tColName}>{r.name}</Text>
+                <Text style={[styles.tColVal, { width: "50%" }]}>{r.value}</Text>
               </View>
             ))}
           </>

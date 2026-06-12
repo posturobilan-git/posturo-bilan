@@ -2,21 +2,23 @@ import type { StudyStep } from "@/lib/stores/studyStore";
 
 const STEPS = [
   { n: 1, label: "Vélo" },
-  { n: 2, label: "Mesures" },
-  { n: 3, label: "Composants" },
-  { n: 4, label: "Exercices" },
+  { n: 2, label: "Tests physio" },
+  { n: 3, label: "Mesures avant" },
+  { n: 4, label: "Mesures après" },
+  { n: 5, label: "Composants" },
+  { n: 6, label: "Exercices" },
 ] as const;
 
 export function StudyStepper({ current }: { current: StudyStep }) {
   return (
-    <nav aria-label="Étapes de l'étude" className="flex items-center gap-0">
+    <nav aria-label="Étapes de l'étude" className="flex items-center gap-0 overflow-x-auto pb-1">
       {STEPS.map(({ n, label }, i) => {
         const done = n < current;
         const active = n === current;
         return (
-          <div key={n} className="flex items-center">
+          <div key={n} className="flex shrink-0 items-center">
             {i > 0 && (
-              <div className={`h-0.5 w-12 transition-colors ${done ? "bg-brand-600" : "bg-border"}`} />
+              <div className={`h-0.5 w-5 transition-colors sm:w-10 ${done ? "bg-brand-600" : "bg-border"}`} />
             )}
             <div className="flex flex-col items-center gap-1">
               <div

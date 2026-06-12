@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import type { StudyMeasureValue } from "@/types";
+import type { PhysioValue, StudyPhysioResult } from "@/lib/physio";
 
-// Steps: 1 Vélo · 2 Mesures · 3 Composants · 4 Exercices
-export type StudyStep = 1 | 2 | 3 | 4;
+// Steps: 1 Vélo · 2 Tests physio · 3 Mesures avant · 4 Mesures après ·
+// 5 Composants · 6 Exercices
+export type StudyStep = 1 | 2 | 3 | 4 | 5 | 6;
 
 interface StudyStoreState {
   patientId: string;
@@ -11,6 +13,12 @@ interface StudyStoreState {
   bikeTypeId: string | null;
   // Côtes saisies, indexées par measurementId pour une mise à jour O(1).
   measureValues: Record<string, { before: number | null; after: number | null }>;
+  // Côtes ajoutées à la volée pour CETTE étude uniquement (hors configuration
+  // du type de vélo), dans l'ordre d'ajout.
+  extraMeasurementIds: string[];
+  // Résultat (unique) des tests physio, indexé par physioTestId. La valeur est
+  // number|boolean|string|null selon l'outputType du test.
+  physioResults: Record<string, PhysioValue>;
   observations: string;
   selectedComponentIds: string[];
   selectedExerciseIds: string[];
@@ -21,6 +29,9 @@ interface StudyStoreActions {
   setStep: (step: StudyStep) => void;
   setBikeTypeId: (id: string | null) => void;
   setMeasureValue: (measurementId: string, field: "before" | "after", value: number | null) => void;
+  addExtraMeasurement: (measurementId: string) => void;
+  removeExtraMeasurement: (measurementId: string) => void;
+  setPhysioValue: (physioTestId: string, value: PhysioValue) => void;
   setObservations: (text: string) => void;
   toggleComponent: (id: string) => void;
   toggleExercise: (id: string) => void;
@@ -34,6 +45,8 @@ const DEFAULT_STATE: StudyStoreState = {
   draftStudyId: null,
   bikeTypeId: null,
   measureValues: {},
+  extraMeasurementIds: [],
+  physioResults: {},
   observations: "",
   selectedComponentIds: [],
   selectedExerciseIds: [],
@@ -46,6 +59,15 @@ export function measureValuesToArray(
   return Object.entries(values)
     .filter(([, v]) => v.before != null || v.after != null)
     .map(([measurementId, v]) => ({ measurementId, before: v.before, after: v.after }));
+}
+
+/** Serialises the physioResults map into the array shape the action expects. */
+export function physioResultsToArray(
+  results: StudyStoreState["physioResults"]
+): StudyPhysioResult[] {
+  return Object.entries(results)
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([physioTestId, value]) => ({ physioTestId, value }));
 }
 
 export const useStudyStore = create<StudyStoreState & StudyStoreActions>((set) => ({
@@ -68,6 +90,29 @@ export const useStudyStore = create<StudyStoreState & StudyStoreActions>((set) =
           [field]: value,
         },
       },
+    })),
+
+  addExtraMeasurement: (measurementId) =>
+    set((s) =>
+      s.extraMeasurementIds.includes(measurementId)
+        ? s
+        : { extraMeasurementIds: [...s.extraMeasurementIds, measurementId] }
+    ),
+
+  removeExtraMeasurement: (measurementId) =>
+    set((s) => {
+      // Drop the row and any values typed into it.
+      const measureValues = { ...s.measureValues };
+      delete measureValues[measurementId];
+      return {
+        extraMeasurementIds: s.extraMeasurementIds.filter((id) => id !== measurementId),
+        measureValues,
+      };
+    }),
+
+  setPhysioValue: (physioTestId, value) =>
+    set((s) => ({
+      physioResults: { ...s.physioResults, [physioTestId]: value },
     })),
 
   setObservations: (observations) => set({ observations }),

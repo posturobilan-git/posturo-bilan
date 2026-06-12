@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/Button";
 import { ReportActions } from "@/components/patients/ReportActions";
 import { StudyDeleteButton } from "@/components/patients/StudyDeleteButton";
 import type { StudyWithLibrary, StudyMeasureValue, MeasurementInfo } from "@/types";
+import {
+  formatPhysioValue,
+  hasPhysioValue,
+  type PhysioTestInfo,
+  type StudyPhysioResult,
+} from "@/lib/physio";
 
 function fmt(value: number | null | undefined, unit: string): string {
   if (value == null) return "—";
@@ -16,17 +22,27 @@ export function StudyCard({
   patientId,
   canEdit,
   measurementsById,
+  physioTestsById,
 }: {
   study: StudyWithLibrary;
   patientId: string;
   canEdit: boolean;
   measurementsById: Record<string, MeasurementInfo>;
+  physioTestsById: Record<string, PhysioTestInfo>;
 }) {
   const values = (study.measureValues as StudyMeasureValue[] | null) ?? [];
   // Keep only côtes we can label, ordered alphabetically by name.
   const rows = values
     .map((v) => ({ value: v, info: measurementsById[v.measurementId] }))
     .filter((r): r is { value: StudyMeasureValue; info: MeasurementInfo } => Boolean(r.info))
+    .sort((a, b) => a.info.name.localeCompare(b.info.name));
+
+  // Same resolution for the physio test results.
+  const physioResults = (study.physioResults as StudyPhysioResult[] | null) ?? [];
+  const physioRows = physioResults
+    .filter(hasPhysioValue)
+    .map((r) => ({ result: r, info: physioTestsById[r.physioTestId] }))
+    .filter((r): r is { result: StudyPhysioResult; info: PhysioTestInfo } => Boolean(r.info))
     .sort((a, b) => a.info.name.localeCompare(b.info.name));
   // Reports can be generated/sent once the study is finalised.
   const reportable = study.status !== "study_pending";
@@ -68,6 +84,29 @@ export function StudyCard({
                   <td className="px-3 py-1.5 text-content">{info.name}</td>
                   <td className="px-3 py-1.5 text-right text-content-muted">{fmt(value.before, info.unit)}</td>
                   <td className="px-3 py-1.5 text-right font-medium text-content">{fmt(value.after, info.unit)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {physioRows.length > 0 && (
+        <div className="mt-4 overflow-hidden rounded-lg border border-border">
+          <table className="min-w-full text-sm">
+            <thead className="bg-surface-muted">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-subtle">Test physio</th>
+                <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-content-subtle">Résultat</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {physioRows.map(({ result, info }) => (
+                <tr key={result.physioTestId}>
+                  <td className="px-3 py-1.5 text-content">{info.name}</td>
+                  <td className="px-3 py-1.5 text-right font-medium text-content">
+                    {formatPhysioValue(info.outputType, result.value, info.unit)}
+                  </td>
                 </tr>
               ))}
             </tbody>

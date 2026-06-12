@@ -5,9 +5,10 @@ import { getResend } from "@/lib/email";
 import { storePdf } from "@/lib/storage";
 import { logAudit } from "@/lib/audit";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
-import { ReportTemplate, type ReportMeasureRow } from "@/components/pdf/ReportTemplate";
+import { ReportTemplate, type ReportMeasureRow, type ReportPhysioRow } from "@/components/pdf/ReportTemplate";
 import { ReportEmail } from "@/lib/emails/ReportEmail";
 import { isLocalEnv } from "@/lib/env";
+import { formatPhysioValue, hasPhysioValue, type StudyPhysioResult } from "@/lib/physio";
 import type { StudyForReport, StudyMeasureValue } from "@/types";
 
 const CABINET = process.env.CABINET_NAME || "PosturoBilan";
@@ -50,6 +51,27 @@ async function buildMeasureRows(study: StudyForReport): Promise<ReportMeasureRow
     .map(({ v, m }) => ({ name: m.name, unit: m.unit, before: v.before ?? null, after: v.after ?? null }));
 }
 
+/** Resolves a study's stored physio results into pre-formatted rows. */
+async function buildPhysioRows(study: StudyForReport): Promise<ReportPhysioRow[]> {
+  const results = ((study.physioResults as StudyPhysioResult[] | null) ?? []).filter(hasPhysioValue);
+  if (results.length === 0) return [];
+
+  const tests = await prisma.physioTest.findMany({
+    where: { id: { in: results.map((r) => r.physioTestId) } },
+    select: { id: true, name: true, unit: true, outputType: true },
+  });
+  const byId = new Map(tests.map((t) => [t.id, t]));
+
+  return results
+    .map((r) => ({ r, t: byId.get(r.physioTestId) }))
+    .filter((x): x is { r: StudyPhysioResult; t: (typeof tests)[number] } => Boolean(x.t))
+    .sort((a, b) => a.t.name.localeCompare(b.t.name))
+    .map(({ r, t }) => ({
+      name: t.name,
+      value: formatPhysioValue(t.outputType, r.value ?? null, t.unit),
+    }));
+}
+
 // ─── Generate ─────────────────────────────────────────────────────────────────
 
 /**
@@ -73,8 +95,13 @@ export async function generateReportForStudy(
   }
 
   try {
-    const measureRows = await buildMeasureRows(study);
-    const pdfBuffer = await renderToBuffer(<ReportTemplate study={study} measureRows={measureRows} />);
+    const [measureRows, physioRows] = await Promise.all([
+      buildMeasureRows(study),
+      buildPhysioRows(study),
+    ]);
+    const pdfBuffer = await renderToBuffer(
+      <ReportTemplate study={study} measureRows={measureRows} physioRows={physioRows} />
+    );
     const url = await storePdf(`reports/${studyId}.pdf`, pdfBuffer);
 
     await prisma.study.update({
@@ -127,8 +154,13 @@ export async function sendReportForStudy(
   try {
     // Re-render for the email attachment (current data == generated data,
     // since editing the study resets the report).
-    const measureRows = await buildMeasureRows(study);
-    const pdfBuffer = await renderToBuffer(<ReportTemplate study={study} measureRows={measureRows} />);
+    const [measureRows, physioRows] = await Promise.all([
+      buildMeasureRows(study),
+      buildPhysioRows(study),
+    ]);
+    const pdfBuffer = await renderToBuffer(
+      <ReportTemplate study={study} measureRows={measureRows} physioRows={physioRows} />
+    );
 
     let emailed = false;
     if (canEmail) {
