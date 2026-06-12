@@ -60,27 +60,27 @@ export default async function RgpdPage({ searchParams }: Props) {
         </Suspense>
 
         {patients.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-gray-300 py-10 text-center text-sm text-gray-500">
+          <div className="rounded-lg border border-dashed border-border-strong py-10 text-center text-sm text-content-muted">
             Aucun patient trouvé.
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-surface-muted">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Patient</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Données</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-500">Actions RGPD</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-muted">Patient</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-muted">Données</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wide text-content-muted">Actions RGPD</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-border">
                 {patients.map((p) => (
                   <tr key={p.id} className={p.isAnonymized ? "opacity-60" : ""}>
                     <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">{p.firstName} {p.lastName}</div>
-                      <div className="text-sm text-gray-500">{p.email}</div>
+                      <div className="text-sm font-medium text-content">{p.firstName} {p.lastName}</div>
+                      <div className="text-sm text-content-muted">{p.email}</div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-6 py-4 text-sm text-content-muted">
                       {p._count.studies} étude{p._count.studies !== 1 ? "s" : ""} · {p._count.followups} suivi{p._count.followups !== 1 ? "s" : ""}
                     </td>
                     <td className="px-6 py-4">
@@ -102,36 +102,36 @@ export default async function RgpdPage({ searchParams }: Props) {
 
       {/* Audit trail */}
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-gray-900">Dernières actions RGPD</h2>
+        <h2 className="text-lg font-semibold text-content">Dernières actions RGPD</h2>
         <Card padding="none">
           {logs.length === 0 ? (
-            <p className="px-6 py-8 text-center text-sm text-gray-500">Aucune action enregistrée.</p>
+            <p className="px-6 py-8 text-center text-sm text-content-muted">Aucune action enregistrée.</p>
           ) : (
             <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-border text-sm">
+              <thead className="bg-surface-muted">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Action</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Par</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-500">Patient (ID)</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-muted">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-muted">Action</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-muted">Par</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wide text-content-muted">Patient (ID)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-border">
                 {logs.map((log) => (
                   <tr key={log.id}>
-                    <td className="px-6 py-3 text-gray-500">
+                    <td className="px-6 py-3 text-content-muted">
                       {new Date(log.timestamp).toLocaleString("fr-FR")}
                     </td>
                     <td className="px-6 py-3">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                        log.action === "ANONYMIZE" ? "bg-red-50 text-red-700" : "bg-brand-50 text-brand-700"
+                        log.action === "ANONYMIZE" ? "bg-danger-50 text-danger-700" : "bg-brand-50 text-brand-700"
                       }`}>
                         {ACTION_LABELS[log.action] ?? log.action}
                       </span>
                     </td>
-                    <td className="px-6 py-3 text-gray-700">{log.user.name}</td>
-                    <td className="px-6 py-3 font-mono text-xs text-gray-400">{log.entityId}</td>
+                    <td className="px-6 py-3 text-content">{log.user.name}</td>
+                    <td className="px-6 py-3 font-mono text-xs text-content-subtle">{log.entityId}</td>
                   </tr>
                 ))}
               </tbody>

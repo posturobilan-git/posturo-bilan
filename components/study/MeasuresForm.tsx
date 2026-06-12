@@ -47,11 +47,70 @@ function NumberInput({
     <input
       type="number"
       step="0.1"
+      inputMode="decimal"
       placeholder={placeholder}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value === "" ? null : parseFloat(e.target.value))}
-      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+      className="w-full rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-content focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
     />
+  );
+}
+
+// Déclaré au niveau module (et non dans MeasuresForm) : une déclaration inline
+// changerait d'identité à chaque frappe, forçant React à démonter/remonter
+// l'input en cours de saisie (perte de focus + scroll inattendu vers le haut).
+function MeasureRow({
+  m,
+  extra,
+  value,
+  phase,
+  onSetValue,
+  onRemoveExtra,
+}: {
+  m: MeasurementForStudy;
+  extra: boolean;
+  value: MeasureValue;
+  phase: "before" | "after";
+  onSetValue: Props["onSetValue"];
+  onRemoveExtra: Props["onRemoveExtra"];
+}) {
+  const isAfter = phase === "after";
+  return (
+    <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3">
+      <span className="text-sm text-content">
+        {m.name}
+        <span className="ml-1 text-content-subtle">({m.unit})</span>
+        {extra && (
+          <span className="ml-2 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
+            Ajoutée pour cette étude
+          </span>
+        )}
+        {/* En phase après, rappel de la valeur avant en référence. */}
+        {isAfter && value.before != null && (
+          <span className="ml-2 text-xs text-content-subtle">Avant : {value.before} {m.unit}</span>
+        )}
+      </span>
+      <div className="w-32 sm:w-36">
+        <NumberInput
+          value={isAfter ? value.after : value.before}
+          placeholder="—"
+          onChange={(val) => onSetValue(m.id, phase, val)}
+        />
+      </div>
+      <div className="w-7">
+        {extra && (
+          <button
+            type="button"
+            onClick={() => onRemoveExtra(m.id)}
+            aria-label={`Retirer ${m.name}`}
+            title="Retirer cette côte de l'étude"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-border-strong text-content-subtle transition-colors hover:bg-danger-50 hover:text-danger-600"
+          >
+            −
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -104,77 +163,43 @@ export function MeasuresForm({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const isAfter = phase === "after";
-
-  function Row({ m, extra }: { m: MeasurementForStudy; extra: boolean }) {
-    const v = values[m.id] ?? { before: null, after: null };
-    return (
-      <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3">
-        <span className="text-sm text-gray-700">
-          {m.name}
-          <span className="ml-1 text-gray-400">({m.unit})</span>
-          {extra && (
-            <span className="ml-2 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
-              Ajoutée pour cette étude
-            </span>
-          )}
-          {/* En phase après, rappel de la valeur avant en référence. */}
-          {isAfter && v.before != null && (
-            <span className="ml-2 text-xs text-gray-400">Avant : {v.before} {m.unit}</span>
-          )}
-        </span>
-        <div className="w-32 sm:w-36">
-          <NumberInput
-            value={isAfter ? v.after : v.before}
-            placeholder="—"
-            onChange={(val) => onSetValue(m.id, phase, val)}
-          />
-        </div>
-        <div className="w-7">
-          {extra && (
-            <button
-              type="button"
-              onClick={() => onRemoveExtra(m.id)}
-              aria-label={`Retirer ${m.name}`}
-              title="Retirer cette côte de l'étude"
-              className="flex h-7 w-7 items-center justify-center rounded-md border border-gray-300 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
-            >
-              −
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   const shown = [...configured, ...extras];
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-gray-600">
+      <p className="text-sm text-content-muted">
         {isAfter
           ? "Renseignez les côtes après ajustement de la position."
           : "Renseignez les côtes relevées avant ajustement."}
       </p>
 
       {shown.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-8 text-center">
-          <p className="text-sm text-gray-400">Aucune côte définie pour ce type de vélo.</p>
-          <p className="mt-1 text-xs text-gray-400">
+        <div className="rounded-lg border border-dashed border-border-strong py-8 text-center">
+          <p className="text-sm text-content-subtle">Aucune côte définie pour ce type de vélo.</p>
+          <p className="mt-1 text-xs text-content-subtle">
             Un administrateur peut en ajouter depuis la configuration de l&apos;étude,
             ou ajoutez-en une ponctuellement ci-dessous.
           </p>
         </div>
       ) : (
-        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-5">
+        <fieldset className="space-y-3 rounded-lg border border-border p-5">
           <div className="hidden grid-cols-[1fr_auto_auto] items-center gap-3 sm:grid">
             <span />
-            <span className="w-36 text-center text-xs font-medium uppercase tracking-wide text-gray-400">
+            <span className="w-36 text-center text-xs font-medium uppercase tracking-wide text-content-subtle">
               {isAfter ? "Après" : "Avant"}
             </span>
             <span className="w-7" />
           </div>
           {shown.map((m) => (
-            <Row key={m.id} m={m} extra={!configuredIds.has(m.id)} />
+            <MeasureRow
+              key={m.id}
+              m={m}
+              extra={!configuredIds.has(m.id)}
+              value={values[m.id] ?? { before: null, after: null }}
+              phase={phase}
+              onSetValue={onSetValue}
+              onRemoveExtra={onRemoveExtra}
+            />
           ))}
         </fieldset>
       )}
@@ -182,7 +207,7 @@ export function MeasuresForm({
       {/* Ajout ponctuel d'une côte de la bibliothèque, pour cette étude seulement. */}
       {addable.length > 0 && (
         <label className="flex flex-col gap-1 sm:max-w-xs">
-          <span className="text-xs font-medium text-gray-600">
+          <span className="text-xs font-medium text-content-muted">
             Ajouter une côte pour cette étude
           </span>
           <select
@@ -190,7 +215,7 @@ export function MeasuresForm({
             onChange={(e) => {
               if (e.target.value) onAddExtra(e.target.value);
             }}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-600 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-content-muted focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           >
             <option value="">Choisir dans la bibliothèque…</option>
             {addable.map((m) => (
@@ -204,14 +229,14 @@ export function MeasuresForm({
 
       {isAfter && (
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-600">Observations libres</span>
+          <span className="text-xs font-medium text-content-muted">Observations libres</span>
           <textarea
             rows={4}
             maxLength={3000}
             value={observations}
             onChange={(e) => onSetObservations(e.target.value)}
             placeholder="Remarques posturales, asymétries observées…"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-content focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </label>
       )}

@@ -48,7 +48,7 @@ export function ComponentPicker({ components, bikeTypeId, selected, onToggle, on
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-600">
+      <p className="text-sm text-content-muted">
         Sélectionnez les composants modifiés ou essayés pendant l&apos;étude.
       </p>
 
@@ -59,12 +59,12 @@ export function ComponentPicker({ components, bikeTypeId, selected, onToggle, on
           placeholder="Rechercher…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className="flex-1 rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
         <select
           value={filterCategory}
           onChange={(e) => setFilterCategory(e.target.value as ComponentCategory | "")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
         >
           <option value="">Toutes catégories</option>
           {categories.map((c) => (
@@ -82,25 +82,25 @@ export function ComponentPicker({ components, bikeTypeId, selected, onToggle, on
 
       {/* List */}
       {filtered.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-8 text-center">
-          <p className="text-sm text-gray-400">Aucun composant compatible avec ce type de vélo.</p>
-          <p className="mt-1 text-xs text-gray-400">
+        <div className="rounded-lg border border-dashed border-border-strong py-8 text-center">
+          <p className="text-sm text-content-subtle">Aucun composant compatible avec ce type de vélo.</p>
+          <p className="mt-1 text-xs text-content-subtle">
             Associez des composants à ce vélo depuis la Bibliothèque.
           </p>
         </div>
       ) : (
-        <div className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
+        <div className="divide-y divide-border rounded-lg border border-border bg-surface">
           {filtered.map((c) => (
-            <label key={c.id} className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-gray-50">
+            <label key={c.id} className="flex cursor-pointer items-center gap-3 px-4 py-3 hover:bg-surface-muted">
               <input
                 type="checkbox"
                 checked={selected.includes(c.id)}
                 onChange={() => onToggle(c.id)}
-                className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                className="h-4 w-4 rounded border-border-strong text-brand-600 focus:ring-brand-500"
               />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
-                <p className="text-xs text-gray-500">
+                <p className="text-sm font-medium text-content truncate">{c.name}</p>
+                <p className="text-xs text-content-muted">
                   {CATEGORY_LABELS[c.category]}
                   {c.brand ? ` · ${c.brand}` : ""}
                   {c.model ? ` ${c.model}` : ""}

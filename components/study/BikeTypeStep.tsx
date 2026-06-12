@@ -14,14 +14,14 @@ interface Props {
 export function BikeTypeStep({ bikeTypes, selected, onSelect, onNext, saving }: Props) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-600">
+      <p className="text-sm text-content-muted">
         Sélectionnez le type de vélo concerné par cette étude.
       </p>
 
       {bikeTypes.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-8 text-center">
-          <p className="text-sm text-gray-400">Aucun type de vélo actif.</p>
-          <p className="mt-1 text-xs text-gray-400">
+        <div className="rounded-lg border border-dashed border-border-strong py-8 text-center">
+          <p className="text-sm text-content-subtle">Aucun type de vélo actif.</p>
+          <p className="mt-1 text-xs text-content-subtle">
             Un administrateur peut en ajouter depuis la Bibliothèque.
           </p>
         </div>
@@ -38,12 +38,12 @@ export function BikeTypeStep({ bikeTypes, selected, onSelect, onNext, saving }: 
                 className={`flex items-center gap-3 rounded-xl border p-4 text-left transition-all ${
                   active
                     ? "border-brand-500 bg-brand-50 ring-2 ring-brand-100"
-                    : "border-gray-200 bg-white hover:border-brand-300 hover:bg-gray-50"
+                    : "border-border bg-surface hover:border-brand-300 hover:bg-surface-muted"
                 }`}
               >
                 <span
                   className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                    active ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-500"
+                    active ? "bg-brand-600 text-white" : "bg-surface-muted text-content-muted"
                   }`}
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -52,7 +52,7 @@ export function BikeTypeStep({ bikeTypes, selected, onSelect, onNext, saving }: 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6 17l4-7h5l3 7M10 10l-1.5-3H6.5M13 7h3.5" />
                   </svg>
                 </span>
-                <span className={`text-sm font-medium ${active ? "text-brand-900" : "text-gray-900"}`}>
+                <span className={`text-sm font-medium ${active ? "text-brand-900" : "text-content"}`}>
                   {bt.name}
                 </span>
               </button>

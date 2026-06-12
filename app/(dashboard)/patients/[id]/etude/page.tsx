@@ -108,7 +108,7 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
         </div>
 
         {/* Multi-step form */}
-        <div className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+        <div className="min-w-0 flex-1 rounded-lg border border-border bg-surface p-4 sm:p-6">
           <StudyForm
             patient={patient}
             bikeTypes={bikeTypeOptions}

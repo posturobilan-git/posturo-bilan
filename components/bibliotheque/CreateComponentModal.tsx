@@ -83,12 +83,12 @@ export function CreateComponentModal({
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
         >
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-xl">
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-surface shadow-2xl sm:rounded-xl">
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <h2 className="text-lg font-semibold text-content">
                 {isEdit ? "Modifier le composant" : "Nouveau composant"}
               </h2>
-              <button onClick={() => setOpen(false)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100" aria-label="Fermer">
+              <button onClick={() => setOpen(false)} className="rounded-md p-1 text-content-subtle hover:bg-surface-muted" aria-label="Fermer">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -97,28 +97,28 @@ export function CreateComponentModal({
 
             <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
               <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-gray-700">Nom <span className="text-red-500">*</span></span>
+                <span className="text-sm font-medium text-content">Nom <span className="text-danger-500">*</span></span>
                 <input name="name" required defaultValue={component?.name}
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                  className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
               </label>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-gray-700">Marque</span>
+                  <span className="text-sm font-medium text-content">Marque</span>
                   <input name="brand" defaultValue={component?.brand ?? ""} placeholder="Fizik"
-                    className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                    className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-gray-700">Modèle</span>
+                  <span className="text-sm font-medium text-content">Modèle</span>
                   <input name="model" defaultValue={component?.model ?? ""} placeholder="Arione R3"
-                    className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                    className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
                 </label>
               </div>
 
               <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-gray-700">Catégorie</span>
+                <span className="text-sm font-medium text-content">Catégorie</span>
                 <select name="category" defaultValue={component?.category ?? "AUTRE"}
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
                   {COMPONENT_CATEGORIES.map((c) => (
                     <option key={c} value={c}>{COMPONENT_CATEGORY_LABELS[c]}</option>
                   ))}
@@ -126,18 +126,18 @@ export function CreateComponentModal({
               </label>
 
               <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium text-gray-700">Notes</span>
+                <span className="text-sm font-medium text-content">Notes</span>
                 <textarea name="notes" rows={2} defaultValue={component?.notes ?? ""}
-                  className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                  className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
               </label>
 
               <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-gray-700">
+                <span className="text-sm font-medium text-content">
                   Types de vélo compatibles
-                  <span className="ml-1 font-normal text-gray-400">(aucun = universel)</span>
+                  <span className="ml-1 font-normal text-content-subtle">(aucun = universel)</span>
                 </span>
                 {bikeTypes.length === 0 ? (
-                  <p className="text-xs text-gray-400">Aucun type de vélo actif.</p>
+                  <p className="text-xs text-content-subtle">Aucun type de vélo actif.</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {bikeTypes.map((bt) => {
@@ -151,7 +151,7 @@ export function CreateComponentModal({
                           className={`rounded-full border px-3 py-1 text-sm transition-colors ${
                             active
                               ? "border-brand-500 bg-brand-50 text-brand-700"
-                              : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                              : "border-border-strong text-content-muted hover:bg-surface-muted"
                           }`}
                         >
                           {bt.name}
@@ -162,7 +162,7 @@ export function CreateComponentModal({
                 )}
               </div>
 
-              {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+              {error && <p className="rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-700">{error}</p>}
 
               <div className="flex justify-end gap-3 pt-2">
                 <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Annuler</Button>
