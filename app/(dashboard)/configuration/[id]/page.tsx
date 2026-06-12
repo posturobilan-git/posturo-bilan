@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getCurrentKine } from "@/lib/auth";
-import { getBikeTypeConfig } from "@/actions/bikeType.actions";
+import {
+  getBikeTypeConfig,
+  setBikeTypeMeasurements,
+  setBikeTypePhysioTests,
+} from "@/actions/bikeType.actions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { BikeTypeConfigurator } from "@/components/bibliotheque/BikeTypeConfigurator";
 
@@ -18,8 +22,12 @@ export default async function BikeTypeConfigPage({
   const config = await getBikeTypeConfig(id);
   if (!config) redirect("/configuration");
 
+  // Bind the bike type id so each configurator just persists an ordered id list.
+  const saveMeasurements = setBikeTypeMeasurements.bind(null, id);
+  const savePhysioTests = setBikeTypePhysioTests.bind(null, id);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <Link
         href="/configuration"
         className="inline-flex items-center gap-1 text-sm font-medium text-content-muted transition-colors hover:text-content"
@@ -32,15 +40,27 @@ export default async function BikeTypeConfigPage({
 
       <PageHeader
         title={`Configuration — ${config.bikeType.name}`}
-        description="Choisissez les côtes relevées pour ce type de vélo et leur ordre d'affichage dans le formulaire d'étude."
+        description="Choisissez les côtes et tests physio relevés pour ce type de vélo, et leur ordre d'affichage dans le formulaire d'étude."
       />
 
       <BikeTypeConfigurator
-        bikeTypeId={config.bikeType.id}
-        common={config.common}
-        initialAssigned={config.assigned}
-        initialAvailable={config.available}
-        canEdit={kine.role === "ADMIN"}
+        title="Côtes"
+        subtitle="Mesures relevées pendant l'étude (avant / après)."
+        common={config.measurements.common}
+        initialAssigned={config.measurements.assigned}
+        initialAvailable={config.measurements.available}
+        save={saveMeasurements}
+        canEdit
+      />
+
+      <BikeTypeConfigurator
+        title="Tests physiologiques"
+        subtitle="Tests réalisés pendant l'étude, selon le type de résultat (valeur, oui/non, commentaire)."
+        common={config.physioTests.common}
+        initialAssigned={config.physioTests.assigned}
+        initialAvailable={config.physioTests.available}
+        save={savePhysioTests}
+        canEdit
       />
     </div>
   );

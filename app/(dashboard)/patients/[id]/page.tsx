@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { PatientDossier } from "@/components/patients/PatientDossier";
 import { PatientHeaderActions } from "@/components/patients/PatientHeaderActions";
 import type { PatientWithRelations, MeasurementInfo } from "@/types";
+import type { PhysioTestInfo } from "@/lib/physio";
 
 export default async function PatientPage(props: PageProps<"/patients/[id]">) {
   const kine = await getCurrentKine();
@@ -20,13 +21,20 @@ export default async function PatientPage(props: PageProps<"/patients/[id]">) {
   // getPatientDossier includes kine, cast to full type
   const patientFull = patient as PatientWithRelations;
 
-  // Resolve measurement metadata so study cards can label their côte values.
-  const measurements = await prisma.measurement.findMany({
-    select: { id: true, name: true, unit: true },
-  });
+  // Resolve measurement & physio-test metadata so study cards can label values.
+  const [measurements, physioTests] = await Promise.all([
+    prisma.measurement.findMany({ select: { id: true, name: true, unit: true } }),
+    prisma.physioTest.findMany({
+      select: { id: true, name: true, unit: true, outputType: true },
+    }),
+  ]);
   const measurementsById: Record<string, MeasurementInfo> = {};
   for (const m of measurements) {
     measurementsById[m.id] = { name: m.name, unit: m.unit };
+  }
+  const physioTestsById: Record<string, PhysioTestInfo> = {};
+  for (const t of physioTests) {
+    physioTestsById[t.id] = { name: t.name, unit: t.unit, outputType: t.outputType };
   }
 
   // KINE only sees their own patients (query is scoped), so anything visible
@@ -60,7 +68,12 @@ export default async function PatientPage(props: PageProps<"/patients/[id]">) {
           </div>
         }
       />
-      <PatientDossier patient={patientFull} canEdit={canEdit} measurementsById={measurementsById} />
+      <PatientDossier
+        patient={patientFull}
+        canEdit={canEdit}
+        measurementsById={measurementsById}
+        physioTestsById={physioTestsById}
+      />
     </div>
   );
 }

@@ -1,52 +1,57 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { setBikeTypeMeasurements } from "@/actions/bikeType.actions";
 import { toast } from "@/lib/stores/toastStore";
-
-interface Cote {
-  id: string;
-  name: string;
-  unit: string;
-}
+import type { ActionResult } from "@/lib/action-result";
+import type { ConfigItem } from "@/actions/bikeType.actions";
 
 interface Props {
-  bikeTypeId: string;
-  /** Common trunk côtes — always applied, shown pinned & non-editable. */
-  common: Cote[];
-  initialAssigned: Cote[];
-  initialAvailable: Cote[];
+  title: string;
+  subtitle?: string;
+  /** Common trunk items — always applied, shown pinned & non-editable. */
+  common: ConfigItem[];
+  initialAssigned: ConfigItem[];
+  initialAvailable: ConfigItem[];
+  /** Persists the ordered assigned ids (a bound server action). */
+  save: (ids: string[]) => Promise<ActionResult<unknown>>;
   canEdit: boolean;
 }
 
 type Column = "available" | "assigned";
 
-function byName(a: Cote, b: Cote) {
+function byName(a: ConfigItem, b: ConfigItem) {
   return a.name.localeCompare(b.name);
 }
 
+function Hint({ hint }: { hint?: string }) {
+  if (!hint) return null;
+  return <span className="text-content-subtle"> ({hint})</span>;
+}
+
 export function BikeTypeConfigurator({
-  bikeTypeId,
+  title,
+  subtitle,
   common,
   initialAssigned,
   initialAvailable,
+  save,
   canEdit,
 }: Props) {
-  const [assigned, setAssigned] = useState<Cote[]>(initialAssigned);
-  const [available, setAvailable] = useState<Cote[]>(initialAvailable);
+  const [assigned, setAssigned] = useState<ConfigItem[]>(initialAssigned);
+  const [available, setAvailable] = useState<ConfigItem[]>(initialAvailable);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragFrom, setDragFrom] = useState<Column | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
 
   /** Persists the given assignment order, reverting local state on failure. */
-  function persist(nextAssigned: Cote[], nextAvailable: Cote[]) {
+  function persist(nextAssigned: ConfigItem[], nextAvailable: ConfigItem[]) {
     const prevAssigned = assigned;
     const prevAvailable = available;
     setAssigned(nextAssigned);
     setAvailable(nextAvailable);
     startSave(async () => {
-      const result = await setBikeTypeMeasurements(bikeTypeId, nextAssigned.map((c) => c.id));
+      const result = await save(nextAssigned.map((c) => c.id));
       if (!result.ok) {
         setAssigned(prevAssigned);
         setAvailable(prevAvailable);
@@ -58,15 +63,15 @@ export function BikeTypeConfigurator({
   // ── Mutations ─────────────────────────────────────────────────────────────
 
   function add(id: string) {
-    const cote = available.find((c) => c.id === id);
-    if (!cote) return;
-    persist([...assigned, cote], available.filter((c) => c.id !== id));
+    const item = available.find((c) => c.id === id);
+    if (!item) return;
+    persist([...assigned, item], available.filter((c) => c.id !== id));
   }
 
   function remove(id: string) {
-    const cote = assigned.find((c) => c.id === id);
-    if (!cote) return;
-    persist(assigned.filter((c) => c.id !== id), [...available, cote].sort(byName));
+    const item = assigned.find((c) => c.id === id);
+    if (!item) return;
+    persist(assigned.filter((c) => c.id !== id), [...available, item].sort(byName));
   }
 
   function move(id: string, delta: -1 | 1) {
@@ -78,25 +83,24 @@ export function BikeTypeConfigurator({
     persist(next, available);
   }
 
-  /** Drops the dragged côte into the assigned column at `targetId` (or the end). */
+  /** Drops the dragged item into the assigned column at `targetId` (or the end). */
   function dropOnAssigned(targetId: string | null) {
     if (!dragId) return;
 
     if (dragFrom === "available") {
-      const cote = available.find((c) => c.id === dragId);
-      if (!cote) return;
+      const item = available.find((c) => c.id === dragId);
+      if (!item) return;
       const next = [...assigned];
       const at = targetId ? next.findIndex((c) => c.id === targetId) : next.length;
-      next.splice(at < 0 ? next.length : at, 0, cote);
+      next.splice(at < 0 ? next.length : at, 0, item);
       persist(next, available.filter((c) => c.id !== dragId));
     } else {
-      // Reorder within assigned.
       const from = assigned.findIndex((c) => c.id === dragId);
       if (from < 0) return;
       const next = [...assigned];
-      const [cote] = next.splice(from, 1);
+      const [item] = next.splice(from, 1);
       const at = targetId ? next.findIndex((c) => c.id === targetId) : next.length;
-      next.splice(at < 0 ? next.length : at, 0, cote);
+      next.splice(at < 0 ? next.length : at, 0, item);
       persist(next, available);
     }
   }
@@ -112,8 +116,6 @@ export function BikeTypeConfigurator({
     setOverId(null);
   }
 
-  // ── Drag handlers (disabled when read-only) ─────────────────────────────────
-
   const dragProps = (id: string, from: Column) =>
     canEdit
       ? {
@@ -127,27 +129,26 @@ export function BikeTypeConfigurator({
       : {};
 
   return (
-    <div>
-      {!canEdit && (
-        <p className="mb-4 rounded-lg bg-surface-muted px-4 py-2 text-sm text-content-muted">
-          Lecture seule — seuls les administrateurs peuvent modifier la configuration.
-        </p>
-      )}
+    <section>
+      <div className="mb-3">
+        <h2 className="text-sm font-semibold text-content">{title}</h2>
+        {subtitle && <p className="text-xs text-content-muted">{subtitle}</p>}
+      </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* ── Available ── */}
-        <section
+        <div
           onDragOver={(e) => canEdit && e.preventDefault()}
           onDrop={() => canEdit && dropOnAvailable()}
           className="flex flex-col rounded-xl border border-border bg-surface"
         >
           <header className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold text-content">Côtes disponibles</h2>
+            <h3 className="text-sm font-semibold text-content">Disponibles</h3>
             <p className="text-xs text-content-muted">Bibliothèque complète — glissez ou ajoutez à droite.</p>
           </header>
           <ul className="flex-1 space-y-2 p-3">
             {available.length === 0 ? (
-              <li className="py-6 text-center text-sm text-content-subtle">Toutes les côtes sont affectées.</li>
+              <li className="py-6 text-center text-sm text-content-subtle">Tout est affecté.</li>
             ) : (
               available.map((c) => (
                 <li
@@ -158,7 +159,8 @@ export function BikeTypeConfigurator({
                   } ${dragId === c.id ? "opacity-40" : ""}`}
                 >
                   <span className="text-sm text-content">
-                    {c.name} <span className="text-content-subtle">({c.unit})</span>
+                    {c.name}
+                    <Hint hint={c.hint} />
                   </span>
                   {canEdit && (
                     <button
@@ -174,10 +176,10 @@ export function BikeTypeConfigurator({
               ))
             )}
           </ul>
-        </section>
+        </div>
 
         {/* ── Assigned (+ common pinned) ── */}
-        <section
+        <div
           onDragOver={(e) => {
             if (canEdit) {
               e.preventDefault();
@@ -188,7 +190,7 @@ export function BikeTypeConfigurator({
           className="flex flex-col rounded-xl border border-border bg-surface"
         >
           <header className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold text-content">Côtes de cette étude</h2>
+            <h3 className="text-sm font-semibold text-content">De cette étude</h3>
             <p className="text-xs text-content-muted">L&apos;ordre ci-dessous est l&apos;ordre d&apos;affichage du formulaire.</p>
           </header>
 
@@ -200,7 +202,8 @@ export function BikeTypeConfigurator({
                 className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-accent-500/40 bg-accent-50/50 px-3 py-2"
               >
                 <span className="text-sm text-content">
-                  {c.name} <span className="text-content-subtle">({c.unit})</span>
+                  {c.name}
+                  <Hint hint={c.hint} />
                 </span>
                 <span className="shrink-0 rounded-full bg-accent-50 px-2 py-0.5 text-xs font-medium text-accent-700">
                   Tronc commun
@@ -210,7 +213,7 @@ export function BikeTypeConfigurator({
 
             {assigned.length === 0 && (
               <p className="py-6 text-center text-sm text-content-subtle">
-                Glissez des côtes ici ou utilisez le bouton +.
+                Glissez des éléments ici ou utilisez le bouton +.
               </p>
             )}
 
@@ -243,7 +246,8 @@ export function BikeTypeConfigurator({
                   </svg>
                 )}
                 <span className="flex-1 text-sm text-content">
-                  {c.name} <span className="text-content-subtle">({c.unit})</span>
+                  {c.name}
+                  <Hint hint={c.hint} />
                 </span>
                 {canEdit && (
                   <div className="flex shrink-0 items-center gap-1">
@@ -276,8 +280,8 @@ export function BikeTypeConfigurator({
               </div>
             ))}
           </div>
-        </section>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }

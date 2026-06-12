@@ -63,6 +63,14 @@ enum MeasurementCategory {
   AUTRE
 }
 
+// Nature du résultat d'un test physiologique : oui/non, commentaire libre, ou
+// valeur numérique (avec unité). Détermine le champ de saisie avant/après.
+enum PhysioOutputType {
+  YES_NO
+  COMMENT
+  VALUE
+}
+
 // ─── MODELS ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -79,6 +87,7 @@ model User {
   components   BikeComponent[]
   bikeTypes    BikeType[]
   measurements Measurement[]
+  physioTests  PhysioTest[]
   auditLogs    AuditLog[]
 
   createdAt DateTime @default(now())
@@ -149,6 +158,7 @@ model BikeType {
 
   studies          Study[]
   measurementLinks BikeTypeMeasurement[]
+  physioTestLinks  BikeTypePhysioTest[]
   components        BikeComponent[]       @relation("BikeTypeComponents")
 
   createdAt   DateTime @default(now())
@@ -196,6 +206,43 @@ model BikeTypeMeasurement {
   @@index([measurementId])
 }
 
+// Un test physiologique relevé pendant une étude. Même logique que Measurement
+// (tronc commun ou spécifique à des types de vélo), mais le résultat varie selon
+// l'outputType : oui/non, commentaire libre, ou valeur numérique avec unité.
+model PhysioTest {
+  id          String   @id @default(uuid())
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  name        String
+  description String?
+  outputType  PhysioOutputType @default(VALUE)
+  unit        String?           // utilisé pour outputType VALUE (mm, cm, °...)
+  isCommon    Boolean          @default(false) // tronc commun (tous les vélos)
+  isActive    Boolean          @default(true)
+
+  bikeTypeLinks BikeTypePhysioTest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdById])
+}
+
+// Configuration des tests physio par type de vélo (même rôle que
+// BikeTypeMeasurement pour les côtes : sélection + ordre d'affichage).
+model BikeTypePhysioTest {
+  bikeTypeId   String
+  bikeType     BikeType   @relation(fields: [bikeTypeId], references: [id], onDelete: Cascade)
+  physioTestId String
+  physioTest   PhysioTest @relation(fields: [physioTestId], references: [id], onDelete: Cascade)
+
+  order Int @default(0)
+
+  @@id([bikeTypeId, physioTestId])
+  @@index([physioTestId])
+}
+
 model Study {
   id        String  @id @default(uuid())
   patientId String
@@ -213,6 +260,11 @@ model Study {
   // Valeurs des côtes saisies pour cette étude : avant/après par côte.
   // Tableau de { measurementId, before, after } — voir StudyMeasureValue.
   measureValues Json @default("[]")
+
+  // Résultats des tests physiologiques : avant/après par test. Tableau de
+  // { physioTestId, before, after } où before/after est number|boolean|string|null
+  // selon l'outputType du test — voir StudyPhysioResult.
+  physioResults Json @default("[]")
 
   // Ancien format de mesures à champs fixes (legacy, conservé pour les études
   // antérieures à la refacto des côtes dynamiques). Plus alimenté.

@@ -3,7 +3,18 @@ import type {
   ComponentCategory,
   StudyStatus,
   MeasurementCategory,
+  PhysioOutputType,
 } from "@prisma/client";
+
+export const PHYSIO_OUTPUT_TYPE_LABELS: Record<PhysioOutputType, string> = {
+  YES_NO: "Oui / Non",
+  COMMENT: "Commentaire",
+  VALUE: "Valeur",
+};
+
+export const PHYSIO_OUTPUT_TYPES = Object.keys(
+  PHYSIO_OUTPUT_TYPE_LABELS
+) as PhysioOutputType[];
 
 export const MEASUREMENT_CATEGORY_LABELS: Record<MeasurementCategory, string> = {
   SELLE: "Selle",
