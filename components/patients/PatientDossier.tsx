@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StudyCard } from "@/components/patients/StudyCard";
 import type { PatientWithRelations, MeasurementInfo } from "@/types";
+import type { PhysioTestInfo } from "@/lib/physio";
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
@@ -106,10 +107,12 @@ function StudiesSection({
   patient,
   canEdit,
   measurementsById,
+  physioTestsById,
 }: {
   patient: PatientWithRelations;
   canEdit: boolean;
   measurementsById: Record<string, MeasurementInfo>;
+  physioTestsById: Record<string, PhysioTestInfo>;
 }) {
   const { studies } = patient;
 
@@ -144,6 +147,7 @@ function StudiesSection({
               patientId={patient.id}
               canEdit={canEdit}
               measurementsById={measurementsById}
+              physioTestsById={physioTestsById}
             />
           ))}
         </div>
@@ -246,10 +250,12 @@ export function PatientDossier({
   patient,
   canEdit = false,
   measurementsById = {},
+  physioTestsById = {},
 }: {
   patient: PatientWithRelations;
   canEdit?: boolean;
   measurementsById?: Record<string, MeasurementInfo>;
+  physioTestsById?: Record<string, PhysioTestInfo>;
 }) {
   const latestFollowup = patient.followups.at(-1);
 
@@ -259,7 +265,12 @@ export function PatientDossier({
         <PanelAmont intake={patient.intake} patientId={patient.id} />
         <PanelSuivi followup={latestFollowup} />
       </div>
-      <StudiesSection patient={patient} canEdit={canEdit} measurementsById={measurementsById} />
+      <StudiesSection
+        patient={patient}
+        canEdit={canEdit}
+        measurementsById={measurementsById}
+        physioTestsById={physioTestsById}
+      />
       <EvolutionTable patient={patient} />
     </div>
   );

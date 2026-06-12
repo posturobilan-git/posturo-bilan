@@ -7,6 +7,7 @@ import {
   ExerciseCategory,
   ComponentCategory,
   MeasurementCategory,
+  PhysioOutputType,
   StudyStatus,
   Prisma,
 } from "@prisma/client";
@@ -86,6 +87,28 @@ const MEASUREMENTS: SeedMeasurement[] = [
   // Spécifiques Triathlon
   { name: "Angle du tronc (aéro)", unit: "°", category: "POSITION", order: 30, isCommon: false, bikeTypes: ["Triathlon"], legacyKey: "trunkAngle" },
   { name: "Avancée de selle (aéro)", unit: "mm", category: "SELLE", order: 31, isCommon: false, bikeTypes: ["Triathlon"] },
+];
+
+// ─── Tests physiologiques ────────────────────────────────────────────────────────
+interface SeedPhysioTest {
+  name: string;
+  description?: string;
+  outputType: PhysioOutputType;
+  unit?: string;
+  isCommon: boolean;
+  bikeTypes?: string[]; // si non commun
+  order?: number;
+}
+
+const PHYSIO_TESTS: SeedPhysioTest[] = [
+  // Tronc commun
+  { name: "Distance doigts-sol", description: "Flexion antérieure du tronc, jambes tendues — distance entre les doigts et le sol.", outputType: "VALUE", unit: "cm", isCommon: true },
+  { name: "Mobilité de hanche 90/90", description: "Rotations interne et externe de hanche en position assise — amplitude atteinte sans compensation.", outputType: "YES_NO", isCommon: true },
+  { name: "Test genou/orteil", description: "Genou avancé au-delà de la pointe du pied en fente, talon au sol.", outputType: "YES_NO", isCommon: true },
+  { name: "Observation posturale globale", description: "Asymétries, attitudes scoliotiques, appuis spontanés.", outputType: "COMMENT", isCommon: true },
+  // Spécifiques
+  { name: "Souplesse des ischio-jambiers (angle poplité)", description: "Élévation jambe tendue en décubitus dorsal.", outputType: "VALUE", unit: "°", isCommon: false, bikeTypes: ["Route", "Triathlon"], order: 0 },
+  { name: "Stabilité unipodale", description: "Tenue 30 s sur un pied, yeux ouverts.", outputType: "YES_NO", isCommon: false, bikeTypes: ["VTT", "Gravel"], order: 0 },
 ];
 
 // ─── Patients d'exemple (intake + une ou plusieurs études) ───────────────────────
@@ -292,6 +315,32 @@ async function main() {
     measCreated++;
   }
 
+  // ── Tests physiologiques ──
+  let physioCreated = 0;
+  for (const t of PHYSIO_TESTS) {
+    const exists = await prisma.physioTest.findFirst({ where: { name: t.name } });
+    if (exists) continue;
+    await prisma.physioTest.create({
+      data: {
+        name: t.name,
+        description: t.description ?? null,
+        outputType: t.outputType,
+        unit: t.outputType === "VALUE" ? t.unit ?? null : null,
+        isCommon: t.isCommon,
+        createdById: admin.id,
+        bikeTypeLinks: t.isCommon
+          ? undefined
+          : {
+              create: (t.bikeTypes ?? [])
+                .map((n) => bikeTypeByName.get(n))
+                .filter((id): id is string => Boolean(id))
+                .map((bikeTypeId) => ({ bikeTypeId, order: t.order ?? 0 })),
+            },
+      },
+    });
+    physioCreated++;
+  }
+
   // Maps: measurement name/id and legacy-key → measurementId (for conversions).
   const measurements = await prisma.measurement.findMany({ select: { id: true, name: true } });
   const measurementIdByName = new Map(measurements.map((m) => [m.name, m.id]));
@@ -388,6 +437,7 @@ async function main() {
 
   console.log(
     `Seed terminé : ${btCreated}/${BIKE_TYPES.length} types de vélo, ${measCreated}/${MEASUREMENTS.length} côtes, ` +
+      `${physioCreated}/${PHYSIO_TESTS.length} tests physio, ` +
       `${exCreated}/${EXERCISES.length} exercices, ${compCreated}/${COMPONENTS.length} composants ` +
       `(${compTypesLinked} associés à des types de vélo), ` +
       `${patientsCreated}/${PATIENTS.length} patients, ${studiesCreated} études créées, ` +

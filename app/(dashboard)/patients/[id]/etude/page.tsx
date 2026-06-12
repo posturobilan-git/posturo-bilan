@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PatientSidebar } from "@/components/study/PatientSidebar";
 import { StudyForm } from "@/components/study/StudyForm";
 import type { StudyMeasureValue } from "@/types";
+import type { PhysioValue, StudyPhysioResult } from "@/lib/physio";
 
 export default async function EtudePage(props: PageProps<"/patients/[id]/etude">) {
   const kine = await getCurrentKine();
@@ -14,7 +15,7 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
   const { studyId } = await props.searchParams;
   const editStudyId = typeof studyId === "string" ? studyId : undefined;
 
-  const [patient, bikeTypes, measurements, components, exercises] = await Promise.all([
+  const [patient, bikeTypes, measurements, physioTests, components, exercises] = await Promise.all([
     prisma.patient.findUnique({
       where: {
         id,
@@ -24,6 +25,11 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
     }),
     prisma.bikeType.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
     prisma.measurement.findMany({
+      where: { isActive: true },
+      include: { bikeTypeLinks: { select: { bikeTypeId: true, order: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.physioTest.findMany({
       where: { isActive: true },
       include: { bikeTypeLinks: { select: { bikeTypeId: true, order: true } } },
       orderBy: { name: "asc" },
@@ -70,11 +76,18 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
     measureValues[v.measurementId] = { before: v.before ?? null, after: v.after ?? null };
   }
 
+  // Same conversion for the stored physio results (one value per test).
+  const physioResults: Record<string, PhysioValue> = {};
+  for (const r of (study?.physioResults as StudyPhysioResult[] | null) ?? []) {
+    physioResults[r.physioTestId] = r.value ?? null;
+  }
+
   const initial = study
     ? {
         studyId: study.id,
         bikeTypeId: study.bikeTypeId,
         measureValues,
+        physioResults,
         observations: study.observations ?? "",
         componentIds: study.componentsUsed.map((c) => c.id),
         exerciseIds: study.exercisesPrescribed.map((e) => e.id),
@@ -100,6 +113,7 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
             patient={patient}
             bikeTypes={bikeTypeOptions}
             measurements={measurements}
+            physioTests={physioTests}
             components={components}
             exercises={exercises}
             initial={initial}

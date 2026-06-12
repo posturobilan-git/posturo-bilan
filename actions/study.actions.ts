@@ -64,11 +64,12 @@ export async function getStudy(id: string) {
   });
 }
 
-/** Shared write payload for a study's côtes + free-text observations. */
+/** Shared write payload for a study's côtes, tests physio + observations. */
 function studyDataFrom(validated: StudyInput) {
   return {
     bikeTypeId: validated.bikeTypeId,
     measureValues: validated.measureValues as Prisma.InputJsonValue,
+    physioResults: validated.physioResults as Prisma.InputJsonValue,
     observations: validated.observations ?? null,
   };
 }

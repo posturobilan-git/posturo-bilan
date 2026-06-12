@@ -6,7 +6,8 @@ import { logAudit } from "@/lib/audit";
 import { requireKine, requireAdmin } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { bikeTypeSchema, type BikeTypeInput } from "@/lib/validations/bikeType.schema";
-import { Prisma, type BikeType } from "@prisma/client";
+import { PHYSIO_OUTPUT_TYPE_LABELS } from "@/lib/labels";
+import { Prisma, type BikeType, type PhysioOutputType } from "@prisma/client";
 
 export type BikeTypeWithCount = BikeType & { _count: { studies: number } };
 
@@ -39,19 +40,33 @@ export async function getActiveBikeTypes(): Promise<BikeType[]> {
   });
 }
 
-// ─── Study configuration (côtes per bike type) ──────────────────────────────────
+// ─── Study configuration (côtes & physio tests per bike type) ────────────────────
+
+/** A transfer-list item; `hint` is a small parenthetical (unit / result type). */
+export interface ConfigItem {
+  id: string;
+  name: string;
+  hint?: string;
+}
+
+/** The three columns of a transfer list: pinned trunk, selected, and available. */
+export interface ConfigLists {
+  common: ConfigItem[];
+  assigned: ConfigItem[];
+  available: ConfigItem[];
+}
 
 export interface BikeTypeConfig {
   bikeType: Pick<BikeType, "id" | "name">;
-  /** Common trunk côtes — always applied, shown but not editable in the config. */
-  common: { id: string; name: string; unit: string }[];
-  /** Côtes configured for this bike type, in display order. */
-  assigned: { id: string; name: string; unit: string }[];
-  /** Remaining (non-common) côtes available to add. */
-  available: { id: string; name: string; unit: string }[];
+  measurements: ConfigLists;
+  physioTests: ConfigLists;
 }
 
-/** Full configuration of a bike type's study form (two-column transfer list). */
+function physioHint(t: { outputType: PhysioOutputType; unit: string | null }): string {
+  return t.outputType === "VALUE" ? t.unit ?? "valeur" : PHYSIO_OUTPUT_TYPE_LABELS[t.outputType];
+}
+
+/** Full configuration of a bike type's study form (two transfer lists). */
 export async function getBikeTypeConfig(bikeTypeId: string): Promise<BikeTypeConfig | null> {
   await requireKine();
 
@@ -61,7 +76,14 @@ export async function getBikeTypeConfig(bikeTypeId: string): Promise<BikeTypeCon
   });
   if (!bikeType) return null;
 
-  const [common, links, others] = await Promise.all([
+  const [
+    mCommon,
+    mLinks,
+    mOthers,
+    pCommon,
+    pLinks,
+    pOthers,
+  ] = await Promise.all([
     prisma.measurement.findMany({
       where: { isActive: true, isCommon: true },
       select: { id: true, name: true, unit: true },
@@ -73,21 +95,51 @@ export async function getBikeTypeConfig(bikeTypeId: string): Promise<BikeTypeCon
       orderBy: { order: "asc" },
     }),
     prisma.measurement.findMany({
-      where: {
-        isActive: true,
-        isCommon: false,
-        bikeTypeLinks: { none: { bikeTypeId } },
-      },
+      where: { isActive: true, isCommon: false, bikeTypeLinks: { none: { bikeTypeId } } },
       select: { id: true, name: true, unit: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.physioTest.findMany({
+      where: { isActive: true, isCommon: true },
+      select: { id: true, name: true, unit: true, outputType: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.bikeTypePhysioTest.findMany({
+      where: { bikeTypeId, physioTest: { isActive: true, isCommon: false } },
+      include: { physioTest: { select: { id: true, name: true, unit: true, outputType: true } } },
+      orderBy: { order: "asc" },
+    }),
+    prisma.physioTest.findMany({
+      where: { isActive: true, isCommon: false, bikeTypeLinks: { none: { bikeTypeId } } },
+      select: { id: true, name: true, unit: true, outputType: true },
       orderBy: { name: "asc" },
     }),
   ]);
 
+  const asMeasure = (m: { id: string; name: string; unit: string }): ConfigItem => ({
+    id: m.id,
+    name: m.name,
+    hint: m.unit,
+  });
+  const asPhysio = (t: {
+    id: string;
+    name: string;
+    unit: string | null;
+    outputType: PhysioOutputType;
+  }): ConfigItem => ({ id: t.id, name: t.name, hint: physioHint(t) });
+
   return {
     bikeType,
-    common,
-    assigned: links.map((l) => l.measurement),
-    available: others,
+    measurements: {
+      common: mCommon.map(asMeasure),
+      assigned: mLinks.map((l) => asMeasure(l.measurement)),
+      available: mOthers.map(asMeasure),
+    },
+    physioTests: {
+      common: pCommon.map(asPhysio),
+      assigned: pLinks.map((l) => asPhysio(l.physioTest)),
+      available: pOthers.map(asPhysio),
+    },
   };
 }
 
@@ -142,6 +194,58 @@ export async function setBikeTypeMeasurements(
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
     console.error("setBikeTypeMeasurements failed:", e);
+    return fail("Impossible d'enregistrer la configuration. Réessayez.");
+  }
+}
+
+/**
+ * Replaces the ordered set of (non-common) physio tests configured for a bike
+ * type. Mirrors setBikeTypeMeasurements; common tests are implicit.
+ */
+export async function setBikeTypePhysioTests(
+  bikeTypeId: string,
+  physioTestIds: string[]
+): Promise<ActionResult<void>> {
+  try {
+    const admin = await requireAdmin();
+
+    const bikeType = await prisma.bikeType.findUnique({
+      where: { id: bikeTypeId },
+      select: { id: true },
+    });
+    if (!bikeType) return fail("Type de vélo introuvable.");
+
+    const valid = await prisma.physioTest.findMany({
+      where: { id: { in: physioTestIds }, isCommon: false },
+      select: { id: true },
+    });
+    const validIds = new Set(valid.map((t) => t.id));
+    const ordered = physioTestIds.filter((id) => validIds.has(id));
+
+    await prisma.$transaction([
+      prisma.bikeTypePhysioTest.deleteMany({ where: { bikeTypeId } }),
+      ...(ordered.length
+        ? [
+            prisma.bikeTypePhysioTest.createMany({
+              data: ordered.map((physioTestId, order) => ({ bikeTypeId, physioTestId, order })),
+            }),
+          ]
+        : []),
+    ]);
+
+    await logAudit({
+      userId: admin.id,
+      action: "UPDATE",
+      entity: "bikeType",
+      entityId: bikeTypeId,
+      metadata: { config: "physioTests", count: ordered.length },
+    });
+    revalidatePath(`/configuration/${bikeTypeId}`);
+    revalidatePath("/configuration");
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
+    console.error("setBikeTypePhysioTests failed:", e);
     return fail("Impossible d'enregistrer la configuration. Réessayez.");
   }
 }
