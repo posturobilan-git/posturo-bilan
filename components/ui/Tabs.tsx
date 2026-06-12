@@ -34,7 +34,13 @@ export function Tabs({ tabs, defaultTab, paramName }: Props) {
 
   return (
     <div>
-      <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-border">
+      {/* Divider drawn as an inset shadow: a real border-b plus the buttons'
+          -mb-px overhang would overflow the scroll container by 1px and
+          trigger a stray scrollbar. */}
+      <div
+        role="tablist"
+        className="flex gap-1 overflow-x-auto shadow-[inset_0_-1px_0_var(--color-border)]"
+      >
         {tabs.map((t) => {
           const isActive = t.id === active;
           return (
@@ -44,7 +50,7 @@ export function Tabs({ tabs, defaultTab, paramName }: Props) {
               role="tab"
               aria-selected={isActive}
               onClick={() => select(t.id)}
-              className={`-mb-px flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
                 isActive
                   ? "border-brand-600 text-brand-700"
                   : "border-transparent text-content-muted hover:border-border-strong hover:text-content"
