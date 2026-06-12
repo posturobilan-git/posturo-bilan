@@ -33,7 +33,7 @@ function PhysioInput({
   onChange: (v: PhysioValue) => void;
 }) {
   const inputCls =
-    "w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
+    "w-full rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
 
   switch (test.outputType) {
     case "VALUE":
@@ -63,7 +63,7 @@ function PhysioInput({
                   ? v
                     ? "border-success-500 bg-success-50 font-medium text-success-700"
                     : "border-danger-500 bg-danger-50 font-medium text-danger-700"
-                  : "border-gray-300 text-gray-500 hover:bg-gray-50"
+                  : "border-border-strong text-content-muted hover:bg-surface-muted"
               }`}
             >
               {v ? "Oui" : "Non"}
@@ -117,36 +117,36 @@ export function PhysioTestsForm({
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-gray-600">
+      <p className="text-sm text-content-muted">
         Renseignez les résultats des tests physiologiques pour ce patient.
       </p>
 
       {applicable.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-8 text-center">
-          <p className="text-sm text-gray-400">Aucun test physio défini pour ce type de vélo.</p>
-          <p className="mt-1 text-xs text-gray-400">
+        <div className="rounded-lg border border-dashed border-border-strong py-8 text-center">
+          <p className="text-sm text-content-subtle">Aucun test physio défini pour ce type de vélo.</p>
+          <p className="mt-1 text-xs text-content-subtle">
             Un administrateur peut en ajouter depuis la configuration de l&apos;étude.
           </p>
         </div>
       ) : (
-        <fieldset className="space-y-4 rounded-lg border border-gray-200 p-5">
+        <fieldset className="space-y-4 rounded-lg border border-border p-5">
           {/* Column header */}
           <div className="hidden grid-cols-[1fr_auto] items-center gap-3 sm:grid">
             <span />
-            <span className="w-48 text-center text-xs font-medium uppercase tracking-wide text-gray-400">Résultat</span>
+            <span className="w-48 text-center text-xs font-medium uppercase tracking-wide text-content-subtle">Résultat</span>
           </div>
 
           {applicable.map((t) => (
             <div key={t.id} className="grid grid-cols-1 items-start gap-2 sm:grid-cols-[1fr_auto] sm:gap-3">
               <div>
-                <span className="text-sm text-gray-700">
+                <span className="text-sm text-content">
                   {t.name}
                   {t.outputType === "VALUE" && t.unit && (
-                    <span className="ml-1 text-gray-400">({t.unit})</span>
+                    <span className="ml-1 text-content-subtle">({t.unit})</span>
                   )}
                 </span>
                 {t.description && (
-                  <p className="mt-0.5 text-xs text-gray-400">{t.description}</p>
+                  <p className="mt-0.5 text-xs text-content-subtle">{t.description}</p>
                 )}
               </div>
               <div className="sm:w-48">

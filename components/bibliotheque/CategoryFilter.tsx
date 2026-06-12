@@ -26,7 +26,7 @@ export function CategoryFilter({ options, defaultValue = "" }: Props) {
     <select
       defaultValue={defaultValue}
       onChange={handleChange}
-      className="rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-sm text-gray-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+      className="rounded-md border border-border-strong bg-surface py-2 pl-3 pr-8 text-sm text-content focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
     >
       <option value="">Toutes catégories</option>
       {options.map(([value, label]) => (

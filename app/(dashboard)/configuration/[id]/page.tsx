@@ -7,18 +7,21 @@ import {
   setBikeTypePhysioTests,
 } from "@/actions/bikeType.actions";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Tabs } from "@/components/ui/Tabs";
 import { BikeTypeConfigurator } from "@/components/bibliotheque/BikeTypeConfigurator";
 
 export default async function BikeTypeConfigPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const kine = await getCurrentKine();
   if (!kine) redirect("/sign-in");
   if (kine.role !== "ADMIN") redirect("/dashboard");
 
-  const { id } = await params;
+  const [{ id }, { tab }] = await Promise.all([params, searchParams]);
   const config = await getBikeTypeConfig(id);
   if (!config) redirect("/configuration");
 
@@ -27,7 +30,7 @@ export default async function BikeTypeConfigPage({
   const savePhysioTests = setBikeTypePhysioTests.bind(null, id);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <Link
         href="/configuration"
         className="inline-flex items-center gap-1 text-sm font-medium text-content-muted transition-colors hover:text-content"
@@ -43,24 +46,43 @@ export default async function BikeTypeConfigPage({
         description="Choisissez les côtes et tests physio relevés pour ce type de vélo, et leur ordre d'affichage dans le formulaire d'étude."
       />
 
-      <BikeTypeConfigurator
-        title="Côtes"
-        subtitle="Mesures relevées pendant l'étude (avant / après)."
-        common={config.measurements.common}
-        initialAssigned={config.measurements.assigned}
-        initialAvailable={config.measurements.available}
-        save={saveMeasurements}
-        canEdit
-      />
-
-      <BikeTypeConfigurator
-        title="Tests physiologiques"
-        subtitle="Tests réalisés pendant l'étude, selon le type de résultat (valeur, oui/non, commentaire)."
-        common={config.physioTests.common}
-        initialAssigned={config.physioTests.assigned}
-        initialAvailable={config.physioTests.available}
-        save={savePhysioTests}
-        canEdit
+      <Tabs
+        defaultTab={tab}
+        paramName="tab"
+        tabs={[
+          {
+            id: "cotes",
+            label: "Côtes",
+            count: config.measurements.common.length + config.measurements.assigned.length,
+            content: (
+              <BikeTypeConfigurator
+                title="Côtes"
+                subtitle="Mesures relevées pendant l'étude (avant / après)."
+                common={config.measurements.common}
+                initialAssigned={config.measurements.assigned}
+                initialAvailable={config.measurements.available}
+                save={saveMeasurements}
+                canEdit
+              />
+            ),
+          },
+          {
+            id: "tests",
+            label: "Tests physio",
+            count: config.physioTests.common.length + config.physioTests.assigned.length,
+            content: (
+              <BikeTypeConfigurator
+                title="Tests physiologiques"
+                subtitle="Tests réalisés pendant l'étude, selon le type de résultat (valeur, oui/non, commentaire)."
+                common={config.physioTests.common}
+                initialAssigned={config.physioTests.assigned}
+                initialAvailable={config.physioTests.available}
+                save={savePhysioTests}
+                canEdit
+              />
+            ),
+          },
+        ]}
       />
     </div>
   );

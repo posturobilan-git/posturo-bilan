@@ -86,7 +86,7 @@ export default async function BibliothequePage({ searchParams }: Props) {
       />
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200">
+      <div className="flex gap-1 border-b border-border">
         <TabLink label="Exercices" tab="exercices" active={activeTab === "exercices"} />
         <TabLink label="Composants" tab="composants" active={activeTab === "composants"} />
       </div>
@@ -150,7 +150,7 @@ function TabLink({ label, tab, active }: { label: string; tab: string; active: b
       className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
         active
           ? "border-brand-600 text-brand-700"
-          : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+          : "border-transparent text-content-muted hover:border-border-strong hover:text-content"
       }`}
     >
       {label}
@@ -160,8 +160,8 @@ function TabLink({ label, tab, active }: { label: string; tab: string; active: b
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-gray-300 py-12 text-center">
-      <p className="text-sm text-gray-500">Aucun {label} ne correspond.</p>
+    <div className="rounded-lg border border-dashed border-border-strong py-12 text-center">
+      <p className="text-sm text-content-muted">Aucun {label} ne correspond.</p>
     </div>
   );
 }

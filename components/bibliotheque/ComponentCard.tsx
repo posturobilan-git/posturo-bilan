@@ -29,24 +29,24 @@ export function ComponentCard({
   }
 
   return (
-    <div className={`flex flex-col rounded-lg border border-gray-200 bg-white p-5 ${!component.isActive ? "opacity-60" : ""}`}>
+    <div className={`flex flex-col rounded-lg border border-border bg-surface p-5 ${!component.isActive ? "opacity-60" : ""}`}>
       <div className="flex items-start justify-between gap-2">
-        <h3 className="font-semibold text-gray-900">{component.name}</h3>
+        <h3 className="font-semibold text-content">{component.name}</h3>
         <span className="flex-shrink-0 rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-700">
           {COMPONENT_CATEGORY_LABELS[component.category]}
         </span>
       </div>
 
       {!component.isActive && (
-        <span className="mt-1 w-fit rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">Désactivé</span>
+        <span className="mt-1 w-fit rounded bg-surface-muted px-1.5 py-0.5 text-xs text-content-muted">Désactivé</span>
       )}
 
       {(component.brand || component.model) && (
-        <p className="mt-2 text-sm text-gray-600">
+        <p className="mt-2 text-sm text-content-muted">
           {[component.brand, component.model].filter(Boolean).join(" — ")}
         </p>
       )}
-      {component.notes && <p className="mt-1 line-clamp-2 text-xs text-gray-500">{component.notes}</p>}
+      {component.notes && <p className="mt-1 line-clamp-2 text-xs text-content-muted">{component.notes}</p>}
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {component.bikeTypes.length === 0 ? (
@@ -62,8 +62,8 @@ export function ComponentCard({
         )}
       </div>
 
-      <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
-        <span className="text-xs text-gray-400">
+      <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+        <span className="text-xs text-content-subtle">
           Utilisé {component._count.studies} fois
         </span>
         {isAdmin && (

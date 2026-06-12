@@ -39,17 +39,17 @@ export function RgpdActions({ patientId, patientName, isAnonymized }: Props) {
       {/* Export is a GET with Content-Disposition → anchor triggers download */}
       <a
         href={`/api/gdpr/export/${patientId}`}
-        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        className="rounded-md border border-border-strong bg-surface px-3 py-1.5 text-sm font-medium text-content hover:bg-surface-muted"
       >
         Exporter
       </a>
 
       {isAnonymized ? (
-        <span className="rounded-md bg-gray-100 px-3 py-1.5 text-sm text-gray-400">Anonymisé</span>
+        <span className="rounded-md bg-surface-muted px-3 py-1.5 text-sm text-content-subtle">Anonymisé</span>
       ) : (
         <button
           onClick={() => setConfirmOpen(true)}
-          className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+          className="rounded-md border border-danger-500 bg-surface px-3 py-1.5 text-sm font-medium text-danger-700 hover:bg-danger-50"
         >
           Anonymiser
         </button>
@@ -60,14 +60,14 @@ export function RgpdActions({ patientId, patientName, isAnonymized }: Props) {
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setConfirmOpen(false); }}
         >
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-xl">
-            <div className="border-b border-gray-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">Anonymiser ce patient ?</h2>
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface shadow-2xl sm:rounded-xl">
+            <div className="border-b border-border px-6 py-4">
+              <h2 className="text-lg font-semibold text-content">Anonymiser ce patient ?</h2>
             </div>
-            <div className="space-y-3 px-6 py-5 text-sm text-gray-600">
+            <div className="space-y-3 px-6 py-5 text-sm text-content-muted">
               <p>
                 Vous êtes sur le point d&apos;anonymiser <strong>{patientName}</strong>. Cette
-                action est <strong className="text-red-600">irréversible</strong>.
+                action est <strong className="text-danger-600">irréversible</strong>.
               </p>
               <ul className="list-disc space-y-1 pl-5">
                 <li>Nom, email et téléphone seront effacés</li>
@@ -75,7 +75,7 @@ export function RgpdActions({ patientId, patientName, isAnonymized }: Props) {
                 <li>Les études et suivis (données métier anonymes) seront conservés</li>
               </ul>
             </div>
-            <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+            <div className="flex justify-end gap-3 border-t border-border px-6 py-4">
               <Button variant="secondary" onClick={() => setConfirmOpen(false)}>Annuler</Button>
               <Button variant="danger" onClick={handleAnonymize} loading={pending}>
                 Anonymiser définitivement

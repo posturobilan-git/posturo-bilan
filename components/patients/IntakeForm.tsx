@@ -46,14 +46,14 @@ function NumberField({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-gray-600">
-        {label}{unit && <span className="ml-1 text-gray-400">({unit})</span>}
+      <span className="text-xs font-medium text-content-muted">
+        {label}{unit && <span className="ml-1 text-content-subtle">({unit})</span>}
       </span>
       <input
         type="number" min={min} max={max} step="0.1"
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? undefined : parseFloat(e.target.value))}
-        className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
       />
     </label>
   );
@@ -67,11 +67,11 @@ function SelectField({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-gray-600">{label}</span>
+      <span className="text-xs font-medium text-content-muted">{label}</span>
       <select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || undefined)}
-        className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
       >
         <option value="">—</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -95,7 +95,7 @@ function InjuriesInput({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-gray-600">Douleurs déclarées</span>
+      <span className="text-xs font-medium text-content-muted">Douleurs déclarées</span>
       <div className="flex gap-2">
         <input
           type="text"
@@ -105,19 +105,19 @@ function InjuriesInput({
             if (e.key === "Enter") { e.preventDefault(); add(); }
           }}
           placeholder="Ex: douleur genou gauche — Entrée pour ajouter"
-          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className="flex-1 rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
         <Button type="button" variant="secondary" size="sm" onClick={add}>Ajouter</Button>
       </div>
       {injuries.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1.5">
           {injuries.map((injury) => (
-            <span key={injury} className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs text-red-700">
+            <span key={injury} className="inline-flex items-center gap-1 rounded-full bg-danger-50 px-2.5 py-0.5 text-xs text-danger-700">
               {injury}
               <button
                 type="button"
                 onClick={() => onChange(injuries.filter((i) => i !== injury))}
-                className="text-red-400 hover:text-red-600"
+                className="text-danger-500 hover:text-danger-600"
                 aria-label={`Retirer ${injury}`}
               >
                 ×
@@ -161,8 +161,8 @@ export function IntakeForm({ patientId, intake }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      <fieldset className="space-y-4 rounded-lg border border-gray-200 p-5">
-        <legend className="px-1 text-sm font-semibold text-gray-700">Morphologie</legend>
+      <fieldset className="space-y-4 rounded-lg border border-border p-5">
+        <legend className="px-1 text-sm font-semibold text-content">Morphologie</legend>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <NumberField label="Taille" unit="cm" min={50} max={250}
             value={form.heightCm} onChange={(v) => set("heightCm", v)} />
@@ -171,8 +171,8 @@ export function IntakeForm({ patientId, intake }: Props) {
         </div>
       </fieldset>
 
-      <fieldset className="space-y-4 rounded-lg border border-gray-200 p-5">
-        <legend className="px-1 text-sm font-semibold text-gray-700">Pratique vélo</legend>
+      <fieldset className="space-y-4 rounded-lg border border-border p-5">
+        <legend className="px-1 text-sm font-semibold text-content">Pratique vélo</legend>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <SelectField label="Type de vélo" value={form.bikeType}
             options={BIKE_TYPES} onChange={(v) => set("bikeType", v)} />
@@ -185,26 +185,26 @@ export function IntakeForm({ patientId, intake }: Props) {
         </div>
       </fieldset>
 
-      <fieldset className="space-y-4 rounded-lg border border-gray-200 p-5">
-        <legend className="px-1 text-sm font-semibold text-gray-700">Douleurs & objectifs</legend>
+      <fieldset className="space-y-4 rounded-lg border border-border p-5">
+        <legend className="px-1 text-sm font-semibold text-content">Douleurs & objectifs</legend>
         <InjuriesInput injuries={form.injuries} onChange={(next) => set("injuries", next)} />
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-600">Objectifs de l&apos;étude</span>
+          <span className="text-xs font-medium text-content-muted">Objectifs de l&apos;étude</span>
           <textarea
             rows={3} maxLength={2000}
             value={form.goals ?? ""}
             onChange={(e) => set("goals", e.target.value || undefined)}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-gray-600">Notes médicales</span>
+          <span className="text-xs font-medium text-content-muted">Notes médicales</span>
           <textarea
             rows={3} maxLength={2000}
             value={form.medicalNotes ?? ""}
             onChange={(e) => set("medicalNotes", e.target.value || undefined)}
             placeholder="Antécédents, opérations, contre-indications…"
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </label>
       </fieldset>

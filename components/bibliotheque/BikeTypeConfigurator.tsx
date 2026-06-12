@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { Button } from "@/components/ui/Button";
 import { toast } from "@/lib/stores/toastStore";
 import type { ActionResult } from "@/lib/action-result";
 import type { ConfigItem } from "@/actions/bikeType.actions";
@@ -19,8 +20,17 @@ interface Props {
 
 type Column = "available" | "assigned";
 
+interface Lists {
+  assigned: ConfigItem[];
+  available: ConfigItem[];
+}
+
 function byName(a: ConfigItem, b: ConfigItem) {
   return a.name.localeCompare(b.name);
+}
+
+function sameOrder(a: ConfigItem[], b: ConfigItem[]) {
+  return a.length === b.length && a.every((item, i) => item.id === b[i].id);
 }
 
 function Hint({ hint }: { hint?: string }) {
@@ -37,6 +47,9 @@ export function BikeTypeConfigurator({
   save,
   canEdit,
 }: Props) {
+  // Toutes les mutations (drag, +/−, réordonnancement) restent locales ;
+  // la base n'est touchée qu'une fois, au clic sur « Enregistrer ».
+  const [saved, setSaved] = useState<Lists>({ assigned: initialAssigned, available: initialAvailable });
   const [assigned, setAssigned] = useState<ConfigItem[]>(initialAssigned);
   const [available, setAvailable] = useState<ConfigItem[]>(initialAvailable);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -44,34 +57,50 @@ export function BikeTypeConfigurator({
   const [overId, setOverId] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
 
-  /** Persists the given assignment order, reverting local state on failure. */
-  function persist(nextAssigned: ConfigItem[], nextAvailable: ConfigItem[]) {
-    const prevAssigned = assigned;
-    const prevAvailable = available;
+  const dirty = !sameOrder(assigned, saved.assigned);
+
+  // Garde-fou navigateur : prévient avant de quitter avec des changements non enregistrés.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  function apply(nextAssigned: ConfigItem[], nextAvailable: ConfigItem[]) {
     setAssigned(nextAssigned);
     setAvailable(nextAvailable);
+  }
+
+  function handleSave() {
     startSave(async () => {
-      const result = await save(nextAssigned.map((c) => c.id));
+      const result = await save(assigned.map((c) => c.id));
       if (!result.ok) {
-        setAssigned(prevAssigned);
-        setAvailable(prevAvailable);
         toast.error(result.error);
+        return;
       }
+      setSaved({ assigned, available });
+      toast.success("Configuration enregistrée.");
     });
   }
 
-  // ── Mutations ─────────────────────────────────────────────────────────────
+  function handleCancel() {
+    setAssigned(saved.assigned);
+    setAvailable(saved.available);
+  }
+
+  // ── Mutations (locales uniquement) ────────────────────────────────────────
 
   function add(id: string) {
     const item = available.find((c) => c.id === id);
     if (!item) return;
-    persist([...assigned, item], available.filter((c) => c.id !== id));
+    apply([...assigned, item], available.filter((c) => c.id !== id));
   }
 
   function remove(id: string) {
     const item = assigned.find((c) => c.id === id);
     if (!item) return;
-    persist(assigned.filter((c) => c.id !== id), [...available, item].sort(byName));
+    apply(assigned.filter((c) => c.id !== id), [...available, item].sort(byName));
   }
 
   function move(id: string, delta: -1 | 1) {
@@ -80,7 +109,7 @@ export function BikeTypeConfigurator({
     if (i < 0 || j < 0 || j >= assigned.length) return;
     const next = [...assigned];
     [next[i], next[j]] = [next[j], next[i]];
-    persist(next, available);
+    apply(next, available);
   }
 
   /** Drops the dragged item into the assigned column at `targetId` (or the end). */
@@ -93,7 +122,7 @@ export function BikeTypeConfigurator({
       const next = [...assigned];
       const at = targetId ? next.findIndex((c) => c.id === targetId) : next.length;
       next.splice(at < 0 ? next.length : at, 0, item);
-      persist(next, available.filter((c) => c.id !== dragId));
+      apply(next, available.filter((c) => c.id !== dragId));
     } else {
       const from = assigned.findIndex((c) => c.id === dragId);
       if (from < 0) return;
@@ -101,7 +130,7 @@ export function BikeTypeConfigurator({
       const [item] = next.splice(from, 1);
       const at = targetId ? next.findIndex((c) => c.id === targetId) : next.length;
       next.splice(at < 0 ? next.length : at, 0, item);
-      persist(next, available);
+      apply(next, available);
     }
   }
 
@@ -130,9 +159,11 @@ export function BikeTypeConfigurator({
 
   return (
     <section>
-      <div className="mb-3">
-        <h2 className="text-sm font-semibold text-content">{title}</h2>
-        {subtitle && <p className="text-xs text-content-muted">{subtitle}</p>}
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-content">{title}</h2>
+          {subtitle && <p className="text-xs text-content-muted">{subtitle}</p>}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -165,9 +196,8 @@ export function BikeTypeConfigurator({
                   {canEdit && (
                     <button
                       onClick={() => add(c.id)}
-                      disabled={saving}
                       aria-label={`Ajouter ${c.name}`}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border-strong text-content-muted transition-colors hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border-strong text-content-muted transition-colors hover:bg-brand-50 hover:text-brand-700"
                     >
                       +
                     </button>
@@ -253,7 +283,7 @@ export function BikeTypeConfigurator({
                   <div className="flex shrink-0 items-center gap-1">
                     <button
                       onClick={() => move(c.id, -1)}
-                      disabled={saving || i === 0}
+                      disabled={i === 0}
                       aria-label={`Monter ${c.name}`}
                       className="flex h-7 w-7 items-center justify-center rounded-md border border-border-strong text-content-muted transition-colors hover:bg-surface-muted disabled:opacity-30"
                     >
@@ -261,7 +291,7 @@ export function BikeTypeConfigurator({
                     </button>
                     <button
                       onClick={() => move(c.id, 1)}
-                      disabled={saving || i === assigned.length - 1}
+                      disabled={i === assigned.length - 1}
                       aria-label={`Descendre ${c.name}`}
                       className="flex h-7 w-7 items-center justify-center rounded-md border border-border-strong text-content-muted transition-colors hover:bg-surface-muted disabled:opacity-30"
                     >
@@ -269,9 +299,8 @@ export function BikeTypeConfigurator({
                     </button>
                     <button
                       onClick={() => remove(c.id)}
-                      disabled={saving}
                       aria-label={`Retirer ${c.name}`}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-border-strong text-content-muted transition-colors hover:bg-danger-50 hover:text-danger-700 disabled:opacity-50"
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-border-strong text-content-muted transition-colors hover:bg-danger-50 hover:text-danger-700"
                     >
                       −
                     </button>
@@ -282,6 +311,27 @@ export function BikeTypeConfigurator({
           </div>
         </div>
       </div>
+
+      {/* Barre d'enregistrement — une seule écriture en base, quand tout est prêt. */}
+      {canEdit && (
+        <div
+          className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors ${
+            dirty ? "border-warning-600/40 bg-warning-50" : "border-border bg-surface"
+          }`}
+        >
+          <p className={`text-sm ${dirty ? "font-medium text-warning-700" : "text-content-subtle"}`}>
+            {dirty ? "Modifications non enregistrées." : "Configuration à jour."}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={handleCancel} disabled={!dirty || saving}>
+              Annuler
+            </Button>
+            <Button size="sm" onClick={handleSave} disabled={!dirty} loading={saving}>
+              Enregistrer
+            </Button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

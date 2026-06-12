@@ -97,7 +97,60 @@ export function EquipeClient({ pendingUsers, activeUsers, pendingInvitations, cu
       {/* Active */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold text-content">Utilisateurs actifs</h2>
-        <div className="overflow-hidden rounded-lg border border-border bg-surface">
+
+        {/* Mobile — stacked cards */}
+        <ul className="space-y-3 md:hidden">
+          {activeUsers.map((u) => {
+            const isSelf = u.id === currentUserId;
+            return (
+              <li key={u.id} className="space-y-3 rounded-xl border border-border bg-surface p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-content">
+                      {u.name}
+                      {isSelf && <span className="ml-2 text-xs text-content-subtle">(vous)</span>}
+                    </p>
+                    <p className="truncate text-sm text-content-muted">{u.email}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                    u.role === "ADMIN" ? "bg-brand-50 text-brand-700" : "bg-surface-muted text-content-muted"
+                  }`}>
+                    {u.role === "ADMIN" ? "Admin" : "Kiné"}
+                  </span>
+                </div>
+                <p className="text-xs text-content-muted">
+                  {u._count.patients} patient{u._count.patients !== 1 ? "s" : ""}
+                </p>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={u.role}
+                    disabled={isSelf || pending}
+                    onChange={(e) =>
+                      run(
+                        () => changeUserRole(u.id, e.target.value as "KINE" | "ADMIN"),
+                        `Rôle de ${u.name} mis à jour.`
+                      )
+                    }
+                    className="flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-content disabled:opacity-50"
+                  >
+                    <option value="KINE">Kiné</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                  <button
+                    disabled={isSelf || pending}
+                    onClick={() => run(() => deactivateUser(u.id), `${u.name} désactivé.`)}
+                    className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-content-muted transition-colors hover:bg-surface-muted disabled:opacity-40"
+                  >
+                    Désactiver
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        {/* Desktop — table */}
+        <div className="hidden overflow-x-auto rounded-lg border border-border bg-surface md:block">
           <table className="min-w-full divide-y divide-border text-sm">
             <thead>
               <tr>
@@ -167,7 +220,29 @@ export function EquipeClient({ pendingUsers, activeUsers, pendingInvitations, cu
             Aucune invitation en attente.
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+          <>
+          {/* Mobile — stacked cards */}
+          <ul className="space-y-3 md:hidden">
+            {pendingInvitations.map((inv) => (
+              <li key={inv.id} className="space-y-3 rounded-xl border border-border bg-surface p-4 shadow-sm">
+                <p className="truncate text-sm font-medium text-content">{inv.emailAddress}</p>
+                <div className="flex items-center justify-between text-xs text-content-muted">
+                  <span>Envoyée le {fmtDate(inv.createdAt)}</span>
+                  <span>Expire dans {expiresIn(inv.createdAt)}</span>
+                </div>
+                <button
+                  disabled={pending}
+                  onClick={() => run(() => revokeInvitation(inv.id), "Invitation révoquée.")}
+                  className="w-full rounded-md border border-border px-3 py-1.5 text-sm font-medium text-danger-600 transition-colors hover:bg-danger-50 disabled:opacity-40"
+                >
+                  Révoquer
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {/* Desktop — table */}
+          <div className="hidden overflow-x-auto rounded-lg border border-border bg-surface md:block">
             <table className="min-w-full divide-y divide-border text-sm">
               <thead>
                 <tr>
@@ -199,6 +274,7 @@ export function EquipeClient({ pendingUsers, activeUsers, pendingInvitations, cu
               </tbody>
             </table>
           </div>
+          </>
         )}
       </section>
 
@@ -224,7 +300,36 @@ export function EquipeClient({ pendingUsers, activeUsers, pendingInvitations, cu
             Aucun compte en attente.
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border bg-surface">
+          <>
+          {/* Mobile — stacked cards */}
+          <ul className="space-y-3 md:hidden">
+            {pendingUsers.map((u) => (
+              <li key={u.id} className="space-y-3 rounded-xl border border-border bg-surface p-4 shadow-sm">
+                <div>
+                  <p className="truncate text-sm font-medium text-content">{u.name}</p>
+                  <p className="truncate text-sm text-content-muted">{u.email}</p>
+                  <p className="mt-1 text-xs text-content-subtle">Inscrit le {fmtDate(u.createdAt)}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" className="flex-1" disabled={pending}
+                    onClick={() => run(() => approveUser(u.id, "KINE"), `${u.name} validé comme Kiné.`)}>
+                    Valider comme Kiné
+                  </Button>
+                  <Button size="sm" variant="secondary" disabled={pending}
+                    onClick={() => run(() => approveUser(u.id, "ADMIN"), `${u.name} validé comme Admin.`)}>
+                    Admin
+                  </Button>
+                  <Button size="sm" variant="danger" disabled={pending}
+                    onClick={() => setConfirmRefuse(u)}>
+                    Refuser
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {/* Desktop — table */}
+          <div className="hidden overflow-x-auto rounded-lg border border-border bg-surface md:block">
             <table className="min-w-full divide-y divide-border text-sm">
               <thead>
                 <tr>
@@ -261,6 +366,7 @@ export function EquipeClient({ pendingUsers, activeUsers, pendingInvitations, cu
               </tbody>
             </table>
           </div>
+          </>
         )}
       </section>
 
