@@ -23,7 +23,7 @@ export default async function IntakePage(props: PageProps<"/patients/[id]/intake
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader
-        title="Saisie de l'intake"
+        title="Saisie de l'accueil"
         description={`${patient.firstName} ${patient.lastName} — ${patient.email}`}
       />
       <IntakeForm patientId={patient.id} intake={patient.intake} />

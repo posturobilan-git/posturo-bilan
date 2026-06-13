@@ -5,6 +5,7 @@ import { rateLimit, clientIp } from "@/lib/rate-limit";
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
+  "/accueil/(.*)",
   "/api/intake/(.*)",
   "/api/followup/(.*)",
   "/api/reports/(.*)",

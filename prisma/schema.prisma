@@ -111,6 +111,23 @@ model Patient {
   // Données anonymisées (RGPD) — null si anonymisé
   isAnonymized    Boolean       @default(false)
 
+  // Formulaire d'accueil (intake) rempli par le patient via un lien public.
+  // Le token est généré à la création ; le patient y accède sur /accueil/[token].
+  // Le lien expire à `inviteExpiresAt` (30 j) ou dès que le patient soumet
+  // (`inviteCompletedAt` renseigné). On garde le token après soumission pour
+  // distinguer « déjà complété » d'un lien invalide.
+  inviteToken       String?   @unique
+  inviteExpiresAt   DateTime?
+  inviteSentAt      DateTime?
+  inviteCompletedAt DateTime?
+
+  // Consentement RGPD donné par le patient lors de la soumission du formulaire
+  // d'accueil. Conservé au niveau patient car l'accueil alimente toute la suite
+  // du parcours. Null si l'accueil a été saisi manuellement par le kiné. La
+  // version renvoie au texte des CGU accepté (cf. INTAKE_CGU_VERSION).
+  consentAcceptedAt DateTime?
+  consentVersion    String?
+
   intake    PatientIntake?
   studies   Study[]
   followups Followup[]

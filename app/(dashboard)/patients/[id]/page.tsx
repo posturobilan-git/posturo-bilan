@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { PatientDossier } from "@/components/patients/PatientDossier";
 import { PatientHeaderActions } from "@/components/patients/PatientHeaderActions";
+import { SendIntakeButton } from "@/components/patients/SendIntakeButton";
 import type { PatientWithRelations, MeasurementInfo } from "@/types";
 import type { PhysioTestInfo } from "@/lib/physio";
 
@@ -48,10 +49,14 @@ export default async function PatientPage(props: PageProps<"/patients/[id]">) {
         description={patient.email}
         action={
           <div className="flex flex-wrap items-center gap-3">
-            {/* Intake — primary CTA while empty, editable afterwards */}
+            {/* Accueil pending — let the kiné email the patient the form link */}
+            {canEdit && !patient.intake && (
+              <SendIntakeButton patientId={patient.id} patientEmail={patient.email} />
+            )}
+            {/* Saisie manuelle de l'accueil — secondaire si déjà rempli */}
             <Link href={`/patients/${patient.id}/intake`}>
-              <Button variant={patient.intake ? "secondary" : "primary"} size="sm">
-                {patient.intake ? "Modifier l'intake" : "Saisir l'intake"}
+              <Button variant="secondary" size="sm">
+                {patient.intake ? "Modifier l'accueil" : "Saisir l'accueil"}
               </Button>
             </Link>
             {canEdit && (

@@ -3,9 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { saveIntake } from "@/actions/intake.actions";
-import { toast } from "@/lib/stores/toastStore";
-import type { PatientIntake } from "@prisma/client";
+import { submitAccueilForm } from "@/actions/accueil.actions";
+import { INTAKE_CGU, intakeCguIntro } from "@/lib/legal";
 
 const BIKE_TYPES = ["Route", "VTT", "Gravel", "Triathlon", "Piste", "Autre"];
 const RIDING_LEVELS = ["Loisir", "Sportif", "Compétiteur"];
@@ -22,21 +21,19 @@ interface FormState {
   medicalNotes: string | undefined;
 }
 
-function initialState(intake: PatientIntake | null): FormState {
-  return {
-    heightCm: intake?.heightCm ?? undefined,
-    weightKg: intake?.weightKg ?? undefined,
-    bikeType: intake?.bikeType ?? undefined,
-    ridingLevel: intake?.ridingLevel ?? undefined,
-    weeklyHours: intake?.weeklyHours ?? undefined,
-    yearsRiding: intake?.yearsRiding ?? undefined,
-    injuries: intake?.injuries ?? [],
-    goals: intake?.goals ?? undefined,
-    medicalNotes: intake?.medicalNotes ?? undefined,
-  };
-}
+const EMPTY: FormState = {
+  heightCm: undefined,
+  weightKg: undefined,
+  bikeType: undefined,
+  ridingLevel: undefined,
+  weeklyHours: undefined,
+  yearsRiding: undefined,
+  injuries: [],
+  goals: undefined,
+  medicalNotes: undefined,
+};
 
-// ─── Small field helpers ────────────────────────────────────────────────────
+// ─── Field helpers ───────────────────────────────────────────────────────────
 
 function NumberField({
   label, unit, value, onChange, min, max,
@@ -104,7 +101,7 @@ function InjuriesInput({
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); add(); }
           }}
-          placeholder="Ex: douleur genou gauche — Entrée pour ajouter"
+          placeholder="Ex : douleur genou gauche — Entrée pour ajouter"
           className="flex-1 rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
         <Button type="button" variant="secondary" size="sm" onClick={add}>Ajouter</Button>
@@ -130,37 +127,83 @@ function InjuriesInput({
   );
 }
 
-// ─── Main form ──────────────────────────────────────────────────────────────
+// ─── Step 1 — CGU ─────────────────────────────────────────────────────────────
 
-interface Props {
-  patientId: string;
-  intake: PatientIntake | null;
+function CguStep({
+  cabinetName,
+  accepted,
+  onAcceptedChange,
+  onContinue,
+}: {
+  cabinetName: string;
+  accepted: boolean;
+  onAcceptedChange: (v: boolean) => void;
+  onContinue: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-6 shadow-sm sm:p-8">
+      <p className="text-sm font-semibold text-brand-600">{cabinetName}</p>
+      <h1 className="mt-2 text-xl font-semibold text-content">Formulaire d&apos;accueil</h1>
+      <p className="mt-3 text-sm text-content-muted">{intakeCguIntro(cabinetName)}</p>
+
+      <div className="mt-6 space-y-4">
+        {INTAKE_CGU.sections.map((s) => (
+          <div key={s.title}>
+            <h2 className="text-sm font-semibold text-content">{s.title}</h2>
+            <p className="mt-1 text-sm text-content-muted">{s.body}</p>
+          </div>
+        ))}
+      </div>
+
+      <label className="mt-6 flex items-start gap-3 rounded-lg border border-border bg-surface-muted p-4">
+        <input
+          type="checkbox"
+          checked={accepted}
+          onChange={(e) => onAcceptedChange(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 rounded border-border-strong text-brand-600 focus:ring-brand-500"
+        />
+        <span className="text-sm text-content">{INTAKE_CGU.consentLabel}</span>
+      </label>
+
+      <div className="mt-6 flex justify-end">
+        <Button type="button" disabled={!accepted} onClick={onContinue}>
+          Continuer
+        </Button>
+      </div>
+    </div>
+  );
 }
 
-export function IntakeForm({ patientId, intake }: Props) {
-  const router = useRouter();
-  const [form, setForm] = useState<FormState>(() => initialState(intake));
-  const [pending, startTransition] = useTransition();
+// ─── Step 2 — Formulaire ──────────────────────────────────────────────────────
 
-  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    startTransition(async () => {
-      const result = await saveIntake(patientId, form);
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success("Accueil enregistré.");
-      router.push(`/patients/${patientId}`);
-    });
-  }
-
+function FormStep({
+  form,
+  set,
+  onBack,
+  onSubmit,
+  pending,
+  error,
+}: {
+  form: FormState;
+  set: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+  onBack: () => void;
+  onSubmit: () => void;
+  pending: boolean;
+  error: string | null;
+}) {
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form
+      onSubmit={(e) => { e.preventDefault(); onSubmit(); }}
+      className="space-y-5 rounded-xl border border-border bg-surface p-6 shadow-sm sm:p-8"
+    >
+      <div>
+        <h1 className="text-xl font-semibold text-content">Vos informations</h1>
+        <p className="mt-1 text-sm text-content-muted">
+          Renseignez les champs que vous connaissez — tout est facultatif, mais
+          plus vous en indiquez, mieux nous préparons votre étude.
+        </p>
+      </div>
+
       <fieldset className="space-y-4 rounded-lg border border-border p-5">
         <legend className="px-1 text-sm font-semibold text-content">Morphologie</legend>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -186,7 +229,7 @@ export function IntakeForm({ patientId, intake }: Props) {
       </fieldset>
 
       <fieldset className="space-y-4 rounded-lg border border-border p-5">
-        <legend className="px-1 text-sm font-semibold text-content">Douleurs & objectifs</legend>
+        <legend className="px-1 text-sm font-semibold text-content">Douleurs &amp; objectifs</legend>
         <InjuriesInput injuries={form.injuries} onChange={(next) => set("injuries", next)} />
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-content-muted">Objectifs de l&apos;étude</span>
@@ -209,14 +252,76 @@ export function IntakeForm({ patientId, intake }: Props) {
         </label>
       </fieldset>
 
+      {error && (
+        <p className="rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-700">{error}</p>
+      )}
+
       <div className="flex justify-between pt-2">
-        <Button type="button" variant="secondary" onClick={() => router.push(`/patients/${patientId}`)}>
-          Annuler
+        <Button type="button" variant="secondary" onClick={onBack} disabled={pending}>
+          Retour
         </Button>
         <Button type="submit" loading={pending}>
-          Enregistrer l&apos;accueil
+          Envoyer
         </Button>
       </div>
     </form>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+export function AccueilForm({
+  token,
+  firstName,
+  cabinetName,
+}: {
+  token: string;
+  firstName: string;
+  cabinetName: string;
+}) {
+  const router = useRouter();
+  const [step, setStep] = useState<"cgu" | "form">("cgu");
+  const [accepted, setAccepted] = useState(false);
+  const [form, setForm] = useState<FormState>(EMPTY);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function handleSubmit() {
+    setError(null);
+    startTransition(async () => {
+      const result = await submitAccueilForm(token, { ...form, cguAccepted: true });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.replace("/accueil/merci");
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-center text-sm text-content-muted">Bonjour {firstName},</p>
+      {step === "cgu" ? (
+        <CguStep
+          cabinetName={cabinetName}
+          accepted={accepted}
+          onAcceptedChange={setAccepted}
+          onContinue={() => setStep("form")}
+        />
+      ) : (
+        <FormStep
+          form={form}
+          set={set}
+          onBack={() => setStep("cgu")}
+          onSubmit={handleSubmit}
+          pending={pending}
+          error={error}
+        />
+      )}
+    </div>
   );
 }

@@ -13,6 +13,19 @@ export const manualIntakeSchema = z.object({
   medicalNotes: z.string().max(2000).optional(),
 });
 
+/**
+ * Public "formulaire d'accueil" submitted by the patient themselves via the
+ * tokenised link. Same fields as the manual intake, plus mandatory consent to
+ * the CGU before the data can be saved.
+ */
+export const accueilFormSchema = manualIntakeSchema.extend({
+  cguAccepted: z.boolean().refine((v) => v === true, {
+    message: "Vous devez accepter les conditions pour continuer.",
+  }),
+});
+
+export type AccueilFormInput = z.infer<typeof accueilFormSchema>;
+
 export const intakeSchema = z.object({
   source: z.string().default("google_forms"),
   calendlyEventId: z.string().optional(),

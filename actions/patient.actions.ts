@@ -8,7 +8,9 @@ import {
   type CreatePatientInput,
   type UpdatePatientInput,
 } from "@/lib/validations/patient.schema";
+import { randomUUID } from "node:crypto";
 import { logAudit } from "@/lib/audit";
+import { inviteExpiryFromNow } from "@/lib/legal";
 import { requireKine, requirePatientOwnership } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { Prisma, type Patient } from "@prisma/client";
@@ -112,8 +114,15 @@ export async function createPatient(
       assignedKineId = target.id;
     }
 
+    // Generate the accueil-form invite token at creation so the patient can be
+    // sent their tokenised link straight away (valid 30 days).
     const patient = await prisma.patient.create({
-      data: { ...fields, kineId: assignedKineId },
+      data: {
+        ...fields,
+        kineId: assignedKineId,
+        inviteToken: randomUUID(),
+        inviteExpiresAt: inviteExpiryFromNow(),
+      },
     });
 
     await logAudit({ userId: kine.id, action: "CREATE", entity: "patient", entityId: patient.id });

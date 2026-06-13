@@ -113,7 +113,7 @@ export default async function StatistiquesPage() {
             {clinical.injuryDistribution.length > 0 ? (
               <InjuryChart data={clinical.injuryDistribution} />
             ) : (
-              <EmptyState message="Aucune douleur déclarée à l'intake." />
+              <EmptyState message="Aucune douleur déclarée à l'accueil." />
             )}
           </Card>
         </div>

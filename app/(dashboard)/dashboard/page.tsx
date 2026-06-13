@@ -116,7 +116,7 @@ export default async function DashboardPage() {
         </div>
         <PatientTable
           patients={recentPatients}
-          emptyMessage="Aucun patient pour le moment. Les patients arrivent via le webhook intake."
+          emptyMessage="Aucun patient pour le moment. Les patients arrivent via le formulaire d'accueil."
         />
       </div>
     </div>
