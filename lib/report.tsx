@@ -216,9 +216,9 @@ export async function sendReportForStudy(
   }
 }
 
-// ─── Combined (n8n automation) ─────────────────────────────────────────────────
+// ─── Combined ──────────────────────────────────────────────────────────────────
 
-/** Generate then send in one call — used by the n8n webhook. */
+/** Generate then send in one call — see lib/emails `sendReportEmail`. */
 export async function generateAndDeliverReport(
   studyId: string,
   actorId: string

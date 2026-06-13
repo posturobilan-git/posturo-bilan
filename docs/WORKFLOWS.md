@@ -1,91 +1,72 @@
-# Workflows n8n — Spécifications
+# Workflows — Automatisation native
 
-## Phase 1 — Intake patient
+Toute l'automatisation est gérée **nativement par l'application** (aucune
+dépendance externe d'orchestration). Les entrées viennent du webhook Calendly et
+d'un Vercel Cron ; les sorties sont les emails transactionnels Resend.
+
+## Phase 1 — Accueil patient
 
 ```
-Trigger: Calendly (nouveau RDV confirmé)
-  │
-  ├── Extraire: nom, email, date RDV, kine_id (metadata Calendly)
-  │
-  ├── Envoyer email au patient avec lien Google Form
-  │     Sujet: "Préparez votre étude posturale — [Prénom]"
-  │     Corps: lien vers Google Form pré-rempli (email, nom)
-  │
-  └── On submit Google Form:
-        POST https://app.velobile.fr/api/intake/receive
-        Headers: x-api-key: {{ $env.N8N_API_KEY }}
-        Body: { patient: {...formData}, kineId: "...", calendlyEventId: "..." }
+Calendly (nouveau RDV confirmé)
+  │  event "invitee.created"
+  ▼
+POST /api/webhooks/calendly
+  ├── Vérifie la signature (header calendly-webhook-signature + CALENDLY_WEBHOOK_SECRET)
+  ├── Extrait email, prénom, nom, date du RDV, et kineId (custom field Calendly)
+  ├── Upsert du patient (email = clé de déduplication), génère son inviteToken
+  └── sendIntakeEmail(patientId) → email avec lien /accueil/[token]
+        │
+        ▼
+  Patient ouvre /accueil/[token] (public)
+    ├── Étape 1 : CGU + consentement RGPD (obligatoire)
+    └── Étape 2 : formulaire → PatientIntake enregistré, lien invalidé
 ```
 
-**Champs Google Form à créer :**
-- Prénom (texte court, requis)
-- Nom (texte court, requis)
-- Email (email, requis)
-- Téléphone (texte court)
-- Taille en cm (nombre)
-- Poids en kg (nombre)
-- Type de vélo (choix: Route / VTT / Gravel / Triathlon / Autre)
-- Niveau de pratique (choix: Loisir / Sportif / Compétiteur)
-- Heures de pratique par semaine (nombre)
-- Années de pratique (nombre)
-- Douleurs actuelles (texte long)
-- Objectifs de l'étude (texte long)
-- Notes médicales (texte long, optionnel)
-
----
+**Champ custom Calendly requis :** le `kineId` (uuid du kiné) doit être passé
+soit dans une question custom contenant « kiné » / « kine », soit dans le
+paramètre de tracking `utm_content` du lien de réservation.
 
 ## Phase 4 — Suivi J+30
 
-> **Note (refacto multi-études) :** le statut du cycle de vie est désormais porté
-> par chaque **étude** (`Study.status`), plus par le patient. Un patient peut avoir
-> plusieurs études (un vélo = une étude). L'éligibilité au suivi J+30 se calcule
-> donc sur les études en statut `report_sent`.
+> Le cycle de vie est porté par chaque **étude** (`Study.status`). L'éligibilité
+> au suivi se calcule sur les études en statut `report_sent`.
 
 ```
-Trigger: Cron / Schedule
-  │
-  ├── Condition: study.status === "report_sent"
-  │             AND NOW() >= study.reportSentAt + 30 jours
-  │
-  ├── Récupérer liste études éligibles
-  │     GET https://app.velobile.fr/api/followup/eligible
-  │     (endpoint à créer — retourne les patientIds éligibles)
-  │
-  ├── Pour chaque étude éligible:
-  │     Envoyer email avec lien Google Form de suivi
-  │     Mettre study.status → followup_pending
-  │
-  └── On submit Google Form suivi:
-        POST https://app.velobile.fr/api/followup/receive
-        Headers: x-api-key: {{ $env.N8N_API_KEY }}
-        Body: { patientId: "...", responses: {...formData} }
-        → l'app marque l'étude la plus récente (report_sent / followup_pending)
-          du patient en followup_completed
+Vercel Cron (vercel.json — tous les jours à 08:00 UTC)
+  ▼
+GET /api/cron/followup        (Authorization: Bearer CRON_SECRET)
+  ├── Sélectionne les études status=report_sent
+  │     ET reportSentAt entre J-31 et J-29 (fenêtre ~J+30)
+  └── Pour chaque étude : sendFollowupEmail(studyId)
+        ├── génère followupToken, email avec lien /suivi/[token]
+        └── statut report_sent → followup_pending
+              │
+              ▼
+  Patient ouvre /suivi/[token] (public)
+    └── Formulaire (douleur, confort, satisfaction, fréquence, commentaire)
+          → Followup enregistré, statut étude → followup_completed, lien invalidé
 ```
 
-**Champs Google Form suivi à créer :**
-- Niveau de douleur actuel 0-10 (nombre)
-- Confort global sur le vélo 0-10 (nombre)
-- Satisfaction globale 0-10 (nombre)
-- Fréquence de pratique actuelle (texte court)
-- Avez-vous repris la compétition/sport ? (oui/non)
-- Commentaires libres (texte long)
+## Emails sortants — `lib/emails/index.ts`
 
----
+Toutes les fonctions d'envoi sont consolidées dans ce module. Chacune récupère
+ses données, rend le template Resend, envoie, et écrit un audit log.
 
-## Variables d'environnement n8n
+| Fonction | Déclencheur | Contenu |
+|----------|-------------|---------|
+| `sendIntakeEmail(patientId)` | webhook Calendly, bouton BO | lien `/accueil/[token]` |
+| `sendReportEmail(studyId)` | action BO (rapport) | PDF en pièce jointe |
+| `sendFollowupEmail(studyId)` | cron J+30 | lien `/suivi/[token]` |
 
-| Variable | Valeur |
-|----------|--------|
-| `N8N_API_KEY` | Même valeur que dans `.env` de l'app |
-| `APP_BASE_URL` | `https://app.velobile.fr` |
-| `RESEND_API_KEY` | Pour envoi d'emails depuis n8n si besoin |
+**Gating local :** en l'absence de `RESEND_API_KEY`, l'envoi est ignoré (le lien
+est loggé) en environnement local, mais échoue en déploiement — voir
+`lib/env.ts` et `deliver()` dans `lib/emails/index.ts`.
 
----
+## Variables d'environnement
 
-## Notes d'implémentation
-
-- Le `kineId` doit être passé en metadata lors de la création du RDV Calendly (champ custom)
-- Le lien Google Form doit être pré-rempli avec l'email du patient pour déduplication
-- En cas d'échec du webhook, n8n doit retenter 3 fois avec backoff exponentiel
-- Les réponses Google Forms doivent inclure un champ caché `patient_id` pour le suivi J+30
+| Variable | Rôle |
+|----------|------|
+| `CALENDLY_WEBHOOK_SECRET` | Signature du webhook Calendly |
+| `CRON_SECRET` | Bearer attendu par `/api/cron/followup` |
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Envoi des emails |
+| `NEXT_PUBLIC_APP_URL` | Base des liens (`/accueil`, `/suivi`) dans les emails |

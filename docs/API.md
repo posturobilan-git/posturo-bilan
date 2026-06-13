@@ -4,78 +4,73 @@
 
 - Toutes les routes API sont dans `app/api/`
 - Les mutations côté app passent par des **Server Actions** (pas des routes API)
-- Les routes API servent uniquement aux **webhooks externes** (n8n) et aux endpoints **RGPD**
-- Toutes les routes API vérifient une `x-api-key` header
+- Les routes API servent aux **entrées externes** (webhook Calendly), au
+  **scheduler** (Vercel Cron) et aux endpoints **RGPD** / **stream PDF**
+- Chaque route porte sa propre auth (signature, bearer, ou session Clerk)
+- Les formulaires patients (`/accueil`, `/suivi`) sont des **pages publiques**
+  à token, pas des routes API
 
 ---
 
-## Webhooks n8n
+## Entrée externe — Calendly
 
-### POST `/api/intake/receive`
+### POST `/api/webhooks/calendly`
 
-Reçoit les données patient après soumission du formulaire Google Form (Phase 1).
+Reçoit les événements Calendly (nouveau RDV). Seul `invitee.created` crée un
+patient ; les autres events sont acquittés sans effet.
 
-**Auth :** `x-api-key: N8N_API_KEY`
+**Auth :** signature `calendly-webhook-signature` vérifiée avec
+`CALENDLY_WEBHOOK_SECRET` (HMAC-SHA256 sur `"<t>.<rawBody>"`). En local sans
+secret, les appels non signés sont acceptés pour faciliter les tests.
 
-**Body :**
+**Body (extrait consommé) :**
 ```json
 {
-  "source": "google_forms",
-  "calendlyEventId": "string",
-  "patient": {
+  "event": "invitee.created",
+  "payload": {
     "email": "string (required)",
-    "firstName": "string (required)",
-    "lastName": "string (required)",
-    "phone": "string?",
-    "heightCm": "number?",
-    "weightKg": "number?",
-    "bikeType": "string?",
-    "ridingLevel": "string?",
-    "weeklyHours": "number?",
-    "injuries": "string[]",
-    "goals": "string?",
-    "medicalNotes": "string?"
-  },
-  "kineId": "string (uuid — id du kiné lié au RDV Calendly)"
+    "first_name": "string?",
+    "last_name": "string?",
+    "name": "string?",
+    "scheduled_event": { "uri": "string?", "start_time": "string?" },
+    "questions_and_answers": [{ "question": "…kiné…", "answer": "<kineId uuid>" }],
+    "tracking": { "utm_content": "<kineId uuid> (fallback)" }
+  }
 }
 ```
 
 **Comportement :**
-- Upsert du patient (email comme clé de déduplication)
-- Création / mise à jour du `PatientIntake` associé
-- Le patient n'a plus de statut : le cycle de vie est porté par les études
-- Réponse `{ success: true, patientId: "uuid" }`
+- Upsert du patient (email = clé de déduplication), génération de l'`inviteToken`
+- `sendIntakeEmail(patientId)` → email du lien `/accueil/[token]`
+- Réponse `{ success: true, patientId: "uuid" }` (207 si l'email échoue)
 
 ---
 
-### POST `/api/followup/receive`
+## Scheduler — Vercel Cron
 
-Reçoit les réponses au formulaire de suivi J+30 (Phase 4).
+### GET `/api/cron/followup`
 
-**Auth :** `x-api-key: N8N_API_KEY`
+Job quotidien (cf. `vercel.json`, `0 8 * * *`) qui envoie le suivi J+30.
 
-**Body :**
-```json
-{
-  "patientId": "string (uuid)",
-  "source": "google_forms",
-  "responses": {
-    "painLevel": "number 0-10",
-    "comfortScore": "number 0-10",
-    "satisfactionScore": "number 0-10",
-    "ridingFrequency": "string?",
-    "returningToSport": "boolean?",
-    "generalFeedback": "string?"
-  },
-  "rawResponses": "object (réponses brutes Google Forms)"
-}
-```
+**Auth :** `Authorization: Bearer ${CRON_SECRET}`
 
 **Comportement :**
-- Création d'un `Followup` lié au patient
-- L'étude la plus récente du patient en `report_sent` / `followup_pending` passe
-  en `followup_completed`
-- Réponse `{ success: true, followupId: "uuid" }`
+- Sélectionne les études `report_sent` dont `reportSentAt` est dans la fenêtre
+  J-31 → J-29
+- Pour chacune : `sendFollowupEmail(studyId)` (envoi + statut → `followup_pending`)
+- Réponse `{ eligible, sent, failed }`
+
+---
+
+## Formulaires patients (pages publiques à token)
+
+| Page | Token | Soumission |
+|------|-------|------------|
+| `/accueil/[token]` | `Patient.inviteToken` | `PatientIntake` + consentement RGPD |
+| `/suivi/[token]` | `Study.followupToken` | `Followup` + étude → `followup_completed` |
+
+Soumission via Server Actions publiques (`submitAccueilForm`,
+`submitFollowupForm`) — autorisées par la possession du token, sans session.
 
 ---
 
@@ -117,16 +112,17 @@ Ces fonctions sont appelées depuis les composants React. Elles ne sont pas des 
 | `submitStudy` | `study.actions.ts` | Soumettre le formulaire d'étude (avance `study_completed`) |
 | `updateStudyStatus` | `study.actions.ts` | Transition stricte du statut d'une étude |
 | `generateReport` / `sendReport` | `report.actions.ts` | Générer le PDF / l'envoyer (avance `report_sent`) |
+| `sendIntakeEmail` | `intake.actions.ts` | Envoyer le formulaire d'accueil (bouton BO) |
+| `submitAccueilForm` | `accueil.actions.ts` | Soumission publique du formulaire d'accueil (token) |
+| `submitFollowupForm` | `followup.actions.ts` | Soumission publique du suivi J+30 (token) |
 | `createExercise` | `exercise.actions.ts` | Créer un exercice (ADMIN) |
 | `createComponent` | `component.actions.ts` | Créer un composant (ADMIN) |
 | `createBikeType` | `bikeType.actions.ts` | Créer un type de vélo (ADMIN) |
 
 ---
 
-## Contrat d'interface n8n ↔ App
+## Emails transactionnels — `lib/emails/index.ts`
 
-L'app est indépendante de n8n. Le contrat est :
-- n8n appelle `/api/intake/receive` ou `/api/followup/receive`
-- L'app ne sait pas que c'est n8n qui appelle
-- Demain, Google Forms peut être remplacé par un formulaire custom sans changer l'API
-- La clé `source` indique l'origine pour debug
+Toutes les fonctions d'envoi sont consolidées ici (`sendIntakeEmail`,
+`sendReportEmail`, `sendFollowupEmail`). Chacune récupère ses données, rend le
+template Resend, envoie, et écrit un audit log. Voir `docs/WORKFLOWS.md`.

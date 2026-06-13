@@ -295,6 +295,13 @@ model Study {
   reportUrl   String?   // URL Vercel Blob du PDF
   reportSentAt DateTime?
 
+  // Suivi J+30 : lien public unique vers /suivi/[token]. Le token est généré à
+  // l'envoi de l'email de suivi (sendFollowupEmail). On garde le token après
+  // soumission (followupCompletedAt renseigné) pour distinguer « déjà complété »
+  // d'un lien invalide.
+  followupToken       String?   @unique
+  followupCompletedAt DateTime?
+
   observations String?
 
   createdAt DateTime @default(now())

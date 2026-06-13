@@ -6,16 +6,19 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/accueil/(.*)",
-  "/api/intake/(.*)",
-  "/api/followup/(.*)",
+  "/suivi/(.*)",
+  "/api/webhooks/(.*)",
+  "/api/cron/(.*)",
+  // Report PDF stream: not behind Clerk's auto-protect (it self-enforces and
+  // returns 401/403 rather than redirecting).
   "/api/reports/(.*)",
 ]);
 
-// Public webhooks (n8n) — protected only by API key, so rate-limit by IP.
+// Routes authenticated by their own secret (Calendly signature, cron bearer)
+// rather than a Clerk session — rate-limit by IP to blunt abuse.
 const isWebhookRoute = createRouteMatcher([
-  "/api/intake/(.*)",
-  "/api/followup/(.*)",
-  "/api/reports/(.*)",
+  "/api/webhooks/(.*)",
+  "/api/cron/(.*)",
 ]);
 
 export const proxy = clerkMiddleware(async (auth, req) => {
