@@ -57,7 +57,8 @@ function PanelAmont({
         <SectionTitle>Amont — Données d&apos;accueil</SectionTitle>
         <p className="text-sm text-content-subtle italic">Accueil non encore renseigné.</p>
         <Link
-          href={`/patients/${patientId}/intake`}
+          href={`/dashboard/patients/${patientId}/intake`}
+          prefetch={false}
           className="mt-3 inline-block text-sm font-medium text-brand-600 hover:text-brand-700"
         >
           + Saisir l&apos;accueil
@@ -141,7 +142,7 @@ function StudiesSection({
           </span>
         </h3>
         {canEdit && (
-          <Link href={`/patients/${patient.id}/etude`}>
+          <Link href={`/dashboard/patients/${patient.id}/etude`} prefetch={false}>
             <Button size="sm">+ Nouvelle étude</Button>
           </Link>
         )}

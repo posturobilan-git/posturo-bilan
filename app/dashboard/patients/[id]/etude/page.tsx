@@ -7,7 +7,7 @@ import { StudyForm } from "@/components/study/StudyForm";
 import type { StudyMeasureValue } from "@/types";
 import type { PhysioValue, StudyPhysioResult } from "@/lib/physio";
 
-export default async function EtudePage(props: PageProps<"/patients/[id]/etude">) {
+export default async function EtudePage(props: PageProps<"/dashboard/patients/[id]/etude">) {
   const kine = await getCurrentKine();
   if (!kine) redirect("/sign-in");
 
@@ -45,7 +45,7 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
     }),
   ]);
 
-  if (!patient) redirect("/patients");
+  if (!patient) redirect("/dashboard/patients");
 
   // Editing: load the specific study (scoped). Creating: no initial data.
   const study = editStudyId
@@ -59,7 +59,7 @@ export default async function EtudePage(props: PageProps<"/patients/[id]/etude">
       })
     : null;
 
-  if (editStudyId && !study) redirect(`/patients/${id}`);
+  if (editStudyId && !study) redirect(`/dashboard/patients/${id}`);
 
   // Editing gently: if the study's bike type has since been deactivated, it's
   // missing from the active list above — re-include it so it stays selectable

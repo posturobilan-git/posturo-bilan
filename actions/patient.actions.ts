@@ -134,7 +134,7 @@ export async function createPatient(
     });
 
     await logAudit({ userId: kine.id, action: "CREATE", entity: "patient", entityId: patient.id });
-    revalidatePath("/patients");
+    revalidatePath("/dashboard/patients");
     return ok(patient);
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -167,8 +167,8 @@ export async function updatePatient(
       entityId: patientId,
       metadata: { fields: Object.keys(parsed.data) },
     });
-    revalidatePath("/patients");
-    revalidatePath(`/patients/${patientId}`);
+    revalidatePath("/dashboard/patients");
+    revalidatePath(`/dashboard/patients/${patientId}`);
     return ok(updated);
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -208,7 +208,7 @@ export async function deletePatient(patientId: string): Promise<ActionResult<voi
       entity: "patient",
       entityId: patientId,
     });
-    revalidatePath("/patients");
+    revalidatePath("/dashboard/patients");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message.startsWith("Accès refusé")) return fail(e.message);

@@ -188,8 +188,8 @@ export async function setBikeTypeMeasurements(
       entityId: bikeTypeId,
       metadata: { config: "measurements", count: ordered.length },
     });
-    revalidatePath(`/configuration/${bikeTypeId}`);
-    revalidatePath("/configuration");
+    revalidatePath(`/dashboard/configuration/${bikeTypeId}`);
+    revalidatePath("/dashboard/configuration");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -240,8 +240,8 @@ export async function setBikeTypePhysioTests(
       entityId: bikeTypeId,
       metadata: { config: "physioTests", count: ordered.length },
     });
-    revalidatePath(`/configuration/${bikeTypeId}`);
-    revalidatePath("/configuration");
+    revalidatePath(`/dashboard/configuration/${bikeTypeId}`);
+    revalidatePath("/dashboard/configuration");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -262,7 +262,7 @@ export async function createBikeType(data: BikeTypeInput): Promise<ActionResult<
       data: { ...parsed.data, createdById: admin.id },
     });
     await logAudit({ userId: admin.id, action: "CREATE", entity: "bikeType", entityId: bikeType.id });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok({ id: bikeType.id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -282,7 +282,7 @@ export async function updateBikeType(
     const admin = await requireAdmin();
     await prisma.bikeType.update({ where: { id }, data: parsed.data });
     await logAudit({ userId: admin.id, action: "UPDATE", entity: "bikeType", entityId: id });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok({ id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -307,7 +307,7 @@ export async function deleteBikeType(id: string): Promise<ActionResult<void>> {
     // No study references it; côte/component links cascade via the join tables.
     await prisma.bikeType.delete({ where: { id } });
     await logAudit({ userId: admin.id, action: "DELETE", entity: "bikeType", entityId: id });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -336,7 +336,7 @@ export async function toggleBikeType(id: string): Promise<ActionResult<{ isActiv
       entityId: id,
       metadata: { isActive: updated.isActive },
     });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok({ isActive: updated.isActive });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");

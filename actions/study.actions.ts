@@ -228,8 +228,8 @@ export async function submitStudy(
       metadata: { submitted: true },
     });
 
-    revalidatePath(`/patients/${validated.patientId}`);
-    revalidatePath("/etudes");
+    revalidatePath(`/dashboard/patients/${validated.patientId}`);
+    revalidatePath("/dashboard/etudes");
     return ok({ studyId });
   } catch (e) {
     console.error("submitStudy failed:", e);
@@ -259,8 +259,8 @@ export async function deleteStudy(studyId: string): Promise<ActionResult<void>> 
     if (study.reportUrl) await deleteReport(study.reportUrl);
 
     await logAudit({ userId: kine.id, action: "DELETE", entity: "study", entityId: studyId });
-    revalidatePath(`/patients/${study.patientId}`);
-    revalidatePath("/etudes");
+    revalidatePath(`/dashboard/patients/${study.patientId}`);
+    revalidatePath("/dashboard/etudes");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message.startsWith("Accès refusé")) return fail(e.message);
@@ -305,7 +305,7 @@ export async function updateStudyStatus(studyId: string, newStatus: StudyStatus)
     entityId: studyId,
     metadata: { from: current.status, to: newStatus },
   });
-  revalidatePath(`/patients/${current.patientId}`);
-  revalidatePath("/etudes");
+  revalidatePath(`/dashboard/patients/${current.patientId}`);
+  revalidatePath("/dashboard/etudes");
   return study;
 }

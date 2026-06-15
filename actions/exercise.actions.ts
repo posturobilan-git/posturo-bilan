@@ -69,7 +69,7 @@ export async function createExercise(
       data: { ...parsed.data, createdById: admin.id },
     });
     await logAudit({ userId: admin.id, action: "CREATE", entity: "exercise", entityId: exercise.id });
-    revalidatePath("/bibliotheque");
+    revalidatePath("/dashboard/bibliotheque");
     return ok({ id: exercise.id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -89,7 +89,7 @@ export async function updateExercise(
     const admin = await requireAdmin();
     await prisma.exercise.update({ where: { id }, data: parsed.data });
     await logAudit({ userId: admin.id, action: "UPDATE", entity: "exercise", entityId: id });
-    revalidatePath("/bibliotheque");
+    revalidatePath("/dashboard/bibliotheque");
     return ok({ id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -105,7 +105,7 @@ export async function deleteExercise(id: string): Promise<ActionResult<void>> {
     // removed from any studies that prescribed it — those studies are preserved.
     await prisma.exercise.delete({ where: { id } });
     await logAudit({ userId: admin.id, action: "DELETE", entity: "exercise", entityId: id });
-    revalidatePath("/bibliotheque");
+    revalidatePath("/dashboard/bibliotheque");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -134,7 +134,7 @@ export async function toggleExercise(id: string): Promise<ActionResult<{ isActiv
       entityId: id,
       metadata: { isActive: updated.isActive },
     });
-    revalidatePath("/bibliotheque");
+    revalidatePath("/dashboard/bibliotheque");
     return ok({ isActive: updated.isActive });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");

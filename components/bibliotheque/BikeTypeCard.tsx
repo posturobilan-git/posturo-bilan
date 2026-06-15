@@ -39,7 +39,8 @@ export function BikeTypeCard({ bikeType, isAdmin }: { bikeType: BikeTypeWithCoun
       </div>
 
       <Link
-        href={`/configuration/${bikeType.id}`}
+        href={`/dashboard/configuration/${bikeType.id}`}
+        prefetch={false}
         className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-brand-600 transition-colors hover:text-brand-800"
       >
         Configurer les côtes

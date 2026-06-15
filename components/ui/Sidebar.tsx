@@ -16,7 +16,7 @@ const navItems = [
     ),
   },
   {
-    href: "/patients",
+    href: "/dashboard/patients",
     label: "Patients",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -25,7 +25,7 @@ const navItems = [
     ),
   },
   {
-    href: "/etudes",
+    href: "/dashboard/etudes",
     label: "Études",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -34,7 +34,7 @@ const navItems = [
     ),
   },
   {
-    href: "/bibliotheque",
+    href: "/dashboard/bibliotheque",
     label: "Bibliothèque",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -46,7 +46,7 @@ const navItems = [
 
 const adminNavItems = [
   {
-    href: "/configuration",
+    href: "/dashboard/configuration",
     label: "Configuration des études",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -56,7 +56,7 @@ const adminNavItems = [
     ),
   },
   {
-    href: "/statistiques",
+    href: "/dashboard/statistiques",
     label: "Statistiques",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -65,7 +65,7 @@ const adminNavItems = [
     ),
   },
   {
-    href: "/parametres/equipe",
+    href: "/dashboard/parametres/equipe",
     label: "Équipe",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -74,7 +74,7 @@ const adminNavItems = [
     ),
   },
   {
-    href: "/parametres/rgpd",
+    href: "/dashboard/parametres/rgpd",
     label: "RGPD",
     icon: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -111,11 +111,17 @@ function NavList({
   return (
     <ul className="space-y-1">
       {items.map((item) => {
-        const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+        // The dashboard home is a prefix of every other route, so it must match
+        // exactly; all other items stay active across their nested pages.
+        const isActive =
+          item.href === "/dashboard"
+            ? pathname === "/dashboard"
+            : pathname === item.href || pathname.startsWith(item.href + "/");
         return (
           <li key={item.href}>
             <Link
               href={item.href}
+              prefetch={false}
               onClick={onNavigate}
               aria-current={isActive ? "page" : undefined}
               className={`group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${

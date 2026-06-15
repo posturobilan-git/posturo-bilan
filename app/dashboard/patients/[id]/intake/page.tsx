@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { IntakeForm } from "@/components/patients/IntakeForm";
 
-export default async function IntakePage(props: PageProps<"/patients/[id]/intake">) {
+export default async function IntakePage(props: PageProps<"/dashboard/patients/[id]/intake">) {
   const kine = await getCurrentKine();
   if (!kine) redirect("/sign-in");
 
@@ -18,7 +18,7 @@ export default async function IntakePage(props: PageProps<"/patients/[id]/intake
     include: { intake: true },
   });
 
-  if (!patient) redirect("/patients");
+  if (!patient) redirect("/dashboard/patients");
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">

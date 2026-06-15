@@ -136,7 +136,7 @@ export function StudyForm({
         return;
       }
       toast.success("Étude soumise avec succès.");
-      router.push(`/patients/${patient.id}`);
+      router.push(`/dashboard/patients/${patient.id}`);
     });
   }
 

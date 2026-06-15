@@ -23,7 +23,7 @@ export default async function BikeTypeConfigPage({
 
   const [{ id }, { tab }] = await Promise.all([params, searchParams]);
   const config = await getBikeTypeConfig(id);
-  if (!config) redirect("/configuration");
+  if (!config) redirect("/dashboard/configuration");
 
   // Bind the bike type id so each configurator just persists an ordered id list.
   const saveMeasurements = setBikeTypeMeasurements.bind(null, id);
@@ -32,7 +32,7 @@ export default async function BikeTypeConfigPage({
   return (
     <div className="space-y-6">
       <Link
-        href="/configuration"
+        href="/dashboard/configuration"
         className="inline-flex items-center gap-1 text-sm font-medium text-content-muted transition-colors hover:text-content"
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

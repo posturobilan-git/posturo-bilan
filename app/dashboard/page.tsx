@@ -108,7 +108,7 @@ export default async function DashboardPage() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold tracking-tight text-content">Patients récents</h2>
           <Link
-            href="/patients"
+            href="/dashboard/patients"
             className="text-sm font-medium text-brand-600 transition-colors hover:text-brand-700"
           >
             Voir tous →

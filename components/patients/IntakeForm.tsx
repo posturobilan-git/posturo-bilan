@@ -155,7 +155,7 @@ export function IntakeForm({ patientId, intake }: Props) {
         return;
       }
       toast.success("Accueil enregistré.");
-      router.push(`/patients/${patientId}`);
+      router.push(`/dashboard/patients/${patientId}`);
     });
   }
 
@@ -210,7 +210,7 @@ export function IntakeForm({ patientId, intake }: Props) {
       </fieldset>
 
       <div className="flex justify-between pt-2">
-        <Button type="button" variant="secondary" onClick={() => router.push(`/patients/${patientId}`)}>
+        <Button type="button" variant="secondary" onClick={() => router.push(`/dashboard/patients/${patientId}`)}>
           Annuler
         </Button>
         <Button type="submit" loading={pending}>

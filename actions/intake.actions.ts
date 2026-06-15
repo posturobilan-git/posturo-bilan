@@ -64,7 +64,7 @@ export async function saveIntake(
       metadata: { source: "manual" },
     });
 
-    revalidatePath(`/patients/${patientId}`);
+    revalidatePath(`/dashboard/patients/${patientId}`);
     return ok({ patientId });
   } catch (e) {
     console.error("saveIntake failed:", e);
@@ -96,7 +96,7 @@ export async function sendIntakeEmail(
     const result = await sendIntakeEmailCore(patientId);
     if (!result.ok) return result;
 
-    revalidatePath(`/patients/${patientId}`);
+    revalidatePath(`/dashboard/patients/${patientId}`);
     return ok(undefined);
   } catch (e) {
     console.error("sendIntakeEmail failed:", e);

@@ -71,7 +71,7 @@ export function PatientHeaderActions({ patient }: { patient: PatientFields }) {
         return;
       }
       toast.success("Patient supprimé.");
-      router.push("/patients");
+      router.push("/dashboard/patients");
       router.refresh();
     });
   }

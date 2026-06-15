@@ -11,13 +11,13 @@ import { SendIntakeButton } from "@/components/patients/SendIntakeButton";
 import type { PatientWithRelations, MeasurementInfo } from "@/types";
 import type { PhysioTestInfo } from "@/lib/physio";
 
-export default async function PatientPage(props: PageProps<"/patients/[id]">) {
+export default async function PatientPage(props: PageProps<"/dashboard/patients/[id]">) {
   const kine = await getCurrentKine();
   if (!kine) redirect("/sign-in");
 
   const { id } = await props.params;
   const patient = await getPatientDossier(id);
-  if (!patient) redirect("/patients");
+  if (!patient) redirect("/dashboard/patients");
 
   // getPatientDossier includes kine, cast to full type
   const patientFull = patient as PatientWithRelations;
@@ -54,7 +54,7 @@ export default async function PatientPage(props: PageProps<"/patients/[id]">) {
               <SendIntakeButton patientId={patient.id} patientEmail={patient.email} />
             )}
             {/* Saisie manuelle de l'accueil — secondaire si déjà rempli */}
-            <Link href={`/patients/${patient.id}/intake`}>
+            <Link href={`/dashboard/patients/${patient.id}/intake`} prefetch={false}>
               <Button variant="secondary" size="sm">
                 {patient.intake ? "Modifier l'accueil" : "Saisir l'accueil"}
               </Button>
