@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
 const isPublicRoute = createRouteMatcher([
+  "/",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/reservation",
