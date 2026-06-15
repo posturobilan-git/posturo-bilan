@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import {
   createPatientSchema,
   updatePatientSchema,
@@ -79,13 +80,20 @@ export async function getPatientDossier(id: string) {
     },
   });
 
+  // Only record an actual view, not Next.js prefetches/cache-warming renders —
+  // otherwise opening the patients list would log VIEW_SENSITIVE for every row.
   if (patient) {
-    await logAudit({
-      userId: kine.id,
-      action: "VIEW_SENSITIVE",
-      entity: "patient",
-      entityId: id,
-    });
+    const h = await headers();
+    const isPrefetch =
+      h.get("next-router-prefetch") === "1" || h.get("purpose") === "prefetch";
+    if (!isPrefetch) {
+      await logAudit({
+        userId: kine.id,
+        action: "VIEW_SENSITIVE",
+        entity: "patient",
+        entityId: id,
+      });
+    }
   }
 
   return patient;
