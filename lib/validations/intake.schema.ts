@@ -8,28 +8,20 @@ export const manualIntakeSchema = z.object({
   ridingLevel: z.string().optional(),
   weeklyHours: z.number().min(0).max(60).optional(),
   yearsRiding: z.number().int().min(0).max(100).optional(),
-  injuries: z.array(z.string().min(1)).default([]),
+  injuries: z.array(z.string().min(1).max(200)).max(50).default([]),
   goals: z.string().max(2000).optional(),
   medicalNotes: z.string().max(2000).optional(),
 });
 
-export const intakeSchema = z.object({
-  source: z.string().default("google_forms"),
-  calendlyEventId: z.string().optional(),
-  kineId: z.string().uuid(),
-  patient: z.object({
-    email: z.string().email(),
-    firstName: z.string().min(1),
-    lastName: z.string().min(1),
-    phone: z.string().optional(),
-    heightCm: z.number().optional(),
-    weightKg: z.number().optional(),
-    bikeType: z.string().optional(),
-    ridingLevel: z.string().optional(),
-    weeklyHours: z.number().optional(),
-    yearsRiding: z.number().int().optional(),
-    injuries: z.array(z.string()).default([]),
-    goals: z.string().optional(),
-    medicalNotes: z.string().optional(),
+/**
+ * Public "formulaire d'accueil" submitted by the patient themselves via the
+ * tokenised link. Same fields as the manual intake, plus mandatory consent to
+ * the CGU before the data can be saved.
+ */
+export const accueilFormSchema = manualIntakeSchema.extend({
+  cguAccepted: z.boolean().refine((v) => v === true, {
+    message: "Vous devez accepter les conditions pour continuer.",
   }),
 });
+
+export type AccueilFormInput = z.infer<typeof accueilFormSchema>;

@@ -1,7 +1,7 @@
 import "server-only";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { prisma } from "@/lib/db";
-import { getResend } from "@/lib/email";
+import { getResend, resendFrom } from "@/lib/email";
 import { storePdf } from "@/lib/storage";
 import { logAudit } from "@/lib/audit";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
@@ -12,7 +12,7 @@ import { formatPhysioValue, hasPhysioValue, type StudyPhysioResult } from "@/lib
 import type { StudyForReport, StudyMeasureValue } from "@/types";
 
 const CABINET = process.env.CABINET_NAME || "PosturoBilan";
-const FROM = process.env.RESEND_FROM_EMAIL || "PosturoBilan <onboarding@resend.dev>";
+const FROM = resendFrom();
 
 function buildAdjustments(study: StudyForReport): string[] {
   return study.componentsUsed.map((c) =>
@@ -216,9 +216,9 @@ export async function sendReportForStudy(
   }
 }
 
-// ─── Combined (n8n automation) ─────────────────────────────────────────────────
+// ─── Combined ──────────────────────────────────────────────────────────────────
 
-/** Generate then send in one call — used by the n8n webhook. */
+/** Generate then send in one call — see lib/emails `sendReportEmail`. */
 export async function generateAndDeliverReport(
   studyId: string,
   actorId: string

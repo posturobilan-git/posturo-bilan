@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { manualIntakeSchema } from "@/lib/validations/intake.schema";
 import { logAudit } from "@/lib/audit";
 import { requireKine } from "@/lib/auth";
+import { sendIntakeEmail as sendIntakeEmailCore } from "@/lib/emails";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { z } from "zod";
 
@@ -63,10 +64,42 @@ export async function saveIntake(
       metadata: { source: "manual" },
     });
 
-    revalidatePath(`/patients/${patientId}`);
+    revalidatePath(`/dashboard/patients/${patientId}`);
     return ok({ patientId });
   } catch (e) {
     console.error("saveIntake failed:", e);
     return fail("Impossible d'enregistrer l'intake. Réessayez.");
+  }
+}
+
+/**
+ * BO action: emails the patient their "formulaire d'accueil" link. Enforces
+ * kiné ownership, then delegates the token handling, send and audit to the
+ * consolidated email module (also used by the Cal.com webhook).
+ */
+export async function sendIntakeEmail(
+  patientId: string
+): Promise<ActionResult<void>> {
+  try {
+    const kine = await requireKine();
+
+    // Scope check: KINE can only act on their own patients.
+    const patient = await prisma.patient.findUnique({
+      where: {
+        id: patientId,
+        ...(kine.role !== "ADMIN" && { kineId: kine.id }),
+      },
+      select: { id: true },
+    });
+    if (!patient) return fail("Patient introuvable.");
+
+    const result = await sendIntakeEmailCore(patientId);
+    if (!result.ok) return result;
+
+    revalidatePath(`/dashboard/patients/${patientId}`);
+    return ok(undefined);
+  } catch (e) {
+    console.error("sendIntakeEmail failed:", e);
+    return fail("Impossible d'envoyer le formulaire d'accueil. Réessayez.");
   }
 }

@@ -71,7 +71,7 @@ export function RgpdActions({ patientId, patientName, isAnonymized }: Props) {
               </p>
               <ul className="list-disc space-y-1 pl-5">
                 <li>Nom, email et téléphone seront effacés</li>
-                <li>Les données d&apos;intake (morphologie, douleurs, notes médicales) seront supprimées</li>
+                <li>Les données d&apos;accueil (morphologie, douleurs, notes médicales) seront supprimées</li>
                 <li>Les études et suivis (données métier anonymes) seront conservés</li>
               </ul>
             </div>

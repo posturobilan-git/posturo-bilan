@@ -101,15 +101,32 @@ model Patient {
   kineId          String
   kine            User          @relation(fields: [kineId], references: [id])
 
-  // Données de base (récupérées via Calendly/n8n)
+  // Données de base (récupérées via le webhook de réservation Cal.com)
   email           String        @unique
   firstName       String
   lastName        String
   phone           String?
-  calendlyEventId String?
+  bookingId       String?       // identifiant de la réservation Cal.com
 
   // Données anonymisées (RGPD) — null si anonymisé
   isAnonymized    Boolean       @default(false)
+
+  // Formulaire d'accueil (intake) rempli par le patient via un lien public.
+  // Le token est généré à la création ; le patient y accède sur /accueil/[token].
+  // Le lien expire à `inviteExpiresAt` (30 j) ou dès que le patient soumet
+  // (`inviteCompletedAt` renseigné). On garde le token après soumission pour
+  // distinguer « déjà complété » d'un lien invalide.
+  inviteToken       String?   @unique
+  inviteExpiresAt   DateTime?
+  inviteSentAt      DateTime?
+  inviteCompletedAt DateTime?
+
+  // Consentement RGPD donné par le patient lors de la soumission du formulaire
+  // d'accueil. Conservé au niveau patient car l'accueil alimente toute la suite
+  // du parcours. Null si l'accueil a été saisi manuellement par le kiné. La
+  // version renvoie au texte des CGU accepté (cf. INTAKE_CGU_VERSION).
+  consentAcceptedAt DateTime?
+  consentVersion    String?
 
   intake    PatientIntake?
   studies   Study[]
@@ -277,6 +294,13 @@ model Study {
   // Rapport
   reportUrl   String?   // URL Vercel Blob du PDF
   reportSentAt DateTime?
+
+  // Suivi J+30 : lien public unique vers /suivi/[token]. Le token est généré à
+  // l'envoi de l'email de suivi (sendFollowupEmail). On garde le token après
+  // soumission (followupCompletedAt renseigné) pour distinguer « déjà complété »
+  // d'un lien invalide.
+  followupToken       String?   @unique
+  followupCompletedAt DateTime?
 
   observations String?
 

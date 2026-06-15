@@ -35,7 +35,7 @@ export async function generateReport(
   if (!auth.ok) return fail(auth.error);
 
   const result = await generateReportForStudy(studyId, auth.kineId);
-  if (result.ok) revalidatePath(`/patients/${auth.patientId}`);
+  if (result.ok) revalidatePath(`/dashboard/patients/${auth.patientId}`);
   return result;
 }
 
@@ -51,8 +51,8 @@ export async function sendReport(
 
   const result = await sendReportForStudy(studyId, auth.kineId);
   if (result.ok) {
-    revalidatePath(`/patients/${auth.patientId}`);
-    revalidatePath("/etudes");
+    revalidatePath(`/dashboard/patients/${auth.patientId}`);
+    revalidatePath("/dashboard/etudes");
   }
   return result;
 }

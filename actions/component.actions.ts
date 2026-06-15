@@ -79,7 +79,7 @@ export async function createComponent(
       },
     });
     await logAudit({ userId: admin.id, action: "CREATE", entity: "component", entityId: component.id });
-    revalidatePath("/bibliotheque");
+    revalidatePath("/dashboard/bibliotheque");
     return ok({ id: component.id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -103,7 +103,7 @@ export async function updateComponent(
       data: { ...fields, bikeTypes: { set: bikeTypeIds.map((bid) => ({ id: bid })) } },
     });
     await logAudit({ userId: admin.id, action: "UPDATE", entity: "component", entityId: id });
-    revalidatePath("/bibliotheque");
+    revalidatePath("/dashboard/bibliotheque");
     return ok({ id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -119,7 +119,7 @@ export async function deleteComponent(id: string): Promise<ActionResult<void>> {
     // removed from any studies that used it — those studies are preserved.
     await prisma.bikeComponent.delete({ where: { id } });
     await logAudit({ userId: admin.id, action: "DELETE", entity: "component", entityId: id });
-    revalidatePath("/bibliotheque");
+    revalidatePath("/dashboard/bibliotheque");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -148,7 +148,7 @@ export async function toggleComponent(id: string): Promise<ActionResult<{ isActi
       entityId: id,
       metadata: { isActive: updated.isActive },
     });
-    revalidatePath("/bibliotheque");
+    revalidatePath("/dashboard/bibliotheque");
     return ok({ isActive: updated.isActive });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");

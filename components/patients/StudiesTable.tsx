@@ -41,7 +41,8 @@ export function StudiesTable({
         {studies.map((s) => (
           <li key={s.id}>
             <Link
-              href={`/patients/${s.patient.id}`}
+              href={`/dashboard/patients/${s.patient.id}`}
+              prefetch={false}
               className="block rounded-xl border border-border bg-surface p-4 shadow-sm transition-colors hover:bg-surface-muted"
             >
               <div className="flex items-center justify-between gap-2">
@@ -84,7 +85,8 @@ export function StudiesTable({
                 <td className="whitespace-nowrap px-6 py-3.5"><Badge status={s.status} /></td>
                 <td className="whitespace-nowrap px-6 py-3.5 text-right text-sm font-medium">
                   <Link
-                    href={`/patients/${s.patient.id}`}
+                    href={`/dashboard/patients/${s.patient.id}`}
+                    prefetch={false}
                     className="text-content-subtle transition-colors group-hover:text-brand-600"
                   >
                     Voir →

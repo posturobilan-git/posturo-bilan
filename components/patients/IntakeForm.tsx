@@ -154,8 +154,8 @@ export function IntakeForm({ patientId, intake }: Props) {
         toast.error(result.error);
         return;
       }
-      toast.success("Intake enregistré.");
-      router.push(`/patients/${patientId}`);
+      toast.success("Accueil enregistré.");
+      router.push(`/dashboard/patients/${patientId}`);
     });
   }
 
@@ -210,11 +210,11 @@ export function IntakeForm({ patientId, intake }: Props) {
       </fieldset>
 
       <div className="flex justify-between pt-2">
-        <Button type="button" variant="secondary" onClick={() => router.push(`/patients/${patientId}`)}>
+        <Button type="button" variant="secondary" onClick={() => router.push(`/dashboard/patients/${patientId}`)}>
           Annuler
         </Button>
         <Button type="submit" loading={pending}>
-          Enregistrer l&apos;intake
+          Enregistrer l&apos;accueil
         </Button>
       </div>
     </form>

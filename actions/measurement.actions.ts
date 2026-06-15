@@ -106,7 +106,7 @@ export async function createMeasurement(
       },
     });
     await logAudit({ userId: admin.id, action: "CREATE", entity: "measurement", entityId: measurement.id });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok({ id: measurement.id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -152,7 +152,7 @@ export async function updateMeasurement(
       ...(added.length ? [prisma.bikeTypeMeasurement.createMany({ data: added })] : []),
     ]);
     await logAudit({ userId: admin.id, action: "UPDATE", entity: "measurement", entityId: id });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok({ id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -168,7 +168,7 @@ export async function deleteMeasurement(id: string): Promise<ActionResult<void>>
     // côte is simply ignored when rendering, so studies stay intact.
     await prisma.measurement.delete({ where: { id } });
     await logAudit({ userId: admin.id, action: "DELETE", entity: "measurement", entityId: id });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -197,7 +197,7 @@ export async function toggleMeasurement(id: string): Promise<ActionResult<{ isAc
       entityId: id,
       metadata: { isActive: updated.isActive },
     });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok({ isActive: updated.isActive });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");

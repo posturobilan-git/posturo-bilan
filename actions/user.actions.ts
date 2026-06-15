@@ -36,7 +36,7 @@ export async function approveUser(
       entityId: userId,
       metadata: { action: "approve", newRole: role },
     });
-    revalidatePath("/parametres/equipe");
+    revalidatePath("/dashboard/parametres/equipe");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -62,7 +62,7 @@ export async function changeUserRole(
       entityId: userId,
       metadata: { action: "changeRole", newRole },
     });
-    revalidatePath("/parametres/equipe");
+    revalidatePath("/dashboard/parametres/equipe");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -85,7 +85,7 @@ export async function deactivateUser(userId: string): Promise<ActionResult<void>
       entityId: userId,
       metadata: { action: "deactivate" },
     });
-    revalidatePath("/parametres/equipe");
+    revalidatePath("/dashboard/parametres/equipe");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -120,7 +120,7 @@ export async function refuseUser(userId: string): Promise<ActionResult<void>> {
       entityId: userId,
       metadata: { action: "refuse", email: user.email },
     });
-    revalidatePath("/parametres/equipe");
+    revalidatePath("/dashboard/parametres/equipe");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -165,7 +165,7 @@ export async function inviteKine(email: string): Promise<ActionResult<void>> {
       metadata: { email: address, role: "KINE" },
     });
 
-    revalidatePath("/parametres/equipe");
+    revalidatePath("/dashboard/parametres/equipe");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -190,7 +190,7 @@ export async function revokeInvitation(invitationId: string): Promise<ActionResu
       metadata: { action: "revoke" },
     });
 
-    revalidatePath("/parametres/equipe");
+    revalidatePath("/dashboard/parametres/equipe");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");

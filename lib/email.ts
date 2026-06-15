@@ -13,3 +13,14 @@ export function getResend(): Resend {
   }
   return client;
 }
+
+/**
+ * Sender address for all outbound emails, sanitised: strips surrounding quotes
+ * and trims whitespace/newlines. Env values pasted into hosting dashboards often
+ * pick up a trailing newline, which makes Resend reject the `from` field
+ * ("Invalid `from` field … format"). Falls back to Resend's shared test sender.
+ */
+export function resendFrom(): string {
+  const raw = process.env.RESEND_FROM_EMAIL?.trim().replace(/^['"]|['"]$/g, "").trim();
+  return raw || "PosturoBilan <onboarding@resend.dev>";
+}

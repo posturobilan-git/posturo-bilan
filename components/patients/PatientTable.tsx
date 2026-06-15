@@ -56,7 +56,8 @@ export function PatientTable({
         {patients.map((p) => (
           <li key={p.id}>
             <Link
-              href={`/patients/${p.id}`}
+              href={`/dashboard/patients/${p.id}`}
+              prefetch={false}
               className="block rounded-xl border border-border bg-surface p-4 shadow-sm transition-colors hover:bg-surface-muted"
             >
               <div className="flex items-center gap-3">
@@ -125,7 +126,8 @@ export function PatientTable({
               </td>
               <td className="whitespace-nowrap px-6 py-3.5 text-right text-sm font-medium">
                 <Link
-                  href={`/patients/${p.id}`}
+                  href={`/dashboard/patients/${p.id}`}
+                  prefetch={false}
                   className="text-content-subtle transition-colors group-hover:text-brand-600"
                 >
                   Voir →

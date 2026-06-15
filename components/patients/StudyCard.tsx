@@ -141,7 +141,7 @@ export function StudyCard({
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
         {canEdit && (
-          <Link href={`/patients/${patientId}/etude?studyId=${study.id}`}>
+          <Link href={`/dashboard/patients/${patientId}/etude?studyId=${study.id}`} prefetch={false}>
             <Button variant="secondary" size="sm">Modifier l&apos;étude</Button>
           </Link>
         )}

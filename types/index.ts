@@ -83,7 +83,7 @@ export type StudyForReport = Study & {
   kine: User;
 };
 
-/** Study row for the cross-patient studies list (/etudes). */
+/** Study row for the cross-patient studies list (/dashboard/etudes). */
 export type StudyListItem = Study & {
   bikeType: BikeType;
   patient: Pick<Patient, "id" | "firstName" | "lastName" | "isAnonymized">;

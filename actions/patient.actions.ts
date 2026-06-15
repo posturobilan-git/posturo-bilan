@@ -2,13 +2,16 @@
 
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import {
   createPatientSchema,
   updatePatientSchema,
   type CreatePatientInput,
   type UpdatePatientInput,
 } from "@/lib/validations/patient.schema";
+import { randomUUID } from "node:crypto";
 import { logAudit } from "@/lib/audit";
+import { inviteExpiryFromNow } from "@/lib/legal";
 import { requireKine, requirePatientOwnership } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { Prisma, type Patient } from "@prisma/client";
@@ -77,13 +80,20 @@ export async function getPatientDossier(id: string) {
     },
   });
 
+  // Only record an actual view, not Next.js prefetches/cache-warming renders —
+  // otherwise opening the patients list would log VIEW_SENSITIVE for every row.
   if (patient) {
-    await logAudit({
-      userId: kine.id,
-      action: "VIEW_SENSITIVE",
-      entity: "patient",
-      entityId: id,
-    });
+    const h = await headers();
+    const isPrefetch =
+      h.get("next-router-prefetch") === "1" || h.get("purpose") === "prefetch";
+    if (!isPrefetch) {
+      await logAudit({
+        userId: kine.id,
+        action: "VIEW_SENSITIVE",
+        entity: "patient",
+        entityId: id,
+      });
+    }
   }
 
   return patient;
@@ -112,12 +122,19 @@ export async function createPatient(
       assignedKineId = target.id;
     }
 
+    // Generate the accueil-form invite token at creation so the patient can be
+    // sent their tokenised link straight away (valid 30 days).
     const patient = await prisma.patient.create({
-      data: { ...fields, kineId: assignedKineId },
+      data: {
+        ...fields,
+        kineId: assignedKineId,
+        inviteToken: randomUUID(),
+        inviteExpiresAt: inviteExpiryFromNow(),
+      },
     });
 
     await logAudit({ userId: kine.id, action: "CREATE", entity: "patient", entityId: patient.id });
-    revalidatePath("/patients");
+    revalidatePath("/dashboard/patients");
     return ok(patient);
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -150,8 +167,8 @@ export async function updatePatient(
       entityId: patientId,
       metadata: { fields: Object.keys(parsed.data) },
     });
-    revalidatePath("/patients");
-    revalidatePath(`/patients/${patientId}`);
+    revalidatePath("/dashboard/patients");
+    revalidatePath(`/dashboard/patients/${patientId}`);
     return ok(updated);
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -191,7 +208,7 @@ export async function deletePatient(patientId: string): Promise<ActionResult<voi
       entity: "patient",
       entityId: patientId,
     });
-    revalidatePath("/patients");
+    revalidatePath("/dashboard/patients");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message.startsWith("Accès refusé")) return fail(e.message);

@@ -43,20 +43,25 @@ function Score({ label, value }: { label: string; value: number | null | undefin
 function PanelAmont({
   intake,
   patientId,
+  consentAcceptedAt,
+  consentVersion,
 }: {
   intake: PatientWithRelations["intake"];
   patientId: string;
+  consentAcceptedAt: Date | null;
+  consentVersion: string | null;
 }) {
   if (!intake) {
     return (
       <Card>
-        <SectionTitle>Amont — Données intake</SectionTitle>
-        <p className="text-sm text-content-subtle italic">Intake non encore renseigné.</p>
+        <SectionTitle>Amont — Données d&apos;accueil</SectionTitle>
+        <p className="text-sm text-content-subtle italic">Accueil non encore renseigné.</p>
         <Link
-          href={`/patients/${patientId}/intake`}
+          href={`/dashboard/patients/${patientId}/intake`}
+          prefetch={false}
           className="mt-3 inline-block text-sm font-medium text-brand-600 hover:text-brand-700"
         >
-          + Saisir l&apos;intake
+          + Saisir l&apos;accueil
         </Link>
       </Card>
     );
@@ -97,6 +102,17 @@ function PanelAmont({
           <dd className="mt-0.5 text-sm text-content">{intake.medicalNotes}</dd>
         </div>
       )}
+      {consentAcceptedAt && (
+        <p className="mt-4 border-t border-border pt-3 text-xs text-content-subtle">
+          Consentement RGPD recueilli le{" "}
+          {new Date(consentAcceptedAt).toLocaleDateString("fr-FR", {
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+          })}
+          {consentVersion && ` (v. ${consentVersion})`}.
+        </p>
+      )}
     </Card>
   );
 }
@@ -126,7 +142,7 @@ function StudiesSection({
           </span>
         </h3>
         {canEdit && (
-          <Link href={`/patients/${patient.id}/etude`}>
+          <Link href={`/dashboard/patients/${patient.id}/etude`} prefetch={false}>
             <Button size="sm">+ Nouvelle étude</Button>
           </Link>
         )}
@@ -262,7 +278,12 @@ export function PatientDossier({
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <PanelAmont intake={patient.intake} patientId={patient.id} />
+        <PanelAmont
+          intake={patient.intake}
+          patientId={patient.id}
+          consentAcceptedAt={patient.consentAcceptedAt}
+          consentVersion={patient.consentVersion}
+        />
         <PanelSuivi followup={latestFollowup} />
       </div>
       <StudiesSection

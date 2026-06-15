@@ -104,7 +104,7 @@ export async function createPhysioTest(
       data: { ...fields, createdById: admin.id, bikeTypeLinks: { create: links } },
     });
     await logAudit({ userId: admin.id, action: "CREATE", entity: "physioTest", entityId: test.id });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok({ id: test.id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -150,7 +150,7 @@ export async function updatePhysioTest(
       ...(added.length ? [prisma.bikeTypePhysioTest.createMany({ data: added })] : []),
     ]);
     await logAudit({ userId: admin.id, action: "UPDATE", entity: "physioTest", entityId: id });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok({ id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -166,7 +166,7 @@ export async function deletePhysioTest(id: string): Promise<ActionResult<void>> 
     // is simply ignored when rendering, so studies stay intact.
     await prisma.physioTest.delete({ where: { id } });
     await logAudit({ userId: admin.id, action: "DELETE", entity: "physioTest", entityId: id });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
@@ -195,7 +195,7 @@ export async function togglePhysioTest(id: string): Promise<ActionResult<{ isAct
       entityId: id,
       metadata: { isActive: updated.isActive },
     });
-    revalidatePath("/configuration");
+    revalidatePath("/dashboard/configuration");
     return ok({ isActive: updated.isActive });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");

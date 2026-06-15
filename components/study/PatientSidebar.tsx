@@ -82,7 +82,7 @@ export function PatientSidebar({ patient }: Props) {
           )}
         </>
       ) : (
-        <p className="text-sm italic text-content-subtle">Formulaire intake non reçu.</p>
+        <p className="text-sm italic text-content-subtle">Formulaire d&apos;accueil non reçu.</p>
       )}
         </div>
       </details>

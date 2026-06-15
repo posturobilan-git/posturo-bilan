@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 /**
  * Returns the app User for the current Clerk session, syncing from Clerk on
  * first visit (no webhook). New accounts start as PENDING and must be approved
- * by an ADMIN from /parametres/equipe — except the very first account in the
+ * by an ADMIN from /dashboard/parametres/equipe — except the very first account in the
  * database, which is bootstrapped as ADMIN so the cabinet founder can log in.
  *
  * Wrapped in React `cache()` so the layout and the page of a dashboard route
