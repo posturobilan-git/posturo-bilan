@@ -1,8 +1,10 @@
 "use server";
 
+import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { followupFormSchema, type FollowupFormInput } from "@/lib/validations/followup.schema";
 import { logAudit } from "@/lib/audit";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 
 /**
@@ -17,6 +19,13 @@ export async function submitFollowupForm(
   token: string,
   data: FollowupFormInput
 ): Promise<ActionResult<void>> {
+  // This endpoint is unauthenticated (token-gated). Cap submissions per IP so it
+  // can't be hammered — a legitimate patient submits once.
+  const ip = clientIp(await headers());
+  if (!rateLimit(`followup-submit:${ip}`, { max: 10 }).success) {
+    return fail("Trop de tentatives. Réessayez dans une minute.");
+  }
+
   const parsed = followupFormSchema.safeParse(data);
   if (!parsed.success) return fail(formatZodError(parsed.error));
   const r = parsed.data;

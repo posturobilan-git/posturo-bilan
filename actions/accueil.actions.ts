@@ -1,9 +1,11 @@
 "use server";
 
+import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { accueilFormSchema, type AccueilFormInput } from "@/lib/validations/intake.schema";
 import { INTAKE_CGU_VERSION } from "@/lib/legal";
 import { logAudit } from "@/lib/audit";
+import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 
 /**
@@ -18,6 +20,13 @@ export async function submitAccueilForm(
   token: string,
   data: AccueilFormInput
 ): Promise<ActionResult<void>> {
+  // This endpoint is unauthenticated (token-gated). Cap submissions per IP so it
+  // can't be hammered — a legitimate patient submits once.
+  const ip = clientIp(await headers());
+  if (!rateLimit(`accueil-submit:${ip}`, { max: 10 }).success) {
+    return fail("Trop de tentatives. Réessayez dans une minute.");
+  }
+
   const parsed = accueilFormSchema.safeParse(data);
   if (!parsed.success) return fail(formatZodError(parsed.error));
   const intake = parsed.data; // cguAccepted is validated above, not persisted

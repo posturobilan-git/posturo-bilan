@@ -8,7 +8,7 @@ export const manualIntakeSchema = z.object({
   ridingLevel: z.string().optional(),
   weeklyHours: z.number().min(0).max(60).optional(),
   yearsRiding: z.number().int().min(0).max(100).optional(),
-  injuries: z.array(z.string().min(1)).default([]),
+  injuries: z.array(z.string().min(1).max(200)).max(50).default([]),
   goals: z.string().max(2000).optional(),
   medicalNotes: z.string().max(2000).optional(),
 });

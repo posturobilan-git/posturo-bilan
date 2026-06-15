@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { studySchema } from "@/lib/validations/study.schema";
 import { logAudit } from "@/lib/audit";
-import { requireKine } from "@/lib/auth";
+import { requireKine, requirePatientOwnership } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { deleteReport } from "@/lib/storage";
 import { Prisma, StudyStatus } from "@prisma/client";
@@ -48,6 +48,37 @@ async function revertReportStatus(studyId: string) {
     where: { id: studyId, status: "report_sent" },
     data: { status: "study_completed" },
   });
+}
+
+/**
+ * Loads a study and asserts the acting kiné may mutate it (its owner, or any
+ * ADMIN). Throws "Étude introuvable." / "Accès refusé à cette étude." which the
+ * callers map to an ActionResult. Mirrors requirePatientOwnership / the report
+ * authz guard so study writes can't cross tenants by passing a foreign id.
+ */
+async function assertStudyOwnership(studyId: string) {
+  const kine = await requireKine();
+  const study = await prisma.study.findUnique({
+    where: { id: studyId },
+    select: { id: true, kineId: true },
+  });
+  if (!study) throw new Error("Étude introuvable.");
+  if (kine.role !== "ADMIN" && study.kineId !== kine.id) {
+    throw new Error("Accès refusé à cette étude.");
+  }
+  return { kine, study };
+}
+
+/** Thrown auth/ownership messages worth surfacing to the caller verbatim. */
+function isAuthzError(e: unknown): e is Error {
+  return (
+    e instanceof Error &&
+    (e.message.startsWith("Accès refusé") ||
+      e.message === "Patient introuvable." ||
+      e.message === "Étude introuvable." ||
+      e.message === "Non authentifié" ||
+      e.message === "Compte en attente de validation")
+  );
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -139,9 +170,9 @@ export async function saveDraftStudy(
   const validated = parsed.data;
 
   try {
-    const kine = await requireKine();
-
     if (validated.draftStudyId) {
+      // Authorize before mutating: a KINE may only edit their own studies.
+      await assertStudyOwnership(validated.draftStudyId);
       // Editing an existing study invalidates any previously generated report.
       await prisma.study.update({
         where: { id: validated.draftStudyId },
@@ -156,6 +187,8 @@ export async function saveDraftStudy(
       return ok({ studyId: validated.draftStudyId });
     }
 
+    // Creating a study: the target patient must belong to the acting kiné.
+    const { user: kine } = await requirePatientOwnership(validated.patientId);
     const study = await prisma.study.create({
       data: {
         patientId: validated.patientId,
@@ -169,6 +202,7 @@ export async function saveDraftStudy(
     await logAudit({ userId: kine.id, action: "CREATE", entity: "study", entityId: study.id });
     return ok({ studyId: study.id });
   } catch (e) {
+    if (isAuthzError(e)) return fail(e.message);
     console.error("saveDraftStudy failed:", e);
     return fail("Impossible d'enregistrer le brouillon. Réessayez.");
   }
@@ -186,10 +220,13 @@ export async function submitStudy(
   const validated = parsed.data;
 
   try {
-    const kine = await requireKine();
     let studyId: string;
+    let kineId: string;
 
     if (validated.draftStudyId) {
+      // Authorize before mutating: a KINE may only edit their own studies.
+      const { kine } = await assertStudyOwnership(validated.draftStudyId);
+      kineId = kine.id;
       // Editing an existing study invalidates any previously generated report.
       await prisma.study.update({
         where: { id: validated.draftStudyId },
@@ -202,6 +239,9 @@ export async function submitStudy(
       });
       studyId = validated.draftStudyId;
     } else {
+      // Creating a study: the target patient must belong to the acting kiné.
+      const { user: kine } = await requirePatientOwnership(validated.patientId);
+      kineId = kine.id;
       const study = await prisma.study.create({
         data: {
           patientId: validated.patientId,
@@ -221,7 +261,7 @@ export async function submitStudy(
     });
 
     await logAudit({
-      userId: kine.id,
+      userId: kineId,
       action: "UPDATE",
       entity: "study",
       entityId: studyId,
@@ -232,6 +272,7 @@ export async function submitStudy(
     revalidatePath("/dashboard/etudes");
     return ok({ studyId });
   } catch (e) {
+    if (isAuthzError(e)) return fail(e.message);
     console.error("submitStudy failed:", e);
     return fail("Impossible de soumettre l'étude. Réessayez.");
   }
