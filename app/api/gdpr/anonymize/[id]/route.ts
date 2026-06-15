@@ -37,7 +37,7 @@ export async function DELETE(
         firstName: "Anonymisé",
         lastName: "Patient",
         phone: null,
-        calendlyEventId: null,
+        bookingId: null,
         isAnonymized: true,
       },
     }),

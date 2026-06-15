@@ -32,7 +32,8 @@ Patient  ──(accueil)──►  Étude(s)  ──study_completed──►  re
 
 ## Flux d'automatisation
 
-1. **Calendly → Accueil.** `POST /api/webhooks/calendly` (signature) upsert le
+1. **Réservation Cal.com → Accueil.** Le patient réserve sur `/reservation`
+   (embed Cal.com). `POST /api/webhooks/cal?kineId=<uuid>` (signature) upsert le
    patient et appelle `sendIntakeEmail`. Le patient remplit `/accueil/[token]`
    (CGU + consentement RGPD → `PatientIntake`).
 2. **Étude & rapport.** Le kiné saisit l'étude (BO), génère et envoie le PDF
@@ -49,10 +50,11 @@ Détails : `docs/WORKFLOWS.md`. Contrats HTTP : `docs/API.md`.
 app/
   (auth)/                 routes publiques Clerk (sign-in/up)
   (dashboard)/            back-office protégé (layout garde le rôle)
+  reservation/            embed Cal.com (public, patient — pas de layout BO)
   accueil/[token]/        formulaire d'accueil patient (public, token)
   suivi/[token]/          formulaire de suivi J+30 (public, token)
   api/
-    webhooks/calendly/    entrée Calendly (signature)
+    webhooks/cal/         entrée Cal.com (signature, kineId en query param)
     cron/followup/        scheduler J+30 (bearer)
     reports/[studyId]/    stream PDF (session Clerk, store privé)
     gdpr/                 export / anonymisation (ADMIN)
@@ -60,7 +62,7 @@ actions/                  Server Actions (mutations BO + soumissions publiques)
 lib/
   emails/                 templates + envois consolidés (index.ts)
   validations/            schémas Zod
-  db, auth, audit, storage, calendly, legal, env, app-url …
+  db, auth, audit, storage, cal, legal, env, app-url …
 prisma/                   schema + migrations
 ```
 
@@ -72,7 +74,7 @@ prisma/                   schema + migrations
 - **Pages publiques** (`/accueil`, `/suivi`) : autorisées par la possession d'un
   **token unique** (UUID) ; les soumissions vérifient token + expiration +
   non-complétion. Aucune session.
-- **Entrées machine** : webhook Calendly (signature HMAC), cron (bearer
+- **Entrées machine** : webhook Cal.com (signature HMAC), cron (bearer
   `CRON_SECRET`). `proxy.ts` (middleware) déclare ces routes publiques côté
   Clerk et les rate-limite par IP.
 - **RGPD** : audit log sur les mutations, consentement horodaté/versionné,

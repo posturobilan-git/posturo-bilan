@@ -101,12 +101,12 @@ model Patient {
   kineId          String
   kine            User          @relation(fields: [kineId], references: [id])
 
-  // Données de base (récupérées via Calendly/n8n)
+  // Données de base (récupérées via le webhook de réservation Cal.com)
   email           String        @unique
   firstName       String
   lastName        String
   phone           String?
-  calendlyEventId String?
+  bookingId       String?       // identifiant de la réservation Cal.com
 
   // Données anonymisées (RGPD) — null si anonymisé
   isAnonymized    Boolean       @default(false)

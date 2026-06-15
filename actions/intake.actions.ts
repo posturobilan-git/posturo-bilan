@@ -75,7 +75,7 @@ export async function saveIntake(
 /**
  * BO action: emails the patient their "formulaire d'accueil" link. Enforces
  * kiné ownership, then delegates the token handling, send and audit to the
- * consolidated email module (also used by the Calendly webhook).
+ * consolidated email module (also used by the Cal.com webhook).
  */
 export async function sendIntakeEmail(
   patientId: string

@@ -2,7 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { ReactElement } from "react";
 import { prisma } from "@/lib/db";
-import { getResend } from "@/lib/email";
+import { getResend, resendFrom } from "@/lib/email";
 import { appBaseUrl } from "@/lib/app-url";
 import { logAudit } from "@/lib/audit";
 import { isLocalEnv } from "@/lib/env";
@@ -15,7 +15,7 @@ import { FollowupEmail } from "@/lib/emails/FollowupEmail";
 /**
  * Single home for every outbound transactional email. Each function fetches
  * the data it needs, renders its Resend template, sends it, and writes an audit
- * entry. They contain no Clerk auth — callers (server actions, the Calendly
+ * entry. They contain no Clerk auth — callers (server actions, the Cal.com
  * webhook, the cron route) are responsible for their own authorization.
  *
  * Email gating mirrors the report flow: a deployment must have RESEND_API_KEY,
@@ -24,7 +24,7 @@ import { FollowupEmail } from "@/lib/emails/FollowupEmail";
  */
 
 const CABINET = process.env.CABINET_NAME || "PosturoBilan";
-const FROM = process.env.RESEND_FROM_EMAIL || "PosturoBilan <onboarding@resend.dev>";
+const FROM = resendFrom();
 
 type Sendable = { subject: string; react: ReactElement; to: string };
 
@@ -53,7 +53,7 @@ async function deliver({ subject, react, to }: Sendable): Promise<ActionResult<{
 /**
  * Emails the patient their "formulaire d'accueil" link. Ensures a valid invite
  * token exists and refreshes its 30-day expiry. Called by the BO button, and by
- * the Calendly webhook on a new booking.
+ * the Cal.com webhook on a new booking.
  */
 export async function sendIntakeEmail(patientId: string): Promise<ActionResult<void>> {
   const patient = await prisma.patient.findUnique({

@@ -4,7 +4,7 @@
 
 - Toutes les routes API sont dans `app/api/`
 - Les mutations côté app passent par des **Server Actions** (pas des routes API)
-- Les routes API servent aux **entrées externes** (webhook Calendly), au
+- Les routes API servent aux **entrées externes** (webhook Cal.com), au
   **scheduler** (Vercel Cron) et aux endpoints **RGPD** / **stream PDF**
 - Chaque route porte sa propre auth (signature, bearer, ou session Clerk)
 - Les formulaires patients (`/accueil`, `/suivi`) sont des **pages publiques**
@@ -12,34 +12,32 @@
 
 ---
 
-## Entrée externe — Calendly
+## Entrée externe — Cal.com
 
-### POST `/api/webhooks/calendly`
+### POST `/api/webhooks/cal?kineId=<uuid>`
 
-Reçoit les événements Calendly (nouveau RDV). Seul `invitee.created` crée un
-patient ; les autres events sont acquittés sans effet.
+Reçoit les événements Cal.com (réservation). Seul `BOOKING_CREATED` crée un
+patient ; les autres events sont acquittés sans effet. Un Event Type Cal.com par
+kiné : le `kineId` est passé en **query param** de l'URL du webhook.
 
-**Auth :** signature `calendly-webhook-signature` vérifiée avec
-`CALENDLY_WEBHOOK_SECRET` (HMAC-SHA256 sur `"<t>.<rawBody>"`). En local sans
-secret, les appels non signés sont acceptés pour faciliter les tests.
+**Auth :** signature `x-cal-signature-256` vérifiée avec `CAL_WEBHOOK_SECRET`
+(HMAC-SHA256 sur le corps brut). En local sans secret, les appels non signés
+sont acceptés pour faciliter les tests.
 
 **Body (extrait consommé) :**
 ```json
 {
-  "event": "invitee.created",
+  "triggerEvent": "BOOKING_CREATED",
   "payload": {
-    "email": "string (required)",
-    "first_name": "string?",
-    "last_name": "string?",
-    "name": "string?",
-    "scheduled_event": { "uri": "string?", "start_time": "string?" },
-    "questions_and_answers": [{ "question": "…kiné…", "answer": "<kineId uuid>" }],
-    "tracking": { "utm_content": "<kineId uuid> (fallback)" }
+    "uid": "string? (id de réservation)",
+    "startTime": "string?",
+    "attendees": [{ "email": "string (required)", "name": "string?" }]
   }
 }
 ```
 
 **Comportement :**
+- Lit `kineId` dans le query param (400 si absent)
 - Upsert du patient (email = clé de déduplication), génération de l'`inviteToken`
 - `sendIntakeEmail(patientId)` → email du lien `/accueil/[token]`
 - Réponse `{ success: true, patientId: "uuid" }` (207 si l'email échoue)

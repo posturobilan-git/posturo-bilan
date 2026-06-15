@@ -5,6 +5,7 @@ import { rateLimit, clientIp } from "@/lib/rate-limit";
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
+  "/reservation",
   "/accueil/(.*)",
   "/suivi/(.*)",
   "/api/webhooks/(.*)",
@@ -14,7 +15,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/reports/(.*)",
 ]);
 
-// Routes authenticated by their own secret (Calendly signature, cron bearer)
+// Routes authenticated by their own secret (Cal.com signature, cron bearer)
 // rather than a Clerk session — rate-limit by IP to blunt abuse.
 const isWebhookRoute = createRouteMatcher([
   "/api/webhooks/(.*)",

@@ -1,18 +1,22 @@
 # Workflows — Automatisation native
 
 Toute l'automatisation est gérée **nativement par l'application** (aucune
-dépendance externe d'orchestration). Les entrées viennent du webhook Calendly et
+dépendance externe d'orchestration). Les entrées viennent du webhook Cal.com et
 d'un Vercel Cron ; les sorties sont les emails transactionnels Resend.
 
-## Phase 1 — Accueil patient
+## Phase 1 — Réservation & accueil patient
+
+Le patient réserve depuis la page `/reservation` (embed Cal.com). Cal.com notifie
+l'app par webhook.
 
 ```
-Calendly (nouveau RDV confirmé)
-  │  event "invitee.created"
+Cal.com (nouvelle réservation)
+  │  triggerEvent "BOOKING_CREATED"
   ▼
-POST /api/webhooks/calendly
-  ├── Vérifie la signature (header calendly-webhook-signature + CALENDLY_WEBHOOK_SECRET)
-  ├── Extrait email, prénom, nom, date du RDV, et kineId (custom field Calendly)
+POST /api/webhooks/cal?kineId=<uuid>
+  ├── Vérifie la signature (header x-cal-signature-256 + CAL_WEBHOOK_SECRET)
+  ├── Lit le kineId dans le query param (un Event Type Cal.com par kiné)
+  ├── Extrait email, nom (→ prénom/nom), uid de réservation depuis l'attendee
   ├── Upsert du patient (email = clé de déduplication), génère son inviteToken
   └── sendIntakeEmail(patientId) → email avec lien /accueil/[token]
         │
@@ -22,9 +26,9 @@ POST /api/webhooks/calendly
     └── Étape 2 : formulaire → PatientIntake enregistré, lien invalidé
 ```
 
-**Champ custom Calendly requis :** le `kineId` (uuid du kiné) doit être passé
-soit dans une question custom contenant « kiné » / « kine », soit dans le
-paramètre de tracking `utm_content` du lien de réservation.
+**Configuration Cal.com :** créer un Event Type par kiné et y ajouter un webhook
+`BOOKING_CREATED` pointant vers `/api/webhooks/cal?kineId=<uuid-du-kiné>`. Le
+`kineId` n'est donc pas dans le payload mais dans l'URL du webhook.
 
 ## Phase 4 — Suivi J+30
 
@@ -54,7 +58,7 @@ ses données, rend le template Resend, envoie, et écrit un audit log.
 
 | Fonction | Déclencheur | Contenu |
 |----------|-------------|---------|
-| `sendIntakeEmail(patientId)` | webhook Calendly, bouton BO | lien `/accueil/[token]` |
+| `sendIntakeEmail(patientId)` | webhook Cal.com, bouton BO | lien `/accueil/[token]` |
 | `sendReportEmail(studyId)` | action BO (rapport) | PDF en pièce jointe |
 | `sendFollowupEmail(studyId)` | cron J+30 | lien `/suivi/[token]` |
 
@@ -66,7 +70,8 @@ est loggé) en environnement local, mais échoue en déploiement — voir
 
 | Variable | Rôle |
 |----------|------|
-| `CALENDLY_WEBHOOK_SECRET` | Signature du webhook Calendly |
+| `NEXT_PUBLIC_CAL_LINK` | Event type Cal.com embarqué sur `/reservation` |
+| `CAL_WEBHOOK_SECRET` | Signature du webhook Cal.com |
 | `CRON_SECRET` | Bearer attendu par `/api/cron/followup` |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Envoi des emails |
 | `NEXT_PUBLIC_APP_URL` | Base des liens (`/accueil`, `/suivi`) dans les emails |

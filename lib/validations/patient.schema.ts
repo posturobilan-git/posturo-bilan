@@ -1,13 +1,5 @@
 import { z } from "zod";
 
-export const patientSchema = z.object({
-  email: z.string().email(),
-  firstName: z.string().min(1).max(100),
-  lastName: z.string().min(1).max(100),
-  phone: z.string().optional(),
-  calendlyEventId: z.string().optional(),
-});
-
 // ─── CRUD (prompt 11) ──────────────────────────────────────────────────────────
 
 export const createPatientSchema = z.object({
