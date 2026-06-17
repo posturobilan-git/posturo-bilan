@@ -4,10 +4,13 @@ export const physioTestSchema = z
   .object({
     name: z.string().min(1, "Le nom est requis").max(120),
     description: z.string().max(1000).optional(),
-    outputType: z.enum(["YES_NO", "COMMENT", "VALUE"]).default("VALUE"),
+    outputType: z.enum(["YES_NO", "POSITIVE_NEGATIVE", "VALUE"]).default("VALUE"),
     // Requise uniquement pour un résultat de type valeur (VALUE).
     unit: z.string().max(20).optional(),
     isCommon: z.boolean().default(false),
+    isRequired: z.boolean().default(false),
+    // Section de regroupement optionnelle (null = groupe « Autres »).
+    sectionId: z.string().uuid().nullable().optional(),
     bikeTypeIds: z.array(z.string().uuid()).default([]),
   })
   .refine((d) => d.isCommon || d.bikeTypeIds.length > 0, {

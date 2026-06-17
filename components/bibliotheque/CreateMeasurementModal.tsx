@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 import { PencilIcon } from "@/components/ui/icons";
 import { createMeasurement, updateMeasurement } from "@/actions/measurement.actions";
 import { toast } from "@/lib/stores/toastStore";
@@ -20,6 +21,7 @@ interface MeasurementValue {
   unit: string;
   category: MeasurementCategory;
   isCommon: boolean;
+  isRequired: boolean;
   bikeTypes: { id: string; name: string }[];
 }
 
@@ -36,6 +38,7 @@ export function CreateMeasurementModal({
   const [pending, startTransition] = useTransition();
 
   const [isCommon, setIsCommon] = useState(measurement?.isCommon ?? false);
+  const [isRequired, setIsRequired] = useState(measurement?.isRequired ?? false);
   const [selectedTypes, setSelectedTypes] = useState<string[]>(
     measurement?.bikeTypes.map((b) => b.id) ?? []
   );
@@ -49,6 +52,7 @@ export function CreateMeasurementModal({
   function reset() {
     setError(null);
     setIsCommon(measurement?.isCommon ?? false);
+    setIsRequired(measurement?.isRequired ?? false);
     setSelectedTypes(measurement?.bikeTypes.map((b) => b.id) ?? []);
   }
 
@@ -60,6 +64,7 @@ export function CreateMeasurementModal({
       unit: String(fd.get("unit") ?? "").trim(),
       category: String(fd.get("category") ?? "AUTRE") as MeasurementCategory,
       isCommon,
+      isRequired,
       bikeTypeIds: isCommon ? [] : selectedTypes,
     };
 
@@ -91,6 +96,7 @@ export function CreateMeasurementModal({
       )}
 
       {open && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
@@ -130,6 +136,16 @@ export function CreateMeasurementModal({
                   </select>
                 </label>
               </div>
+
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={isRequired}
+                  onChange={(e) => setIsRequired(e.target.checked)}
+                  className="h-4 w-4 rounded border-border-strong text-brand-600 focus:ring-brand-500"
+                />
+                <span className="text-sm font-medium text-content">Saisie obligatoire dans l&apos;étude</span>
+              </label>
 
               <label className="flex items-center gap-2">
                 <input
@@ -180,6 +196,7 @@ export function CreateMeasurementModal({
             </form>
           </div>
         </div>
+        </ModalPortal>
       )}
     </>
   );

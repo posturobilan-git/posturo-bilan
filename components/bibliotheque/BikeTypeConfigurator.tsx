@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type DragEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/lib/stores/toastStore";
 import type { ActionResult } from "@/lib/action-result";
@@ -9,12 +9,17 @@ import type { ConfigItem } from "@/actions/bikeType.actions";
 interface Props {
   title: string;
   subtitle?: string;
-  /** Common trunk items — always applied, shown pinned & non-editable. */
+  /** Common trunk items — always applied. Reorderable when `saveCommon` is set. */
   common: ConfigItem[];
   initialAssigned: ConfigItem[];
   initialAvailable: ConfigItem[];
   /** Persists the ordered assigned ids (a bound server action). */
   save: (ids: string[]) => Promise<ActionResult<unknown>>;
+  /**
+   * Persists the GLOBAL order of the common trunk (shared by all bike types).
+   * When provided, the common block becomes drag-and-drop reorderable.
+   */
+  saveCommon?: (ids: string[]) => Promise<ActionResult<unknown>>;
   canEdit: boolean;
 }
 
@@ -45,6 +50,7 @@ export function BikeTypeConfigurator({
   initialAssigned,
   initialAvailable,
   save,
+  saveCommon,
   canEdit,
 }: Props) {
   // Toutes les mutations (drag, +/−, réordonnancement) restent locales ;
@@ -57,7 +63,16 @@ export function BikeTypeConfigurator({
   const [overId, setOverId] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
 
-  const dirty = !sameOrder(assigned, saved.assigned);
+  // Tronc commun réordonnable (ordre global) — état séparé de la colonne droite.
+  const commonEditable = canEdit && Boolean(saveCommon);
+  const [savedCommon, setSavedCommon] = useState<ConfigItem[]>(common);
+  const [commonItems, setCommonItems] = useState<ConfigItem[]>(common);
+  const [commonDragId, setCommonDragId] = useState<string | null>(null);
+  const [commonOverId, setCommonOverId] = useState<string | null>(null);
+
+  const assignedDirty = !sameOrder(assigned, saved.assigned);
+  const commonDirty = !sameOrder(commonItems, savedCommon);
+  const dirty = assignedDirty || commonDirty;
 
   // Garde-fou navigateur : prévient avant de quitter avec des changements non enregistrés.
   useEffect(() => {
@@ -74,12 +89,22 @@ export function BikeTypeConfigurator({
 
   function handleSave() {
     startSave(async () => {
-      const result = await save(assigned.map((c) => c.id));
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
+      if (assignedDirty) {
+        const result = await save(assigned.map((c) => c.id));
+        if (!result.ok) {
+          toast.error(result.error);
+          return;
+        }
+        setSaved({ assigned, available });
       }
-      setSaved({ assigned, available });
+      if (commonDirty && saveCommon) {
+        const result = await saveCommon(commonItems.map((c) => c.id));
+        if (!result.ok) {
+          toast.error(result.error);
+          return;
+        }
+        setSavedCommon(commonItems);
+      }
       toast.success("Configuration enregistrée.");
     });
   }
@@ -87,7 +112,51 @@ export function BikeTypeConfigurator({
   function handleCancel() {
     setAssigned(saved.assigned);
     setAvailable(saved.available);
+    setCommonItems(savedCommon);
   }
+
+  // ── Réordonnancement du tronc commun (local) ──────────────────────────────
+
+  function moveCommon(id: string, delta: -1 | 1) {
+    const i = commonItems.findIndex((c) => c.id === id);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= commonItems.length) return;
+    const next = [...commonItems];
+    [next[i], next[j]] = [next[j], next[i]];
+    setCommonItems(next);
+  }
+
+  function dropOnCommon(targetId: string | null) {
+    if (!commonDragId) return;
+    const from = commonItems.findIndex((c) => c.id === commonDragId);
+    if (from < 0) return;
+    const next = [...commonItems];
+    const [item] = next.splice(from, 1);
+    const at = targetId ? next.findIndex((c) => c.id === targetId) : next.length;
+    next.splice(at < 0 ? next.length : at, 0, item);
+    setCommonItems(next);
+  }
+
+  const commonDragProps = (id: string) =>
+    commonEditable
+      ? {
+          draggable: true,
+          onDragStart: () => setCommonDragId(id),
+          onDragEnd: () => {
+            setCommonDragId(null);
+            setCommonOverId(null);
+          },
+          onDragOver: (e: DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setCommonOverId(id);
+          },
+          onDrop: (e: DragEvent) => {
+            e.stopPropagation();
+            dropOnCommon(id);
+          },
+        }
+      : {};
 
   // ── Mutations (locales uniquement) ────────────────────────────────────────
 
@@ -225,19 +294,50 @@ export function BikeTypeConfigurator({
           </header>
 
           <div className="flex-1 space-y-2 p-3">
-            {/* Common trunk — always present, not editable */}
-            {common.map((c) => (
+            {/* Common trunk — always present. Reorderable (global order) when editable. */}
+            {commonItems.map((c, i) => (
               <div
                 key={c.id}
-                className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-accent-500/40 bg-accent-50/50 px-3 py-2"
+                {...commonDragProps(c.id)}
+                className={`flex items-center gap-2 rounded-lg border border-dashed bg-accent-50/50 px-3 py-2 ${
+                  commonEditable ? "cursor-grab active:cursor-grabbing" : ""
+                } ${commonDragId === c.id ? "opacity-40" : ""} ${
+                  commonOverId === c.id ? "border-brand-500 ring-2 ring-brand-100" : "border-accent-500/40"
+                }`}
               >
-                <span className="text-sm text-content">
+                {commonEditable && (
+                  <svg className="h-4 w-4 shrink-0 text-accent-700/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01" />
+                  </svg>
+                )}
+                <span className="flex-1 text-sm text-content">
                   {c.name}
                   <Hint hint={c.hint} />
                 </span>
-                <span className="shrink-0 rounded-full bg-accent-50 px-2 py-0.5 text-xs font-medium text-accent-700">
-                  Tronc commun
-                </span>
+                {commonEditable ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={() => moveCommon(c.id, -1)}
+                      disabled={i === 0}
+                      aria-label={`Monter ${c.name}`}
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-accent-500/40 text-accent-700 transition-colors hover:bg-accent-50 disabled:opacity-30"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      onClick={() => moveCommon(c.id, 1)}
+                      disabled={i === commonItems.length - 1}
+                      aria-label={`Descendre ${c.name}`}
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-accent-500/40 text-accent-700 transition-colors hover:bg-accent-50 disabled:opacity-30"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                ) : (
+                  <span className="shrink-0 rounded-full bg-accent-50 px-2 py-0.5 text-xs font-medium text-accent-700">
+                    Tronc commun
+                  </span>
+                )}
               </div>
             ))}
 

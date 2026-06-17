@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 import { PencilIcon } from "@/components/ui/icons";
 import { createPhysioTest, updatePhysioTest } from "@/actions/physioTest.actions";
 import { toast } from "@/lib/stores/toastStore";
@@ -14,6 +15,11 @@ interface BikeTypeOption {
   name: string;
 }
 
+interface SectionOption {
+  id: string;
+  name: string;
+}
+
 interface PhysioTestValue {
   id: string;
   name: string;
@@ -21,15 +27,19 @@ interface PhysioTestValue {
   outputType: PhysioOutputType;
   unit: string | null;
   isCommon: boolean;
+  isRequired: boolean;
+  sectionId: string | null;
   bikeTypes: { id: string; name: string }[];
 }
 
 export function CreatePhysioTestModal({
   physioTest,
   bikeTypes,
+  sections,
 }: {
   physioTest?: PhysioTestValue;
   bikeTypes: BikeTypeOption[];
+  sections: SectionOption[];
 }) {
   const isEdit = Boolean(physioTest);
   const [open, setOpen] = useState(false);
@@ -38,6 +48,8 @@ export function CreatePhysioTestModal({
 
   const [outputType, setOutputType] = useState<PhysioOutputType>(physioTest?.outputType ?? "VALUE");
   const [isCommon, setIsCommon] = useState(physioTest?.isCommon ?? false);
+  const [isRequired, setIsRequired] = useState(physioTest?.isRequired ?? false);
+  const [sectionId, setSectionId] = useState<string>(physioTest?.sectionId ?? "");
   const [selectedTypes, setSelectedTypes] = useState<string[]>(
     physioTest?.bikeTypes.map((b) => b.id) ?? []
   );
@@ -52,6 +64,8 @@ export function CreatePhysioTestModal({
     setError(null);
     setOutputType(physioTest?.outputType ?? "VALUE");
     setIsCommon(physioTest?.isCommon ?? false);
+    setIsRequired(physioTest?.isRequired ?? false);
+    setSectionId(physioTest?.sectionId ?? "");
     setSelectedTypes(physioTest?.bikeTypes.map((b) => b.id) ?? []);
   }
 
@@ -64,6 +78,8 @@ export function CreatePhysioTestModal({
       outputType,
       unit: outputType === "VALUE" ? String(fd.get("unit") ?? "").trim() : undefined,
       isCommon,
+      isRequired,
+      sectionId: sectionId || null,
       bikeTypeIds: isCommon ? [] : selectedTypes,
     };
 
@@ -95,6 +111,7 @@ export function CreatePhysioTestModal({
       )}
 
       {open && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
@@ -146,6 +163,30 @@ export function CreatePhysioTestModal({
                 )}
               </div>
 
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-content">Section</span>
+                <select
+                  value={sectionId}
+                  onChange={(e) => setSectionId(e.target.value)}
+                  className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">Aucune section</option>
+                  {sections.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={isRequired}
+                  onChange={(e) => setIsRequired(e.target.checked)}
+                  className="h-4 w-4 rounded border-border-strong text-brand-600 focus:ring-brand-500"
+                />
+                <span className="text-sm font-medium text-content">Saisie obligatoire dans l&apos;étude</span>
+              </label>
+
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -195,6 +236,7 @@ export function CreatePhysioTestModal({
             </form>
           </div>
         </div>
+        </ModalPortal>
       )}
     </>
   );

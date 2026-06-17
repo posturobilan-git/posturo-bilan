@@ -80,6 +80,7 @@ function MeasureRow({
       <span className="text-sm text-content">
         {m.name}
         <span className="ml-1 text-content-subtle">({m.unit})</span>
+        {m.isRequired && <span className="ml-0.5 text-danger-500">*</span>}
         {extra && (
           <span className="ml-2 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
             Ajoutée pour cette étude
@@ -137,14 +138,13 @@ export function MeasuresForm({
   const configured = measurements
     .map((m) => {
       const link = bikeTypeId != null ? m.bikeTypeLinks.find((b) => b.bikeTypeId === bikeTypeId) : undefined;
-      if (m.isCommon) return { m, common: true, order: 0 };
+      if (m.isCommon) return { m, common: true, order: m.commonOrder };
       if (link) return { m, common: false, order: link.order };
       return null;
     })
     .filter((x): x is { m: MeasurementForStudy; common: boolean; order: number } => x !== null)
     .sort((a, b) => {
       if (a.common !== b.common) return a.common ? -1 : 1;
-      if (a.common) return a.m.name.localeCompare(b.m.name);
       return a.order - b.order || a.m.name.localeCompare(b.m.name);
     })
     .map((x) => x.m);

@@ -8,6 +8,7 @@ export const measurementSchema = z
       .enum(["SELLE", "CINTRE", "POTENCE", "POSITION", "CALE_PIEDS", "MANIVELLES", "AUTRE"])
       .default("AUTRE"),
     isCommon: z.boolean().default(false),
+    isRequired: z.boolean().default(false),
     bikeTypeIds: z.array(z.string().uuid()).default([]),
   })
   .refine((d) => d.isCommon || d.bikeTypeIds.length > 0, {

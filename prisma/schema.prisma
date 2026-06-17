@@ -63,11 +63,14 @@ enum MeasurementCategory {
   AUTRE
 }
 
-// Nature du résultat d'un test physiologique : oui/non, commentaire libre, ou
-// valeur numérique (avec unité). Détermine le champ de saisie avant/après.
+// Nature du résultat d'un test physiologique : oui/non, positif/négatif, ou
+// valeur numérique (avec unité). Détermine le champ de saisie. POSITIVE_NEGATIVE
+// est sémantiquement distinct de YES_NO (signe clinique présent/absent), même si
+// tous deux stockés comme booléen. La description du test et une éventuelle note
+// libre (commentaire) sont gérées séparément, hors outputType.
 enum PhysioOutputType {
   YES_NO
-  COMMENT
+  POSITIVE_NEGATIVE
   VALUE
 }
 
@@ -88,6 +91,7 @@ model User {
   bikeTypes    BikeType[]
   measurements Measurement[]
   physioTests  PhysioTest[]
+  physioTestSections PhysioTestSection[]
   auditLogs    AuditLog[]
 
   createdAt DateTime @default(now())
@@ -196,6 +200,11 @@ model Measurement {
   category    MeasurementCategory @default(AUTRE)
   isCommon    Boolean             @default(false) // tronc commun (tous les vélos)
   isActive    Boolean             @default(true)
+  isRequired  Boolean             @default(false) // saisie obligatoire dans l'étude
+
+  // Ordre d'affichage global du tronc commun (côtes communes uniquement).
+  // S'applique avant les côtes spécifiques au type de vélo. Ignoré si non commune.
+  commonOrder Int                 @default(0)
 
   // Si non commune, liée à un ou plusieurs types de vélo via la table de
   // configuration (qui porte aussi l'ordre d'affichage propre à chaque vélo).
@@ -237,11 +246,39 @@ model PhysioTest {
   unit        String?           // utilisé pour outputType VALUE (mm, cm, °...)
   isCommon    Boolean          @default(false) // tronc commun (tous les vélos)
   isActive    Boolean          @default(true)
+  isRequired  Boolean          @default(false) // saisie obligatoire dans l'étude
+
+  // Ordre d'affichage global du tronc commun (tests communs uniquement).
+  commonOrder Int              @default(0)
+
+  // Section/catégorie de regroupement dans le formulaire (Genou, Hanche...).
+  // Optionnelle : un test sans section est rangé dans un groupe « Autres ».
+  sectionId   String?
+  section     PhysioTestSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
 
   bikeTypeLinks BikeTypePhysioTest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([createdById])
+  @@index([sectionId])
+}
+
+// Section de regroupement des tests physio dans le formulaire d'étude
+// (ex : Genou, Hanche, Tests dynamiques). Gérée par l'admin (CRUD).
+model PhysioTestSection {
+  id          String   @id @default(uuid())
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  name        String
+  order       Int      @default(0) // ordre d'affichage de la section
+
+  physioTests PhysioTest[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([createdById])
 }

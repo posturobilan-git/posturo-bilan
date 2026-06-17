@@ -31,7 +31,10 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
     }),
     prisma.physioTest.findMany({
       where: { isActive: true },
-      include: { bikeTypeLinks: { select: { bikeTypeId: true, order: true } } },
+      include: {
+        bikeTypeLinks: { select: { bikeTypeId: true, order: true } },
+        section: { select: { id: true, name: true, order: true } },
+      },
       orderBy: { name: "asc" },
     }),
     prisma.bikeComponent.findMany({
@@ -76,10 +79,12 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
     measureValues[v.measurementId] = { before: v.before ?? null, after: v.after ?? null };
   }
 
-  // Same conversion for the stored physio results (one value per test).
+  // Same conversion for the stored physio results (one value per test) + comments.
   const physioResults: Record<string, PhysioValue> = {};
+  const physioComments: Record<string, string> = {};
   for (const r of (study?.physioResults as StudyPhysioResult[] | null) ?? []) {
     physioResults[r.physioTestId] = r.value ?? null;
+    if (r.comment) physioComments[r.physioTestId] = r.comment;
   }
 
   const initial = study
@@ -88,6 +93,7 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
         bikeTypeId: study.bikeTypeId,
         measureValues,
         physioResults,
+        physioComments,
         observations: study.observations ?? "",
         componentIds: study.componentsUsed.map((c) => c.id),
         exerciseIds: study.exercisesPrescribed.map((e) => e.id),

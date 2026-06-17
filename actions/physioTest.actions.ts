@@ -6,10 +6,11 @@ import { logAudit } from "@/lib/audit";
 import { requireKine, requireAdmin } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { physioTestSchema, type PhysioTestInput } from "@/lib/validations/physioTest.schema";
-import { Prisma, type PhysioTest, type BikeType } from "@prisma/client";
+import { Prisma, type PhysioTest, type BikeType, type PhysioTestSection } from "@prisma/client";
 
 export type PhysioTestWithTypes = PhysioTest & {
   bikeTypes: Pick<BikeType, "id" | "name">[];
+  section: Pick<PhysioTestSection, "id" | "name"> | null;
 };
 
 // ─── Queries ────────────────────────────────────────────────────────────────────
@@ -26,7 +27,10 @@ export async function getPhysioTests(filters?: {
         name: { contains: filters.search, mode: "insensitive" },
       }),
     },
-    include: { bikeTypeLinks: { include: { bikeType: { select: { id: true, name: true } } } } },
+    include: {
+      bikeTypeLinks: { include: { bikeType: { select: { id: true, name: true } } } },
+      section: { select: { id: true, name: true } },
+    },
     orderBy: [{ isActive: "desc" }, { isCommon: "desc" }, { name: "asc" }],
   });
 
@@ -48,7 +52,7 @@ export async function getPhysioTestsForBikeType(bikeTypeId: string): Promise<Phy
   const [common, links] = await Promise.all([
     prisma.physioTest.findMany({
       where: { isActive: true, isCommon: true },
-      orderBy: { name: "asc" },
+      orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
     }),
     prisma.bikeTypePhysioTest.findMany({
       where: { bikeTypeId, physioTest: { isActive: true, isCommon: false } },
@@ -70,6 +74,8 @@ function relationData(input: PhysioTestInput) {
     // Unit is only meaningful for a numeric (VALUE) result.
     unit: input.outputType === "VALUE" ? input.unit ?? null : null,
     isCommon: input.isCommon,
+    isRequired: input.isRequired,
+    sectionId: input.sectionId ?? null,
     // A common test applies to all bike types, so it carries no explicit links.
     bikeTypeIds: input.isCommon ? [] : input.bikeTypeIds,
   };

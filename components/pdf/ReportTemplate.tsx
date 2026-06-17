@@ -8,10 +8,12 @@ export interface ReportMeasureRow {
   after: number | null;
 }
 
-/** Physio test row — the value is pre-formatted (Oui/Non, valeur + unité, texte). */
+/** Physio test row — the value is pre-formatted (Oui/Non, Positif/Négatif, valeur + unité). */
 export interface ReportPhysioRow {
   name: string;
   value: string;
+  /** Optional free-text note entered by the kiné during the study. */
+  comment?: string | null;
 }
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -61,6 +63,7 @@ const styles = StyleSheet.create({
   tHead: { flexDirection: "row", backgroundColor: "#F3F4F6", paddingVertical: 4, paddingHorizontal: 6 },
   tRow: { flexDirection: "row", paddingVertical: 4, paddingHorizontal: 6, borderBottomWidth: 0.5, borderBottomColor: LIGHT },
   tColName: { width: "50%", color: DARK },
+  tComment: { color: GRAY, fontSize: 8, marginTop: 1 },
   tColNameHead: { width: "50%", color: GRAY, fontSize: 9, textTransform: "uppercase" },
   tColVal: { width: "25%", textAlign: "right", fontFamily: "Helvetica-Bold" },
   tColValHead: { width: "25%", textAlign: "right", color: GRAY, fontSize: 9, textTransform: "uppercase" },
@@ -273,7 +276,10 @@ export function ReportTemplate({
             </View>
             {physioRows.map((r, i) => (
               <View key={i} style={styles.tRow}>
-                <Text style={styles.tColName}>{r.name}</Text>
+                <View style={{ width: "50%" }}>
+                  <Text style={{ color: DARK }}>{r.name}</Text>
+                  {r.comment ? <Text style={styles.tComment}>{r.comment}</Text> : null}
+                </View>
                 <Text style={[styles.tColVal, { width: "50%" }]}>{r.value}</Text>
               </View>
             ))}

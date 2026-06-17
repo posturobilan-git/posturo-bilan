@@ -69,6 +69,46 @@ async function assertStudyOwnership(studyId: string) {
   return { kine, study };
 }
 
+/**
+ * Authoritative required-field guard for finalising a study. Every active côte /
+ * test marked `isRequired` and applicable to the chosen bike type must hold at
+ * least a "before" value (côtes) / a result (tests). Returns the missing names.
+ */
+async function missingRequiredFields(validated: StudyInput): Promise<string[]> {
+  const { bikeTypeId } = validated;
+  const [reqMeasurements, reqTests] = await Promise.all([
+    prisma.measurement.findMany({
+      where: {
+        isActive: true,
+        isRequired: true,
+        OR: [{ isCommon: true }, { bikeTypeLinks: { some: { bikeTypeId } } }],
+      },
+      select: { id: true, name: true },
+    }),
+    prisma.physioTest.findMany({
+      where: {
+        isActive: true,
+        isRequired: true,
+        OR: [{ isCommon: true }, { bikeTypeLinks: { some: { bikeTypeId } } }],
+      },
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  const beforeById = new Map(validated.measureValues.map((v) => [v.measurementId, v.before]));
+  const resultById = new Map(validated.physioResults.map((r) => [r.physioTestId, r.value]));
+  const hasValue = (v: unknown) => v !== null && v !== undefined && v !== "";
+
+  const missing: string[] = [];
+  for (const m of reqMeasurements) {
+    if (beforeById.get(m.id) == null) missing.push(m.name);
+  }
+  for (const t of reqTests) {
+    if (!hasValue(resultById.get(t.id))) missing.push(t.name);
+  }
+  return missing;
+}
+
 /** Thrown auth/ownership messages worth surfacing to the caller verbatim. */
 function isAuthzError(e: unknown): e is Error {
   return (
@@ -220,6 +260,13 @@ export async function submitStudy(
   const validated = parsed.data;
 
   try {
+    // Block finalisation when a required côte/test applicable to the bike type
+    // is still empty (drafts may stay partial; submitted studies may not).
+    const missing = await missingRequiredFields(validated);
+    if (missing.length > 0) {
+      return fail(`Champs obligatoires manquants : ${missing.join(", ")}.`);
+    }
+
     let studyId: string;
     let kineId: string;
 

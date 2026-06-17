@@ -46,6 +46,11 @@ export function MeasurementCard({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
+        {measurement.isRequired && (
+          <span className="rounded-full bg-warning-50 px-2.5 py-0.5 text-xs font-medium text-warning-700">
+            Obligatoire
+          </span>
+        )}
         {measurement.isCommon ? (
           <span className="rounded-full bg-accent-50 px-2.5 py-0.5 text-xs font-medium text-accent-700">
             Tronc commun

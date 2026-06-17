@@ -19,6 +19,8 @@ interface StudyStoreState {
   // Résultat (unique) des tests physio, indexé par physioTestId. La valeur est
   // number|boolean|string|null selon l'outputType du test.
   physioResults: Record<string, PhysioValue>;
+  // Commentaire libre optionnel par test physio (accordéon), indexé par physioTestId.
+  physioComments: Record<string, string>;
   observations: string;
   selectedComponentIds: string[];
   selectedExerciseIds: string[];
@@ -32,6 +34,7 @@ interface StudyStoreActions {
   addExtraMeasurement: (measurementId: string) => void;
   removeExtraMeasurement: (measurementId: string) => void;
   setPhysioValue: (physioTestId: string, value: PhysioValue) => void;
+  setPhysioComment: (physioTestId: string, comment: string) => void;
   setObservations: (text: string) => void;
   toggleComponent: (id: string) => void;
   toggleExercise: (id: string) => void;
@@ -47,6 +50,7 @@ const DEFAULT_STATE: StudyStoreState = {
   measureValues: {},
   extraMeasurementIds: [],
   physioResults: {},
+  physioComments: {},
   observations: "",
   selectedComponentIds: [],
   selectedExerciseIds: [],
@@ -61,13 +65,24 @@ export function measureValuesToArray(
     .map(([measurementId, v]) => ({ measurementId, before: v.before, after: v.after }));
 }
 
-/** Serialises the physioResults map into the array shape the action expects. */
+/**
+ * Serialises the physio results + comments maps into the array shape the action
+ * expects. Keeps any test that has a value OR a comment.
+ */
 export function physioResultsToArray(
-  results: StudyStoreState["physioResults"]
+  results: StudyStoreState["physioResults"],
+  comments: StudyStoreState["physioComments"] = {}
 ): StudyPhysioResult[] {
-  return Object.entries(results)
-    .filter(([, value]) => value !== null && value !== undefined && value !== "")
-    .map(([physioTestId, value]) => ({ physioTestId, value }));
+  const hasValue = (v: PhysioValue) => v !== null && v !== undefined && v !== "";
+  const ids = new Set([
+    ...Object.keys(results).filter((id) => hasValue(results[id])),
+    ...Object.keys(comments).filter((id) => comments[id]?.trim()),
+  ]);
+  return [...ids].map((physioTestId) => {
+    const value = hasValue(results[physioTestId]) ? results[physioTestId] : null;
+    const comment = comments[physioTestId]?.trim() || null;
+    return { physioTestId, value, comment };
+  });
 }
 
 export const useStudyStore = create<StudyStoreState & StudyStoreActions>((set) => ({
@@ -113,6 +128,11 @@ export const useStudyStore = create<StudyStoreState & StudyStoreActions>((set) =
   setPhysioValue: (physioTestId, value) =>
     set((s) => ({
       physioResults: { ...s.physioResults, [physioTestId]: value },
+    })),
+
+  setPhysioComment: (physioTestId, comment) =>
+    set((s) => ({
+      physioComments: { ...s.physioComments, [physioTestId]: comment },
     })),
 
   setObservations: (observations) => set({ observations }),

@@ -31,6 +31,7 @@ interface Props {
     bikeTypeId: string;
     measureValues: Record<string, { before: number | null; after: number | null }>;
     physioResults: Record<string, PhysioValue>;
+    physioComments: Record<string, string>;
     observations: string;
     componentIds: string[];
     exerciseIds: string[];
@@ -75,6 +76,7 @@ export function StudyForm({
       measureValues: initial?.measureValues ?? {},
       extraMeasurementIds,
       physioResults: initial?.physioResults ?? {},
+      physioComments: initial?.physioComments ?? {},
       observations: initial?.observations ?? "",
       selectedComponentIds: initial?.componentIds ?? [],
       selectedExerciseIds: initial?.exerciseIds ?? [],
@@ -91,7 +93,7 @@ export function StudyForm({
       draftStudyId: store.draftStudyId ?? undefined,
       bikeTypeId: store.bikeTypeId ?? "",
       measureValues: measureValuesToArray(store.measureValues),
-      physioResults: physioResultsToArray(store.physioResults),
+      physioResults: physioResultsToArray(store.physioResults, store.physioComments),
       observations: store.observations || undefined,
       componentIds: store.selectedComponentIds,
       exerciseIds: store.selectedExerciseIds,
@@ -104,10 +106,55 @@ export function StudyForm({
     return true;
   }
 
+  // ── Required-field guards ─────────────────────────────────────────────────────
+
+  /** Required physio tests applicable to the bike type that have no result yet. */
+  function missingRequiredTests(): string[] {
+    const btId = store.bikeTypeId;
+    const missing: string[] = [];
+    for (const t of physioTests) {
+      if (!t.isRequired) continue;
+      const applies = t.isCommon || t.bikeTypeLinks.some((b) => b.bikeTypeId === btId);
+      if (!applies) continue;
+      const v = store.physioResults[t.id];
+      if (v === null || v === undefined || v === "") missing.push(t.name);
+    }
+    return missing;
+  }
+
+  /** Required côtes applicable to the bike type with no "before" value yet. */
+  function missingRequiredMeasures(): string[] {
+    const btId = store.bikeTypeId;
+    const missing: string[] = [];
+    for (const m of measurements) {
+      if (!m.isRequired) continue;
+      const applies = m.isCommon || m.bikeTypeLinks.some((b) => b.bikeTypeId === btId);
+      if (!applies) continue;
+      if (store.measureValues[m.id]?.before == null) missing.push(m.name);
+    }
+    return missing;
+  }
+
+  /** Missing required fields owned by the given step (the one being left). */
+  function missingForStep(step: number): string[] {
+    if (step === 2) return missingRequiredTests(); // Tests physio
+    if (step === 3) return missingRequiredMeasures(); // Mesures avant
+    return [];
+  }
+
   // ── Step transitions ──────────────────────────────────────────────────────────
 
-  /** Persists the draft, then advances to the given step. */
+  /**
+   * Persists the draft, then advances to the given step. Blocks the move when a
+   * required côte/test on the current step is still empty (drafts may stay
+   * partial, but you can't step past an unfilled required field).
+   */
   function advanceTo(step: 2 | 3 | 4 | 5 | 6) {
+    const missing = missingForStep(store.step);
+    if (missing.length > 0) {
+      toast.error(`Champs obligatoires manquants : ${missing.join(", ")}.`);
+      return;
+    }
     startSave(async () => {
       if (await persistDraft()) store.setStep(step);
     });
@@ -120,13 +167,19 @@ export function StudyForm({
   }
 
   function handleSubmit() {
+    // Final safety net — covers every required field regardless of step.
+    const missing = [...missingRequiredTests(), ...missingRequiredMeasures()];
+    if (missing.length > 0) {
+      toast.error(`Champs obligatoires manquants : ${missing.join(", ")}.`);
+      return;
+    }
     startSubmit(async () => {
       const result = await submitStudy({
         patientId: patient.id,
         draftStudyId: store.draftStudyId ?? undefined,
         bikeTypeId: store.bikeTypeId ?? "",
         measureValues: measureValuesToArray(store.measureValues),
-        physioResults: physioResultsToArray(store.physioResults),
+        physioResults: physioResultsToArray(store.physioResults, store.physioComments),
         observations: store.observations || undefined,
         componentIds: store.selectedComponentIds,
         exerciseIds: store.selectedExerciseIds,
@@ -174,7 +227,9 @@ export function StudyForm({
           physioTests={physioTests}
           bikeTypeId={store.bikeTypeId}
           results={store.physioResults}
+          comments={store.physioComments}
           onSetValue={store.setPhysioValue}
+          onSetComment={store.setPhysioComment}
           onBack={() => store.setStep(1)}
           onNext={() => advanceTo(3)}
           onSaveDraft={handleSaveDraft}

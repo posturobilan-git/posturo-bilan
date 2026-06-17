@@ -53,7 +53,10 @@ async function buildMeasureRows(study: StudyForReport): Promise<ReportMeasureRow
 
 /** Resolves a study's stored physio results into pre-formatted rows. */
 async function buildPhysioRows(study: StudyForReport): Promise<ReportPhysioRow[]> {
-  const results = ((study.physioResults as StudyPhysioResult[] | null) ?? []).filter(hasPhysioValue);
+  // Keep results that carry a value OR a free-text comment (both go in the report).
+  const results = ((study.physioResults as StudyPhysioResult[] | null) ?? []).filter(
+    (r) => hasPhysioValue(r) || Boolean(r.comment?.trim())
+  );
   if (results.length === 0) return [];
 
   const tests = await prisma.physioTest.findMany({
@@ -68,7 +71,8 @@ async function buildPhysioRows(study: StudyForReport): Promise<ReportPhysioRow[]
     .sort((a, b) => a.t.name.localeCompare(b.t.name))
     .map(({ r, t }) => ({
       name: t.name,
-      value: formatPhysioValue(t.outputType, r.value ?? null, t.unit),
+      value: hasPhysioValue(r) ? formatPhysioValue(t.outputType, r.value ?? null, t.unit) : "—",
+      comment: r.comment?.trim() || null,
     }));
 }
 

@@ -20,6 +20,10 @@ const prisma = new PrismaClient({
 // ─── Types de vélo (gérés par l'admin) ──────────────────────────────────────────
 const BIKE_TYPES = ["Route", "VTT", "Gravel", "Triathlon", "Piste"];
 
+// ─── Sections de tests physio (regroupement dans le formulaire) ───────────────────
+// L'ordre du tableau définit l'ordre d'affichage des groupes.
+const PHYSIO_SECTIONS = ["Tronc commun", "Genou", "Hanche", "Tests dynamiques"];
+
 const EXERCISES: Array<{
   name: string;
   description: string;
@@ -66,13 +70,14 @@ interface SeedMeasurement {
   category: MeasurementCategory;
   order: number;
   isCommon: boolean;
+  isRequired?: boolean;
   bikeTypes?: string[]; // si non commune
   legacyKey?: keyof StudyMeasures;
 }
 
 const MEASUREMENTS: SeedMeasurement[] = [
-  // Tronc commun
-  { name: "Hauteur de selle", unit: "cm", category: "SELLE", order: 1, isCommon: true, legacyKey: "saddleHeight" },
+  // Tronc commun (l'ordre `order` sert aussi de commonOrder pour les côtes communes)
+  { name: "Hauteur de selle", unit: "cm", category: "SELLE", order: 1, isCommon: true, isRequired: true, legacyKey: "saddleHeight" },
   { name: "Recul de selle", unit: "mm", category: "SELLE", order: 2, isCommon: true, legacyKey: "saddleSetback" },
   { name: "Angle de selle", unit: "°", category: "SELLE", order: 3, isCommon: true, legacyKey: "saddleAngle" },
   { name: "Hauteur de cintre", unit: "cm", category: "CINTRE", order: 4, isCommon: true, legacyKey: "handlebarHeight" },
@@ -96,19 +101,24 @@ interface SeedPhysioTest {
   outputType: PhysioOutputType;
   unit?: string;
   isCommon: boolean;
+  isRequired?: boolean;
+  section?: string; // nom d'une section de PHYSIO_SECTIONS
   bikeTypes?: string[]; // si non commun
   order?: number;
+  commonOrder?: number; // ordre global du tronc commun (si isCommon)
 }
 
 const PHYSIO_TESTS: SeedPhysioTest[] = [
   // Tronc commun
-  { name: "Distance doigts-sol", description: "Flexion antérieure du tronc, jambes tendues — distance entre les doigts et le sol.", outputType: "VALUE", unit: "cm", isCommon: true },
-  { name: "Mobilité de hanche 90/90", description: "Rotations interne et externe de hanche en position assise — amplitude atteinte sans compensation.", outputType: "YES_NO", isCommon: true },
-  { name: "Test genou/orteil", description: "Genou avancé au-delà de la pointe du pied en fente, talon au sol.", outputType: "YES_NO", isCommon: true },
-  { name: "Observation posturale globale", description: "Asymétries, attitudes scoliotiques, appuis spontanés.", outputType: "COMMENT", isCommon: true },
+  { name: "Distance doigts-sol", description: "Flexion antérieure du tronc, jambes tendues — distance entre les doigts et le sol.", outputType: "VALUE", unit: "cm", isCommon: true, isRequired: true, section: "Tronc commun", commonOrder: 0 },
+  { name: "Observation posturale globale", description: "Asymétries, attitudes scoliotiques, appuis spontanés — positif si anomalie notable. Détaillez au besoin via le commentaire.", outputType: "POSITIVE_NEGATIVE", isCommon: true, section: "Tronc commun", commonOrder: 1 },
+  { name: "Mobilité de hanche 90/90", description: "Rotations interne et externe de hanche en position assise — amplitude atteinte sans compensation.", outputType: "YES_NO", isCommon: true, section: "Hanche", commonOrder: 2 },
+  { name: "Test genou/orteil", description: "Genou avancé au-delà de la pointe du pied en fente, talon au sol.", outputType: "YES_NO", isCommon: true, section: "Genou", commonOrder: 3 },
+  // Signe clinique positif/négatif (sémantique distincte de Oui/Non)
+  { name: "Signe de Trendelenburg", description: "Bascule du bassin en appui unipodal — positif = insuffisance du moyen fessier.", outputType: "POSITIVE_NEGATIVE", isCommon: true, section: "Hanche", commonOrder: 4 },
   // Spécifiques
-  { name: "Souplesse des ischio-jambiers (angle poplité)", description: "Élévation jambe tendue en décubitus dorsal.", outputType: "VALUE", unit: "°", isCommon: false, bikeTypes: ["Route", "Triathlon"], order: 0 },
-  { name: "Stabilité unipodale", description: "Tenue 30 s sur un pied, yeux ouverts.", outputType: "YES_NO", isCommon: false, bikeTypes: ["VTT", "Gravel"], order: 0 },
+  { name: "Souplesse des ischio-jambiers (angle poplité)", description: "Élévation jambe tendue en décubitus dorsal.", outputType: "VALUE", unit: "°", isCommon: false, section: "Genou", bikeTypes: ["Route", "Triathlon"], order: 0 },
+  { name: "Stabilité unipodale", description: "Tenue 30 s sur un pied, yeux ouverts.", outputType: "YES_NO", isCommon: false, section: "Tests dynamiques", bikeTypes: ["VTT", "Gravel"], order: 0 },
 ];
 
 // ─── Patients d'exemple (intake + une ou plusieurs études) ───────────────────────
@@ -241,6 +251,17 @@ async function main() {
   const idsForNames = (names: string[] = []) =>
     names.map((n) => bikeTypeByName.get(n)).filter((id): id is string => Boolean(id));
 
+  // ── Sections de tests physio ──
+  let sectionsCreated = 0;
+  for (const [i, name] of PHYSIO_SECTIONS.entries()) {
+    const exists = await prisma.physioTestSection.findFirst({ where: { name } });
+    if (exists) continue;
+    await prisma.physioTestSection.create({ data: { name, order: i, createdById: admin.id } });
+    sectionsCreated++;
+  }
+  const sections = await prisma.physioTestSection.findMany();
+  const sectionByName = new Map(sections.map((s) => [s.name, s.id]));
+
   // ── Exercices ──
   let exCreated = 0;
   for (const ex of EXERCISES) {
@@ -292,13 +313,23 @@ async function main() {
   let measCreated = 0;
   for (const m of MEASUREMENTS) {
     const exists = await prisma.measurement.findFirst({ where: { name: m.name } });
-    if (exists) continue;
+    if (exists) {
+      // Backfill obligatoire / ordre du tronc commun sur les côtes déjà seedées.
+      await prisma.measurement.update({
+        where: { id: exists.id },
+        data: { isRequired: m.isRequired ?? false, commonOrder: m.isCommon ? m.order : 0 },
+      });
+      continue;
+    }
     await prisma.measurement.create({
       data: {
         name: m.name,
         unit: m.unit,
         category: m.category,
         isCommon: m.isCommon,
+        isRequired: m.isRequired ?? false,
+        // Pour le tronc commun, l'ancien `order` devient l'ordre global d'affichage.
+        commonOrder: m.isCommon ? m.order : 0,
         createdById: admin.id,
         // Non-common côtes are linked to their bike types with a per-bike-type
         // display order (the old global `order` becomes this link order).
@@ -319,7 +350,18 @@ async function main() {
   let physioCreated = 0;
   for (const t of PHYSIO_TESTS) {
     const exists = await prisma.physioTest.findFirst({ where: { name: t.name } });
-    if (exists) continue;
+    if (exists) {
+      // Backfill section / obligatoire / ordre du tronc commun sur les tests déjà seedés.
+      await prisma.physioTest.update({
+        where: { id: exists.id },
+        data: {
+          isRequired: t.isRequired ?? false,
+          commonOrder: t.isCommon ? t.commonOrder ?? 0 : 0,
+          sectionId: t.section ? sectionByName.get(t.section) ?? null : null,
+        },
+      });
+      continue;
+    }
     await prisma.physioTest.create({
       data: {
         name: t.name,
@@ -327,6 +369,9 @@ async function main() {
         outputType: t.outputType,
         unit: t.outputType === "VALUE" ? t.unit ?? null : null,
         isCommon: t.isCommon,
+        isRequired: t.isRequired ?? false,
+        commonOrder: t.isCommon ? t.commonOrder ?? 0 : 0,
+        sectionId: t.section ? sectionByName.get(t.section) ?? null : null,
         createdById: admin.id,
         bikeTypeLinks: t.isCommon
           ? undefined
@@ -436,7 +481,8 @@ async function main() {
   }
 
   console.log(
-    `Seed terminé : ${btCreated}/${BIKE_TYPES.length} types de vélo, ${measCreated}/${MEASUREMENTS.length} côtes, ` +
+    `Seed terminé : ${btCreated}/${BIKE_TYPES.length} types de vélo, ` +
+      `${sectionsCreated}/${PHYSIO_SECTIONS.length} sections physio, ${measCreated}/${MEASUREMENTS.length} côtes, ` +
       `${physioCreated}/${PHYSIO_TESTS.length} tests physio, ` +
       `${exCreated}/${EXERCISES.length} exercices, ${compCreated}/${COMPONENTS.length} composants ` +
       `(${compTypesLinked} associés à des types de vélo), ` +

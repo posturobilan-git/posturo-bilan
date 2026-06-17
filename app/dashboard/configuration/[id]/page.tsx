@@ -5,6 +5,8 @@ import {
   getBikeTypeConfig,
   setBikeTypeMeasurements,
   setBikeTypePhysioTests,
+  setCommonMeasurementOrder,
+  setCommonPhysioTestOrder,
 } from "@/actions/bikeType.actions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
@@ -62,6 +64,7 @@ export default async function BikeTypeConfigPage({
                 initialAssigned={config.measurements.assigned}
                 initialAvailable={config.measurements.available}
                 save={saveMeasurements}
+                saveCommon={setCommonMeasurementOrder}
                 canEdit
               />
             ),
@@ -78,6 +81,7 @@ export default async function BikeTypeConfigPage({
                 initialAssigned={config.physioTests.assigned}
                 initialAvailable={config.physioTests.available}
                 save={savePhysioTests}
+                saveCommon={setCommonPhysioTestOrder}
                 canEdit
               />
             ),

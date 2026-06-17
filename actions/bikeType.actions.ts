@@ -87,7 +87,7 @@ export async function getBikeTypeConfig(bikeTypeId: string): Promise<BikeTypeCon
     prisma.measurement.findMany({
       where: { isActive: true, isCommon: true },
       select: { id: true, name: true, unit: true },
-      orderBy: { name: "asc" },
+      orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
     }),
     prisma.bikeTypeMeasurement.findMany({
       where: { bikeTypeId, measurement: { isActive: true, isCommon: false } },
@@ -102,7 +102,7 @@ export async function getBikeTypeConfig(bikeTypeId: string): Promise<BikeTypeCon
     prisma.physioTest.findMany({
       where: { isActive: true, isCommon: true },
       select: { id: true, name: true, unit: true, outputType: true },
-      orderBy: { name: "asc" },
+      orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
     }),
     prisma.bikeTypePhysioTest.findMany({
       where: { bikeTypeId, physioTest: { isActive: true, isCommon: false } },
@@ -247,6 +247,80 @@ export async function setBikeTypePhysioTests(
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
     console.error("setBikeTypePhysioTests failed:", e);
     return fail("Impossible d'enregistrer la configuration. Réessayez.");
+  }
+}
+
+/**
+ * Persists the global display order of the common-trunk côtes from an ordered
+ * list of ids (top to bottom). Non-common ids are ignored. This order is global
+ * (shared by every bike type) and applies first in the study form.
+ */
+export async function setCommonMeasurementOrder(
+  measurementIds: string[]
+): Promise<ActionResult<void>> {
+  try {
+    const admin = await requireAdmin();
+    const valid = await prisma.measurement.findMany({
+      where: { id: { in: measurementIds }, isCommon: true },
+      select: { id: true },
+    });
+    const validIds = new Set(valid.map((m) => m.id));
+    const ordered = measurementIds.filter((id) => validIds.has(id));
+
+    await prisma.$transaction(
+      ordered.map((id, commonOrder) =>
+        prisma.measurement.update({ where: { id }, data: { commonOrder } })
+      )
+    );
+
+    await logAudit({
+      userId: admin.id,
+      action: "UPDATE",
+      entity: "measurement",
+      entityId: "commonOrder",
+      metadata: { count: ordered.length },
+    });
+    revalidatePath("/dashboard/configuration");
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
+    console.error("setCommonMeasurementOrder failed:", e);
+    return fail("Impossible d'enregistrer l'ordre du tronc commun. Réessayez.");
+  }
+}
+
+/** Mirrors setCommonMeasurementOrder for the common-trunk physio tests. */
+export async function setCommonPhysioTestOrder(
+  physioTestIds: string[]
+): Promise<ActionResult<void>> {
+  try {
+    const admin = await requireAdmin();
+    const valid = await prisma.physioTest.findMany({
+      where: { id: { in: physioTestIds }, isCommon: true },
+      select: { id: true },
+    });
+    const validIds = new Set(valid.map((t) => t.id));
+    const ordered = physioTestIds.filter((id) => validIds.has(id));
+
+    await prisma.$transaction(
+      ordered.map((id, commonOrder) =>
+        prisma.physioTest.update({ where: { id }, data: { commonOrder } })
+      )
+    );
+
+    await logAudit({
+      userId: admin.id,
+      action: "UPDATE",
+      entity: "physioTest",
+      entityId: "commonOrder",
+      metadata: { count: ordered.length },
+    });
+    revalidatePath("/dashboard/configuration");
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
+    console.error("setCommonPhysioTestOrder failed:", e);
+    return fail("Impossible d'enregistrer l'ordre du tronc commun. Réessayez.");
   }
 }
 

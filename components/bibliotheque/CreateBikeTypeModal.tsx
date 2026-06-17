@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
+import { ModalPortal } from "@/components/ui/ModalPortal";
 import { PencilIcon } from "@/components/ui/icons";
 import { createBikeType, updateBikeType } from "@/actions/bikeType.actions";
 import { toast } from "@/lib/stores/toastStore";
@@ -47,6 +48,7 @@ export function CreateBikeTypeModal({ bikeType }: { bikeType?: BikeType }) {
       )}
 
       {open && (
+        <ModalPortal>
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
           onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
@@ -79,6 +81,7 @@ export function CreateBikeTypeModal({ bikeType }: { bikeType?: BikeType }) {
             </form>
           </div>
         </div>
+        </ModalPortal>
       )}
     </>
   );

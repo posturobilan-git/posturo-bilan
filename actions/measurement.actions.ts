@@ -48,7 +48,7 @@ export async function getMeasurementsForBikeType(bikeTypeId: string): Promise<Me
   const [common, links] = await Promise.all([
     prisma.measurement.findMany({
       where: { isActive: true, isCommon: true },
-      orderBy: { name: "asc" },
+      orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
     }),
     prisma.bikeTypeMeasurement.findMany({
       where: { bikeTypeId, measurement: { isActive: true, isCommon: false } },
@@ -68,6 +68,7 @@ function relationData(input: MeasurementInput) {
     unit: input.unit,
     category: input.category,
     isCommon: input.isCommon,
+    isRequired: input.isRequired,
     // A common measurement applies to all bike types, so it carries no explicit links.
     bikeTypeIds: input.isCommon ? [] : input.bikeTypeIds,
   };

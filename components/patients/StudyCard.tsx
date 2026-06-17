@@ -37,10 +37,10 @@ export function StudyCard({
     .filter((r): r is { value: StudyMeasureValue; info: MeasurementInfo } => Boolean(r.info))
     .sort((a, b) => a.info.name.localeCompare(b.info.name));
 
-  // Same resolution for the physio test results.
+  // Same resolution for the physio test results. Keep rows with a value OR a comment.
   const physioResults = (study.physioResults as StudyPhysioResult[] | null) ?? [];
   const physioRows = physioResults
-    .filter(hasPhysioValue)
+    .filter((r) => hasPhysioValue(r) || Boolean(r.comment?.trim()))
     .map((r) => ({ result: r, info: physioTestsById[r.physioTestId] }))
     .filter((r): r is { result: StudyPhysioResult; info: PhysioTestInfo } => Boolean(r.info))
     .sort((a, b) => a.info.name.localeCompare(b.info.name));
@@ -103,7 +103,12 @@ export function StudyCard({
             <tbody className="divide-y divide-border">
               {physioRows.map(({ result, info }) => (
                 <tr key={result.physioTestId}>
-                  <td className="px-3 py-1.5 text-content">{info.name}</td>
+                  <td className="px-3 py-1.5 text-content">
+                    {info.name}
+                    {result.comment?.trim() && (
+                      <span className="mt-0.5 block text-xs text-content-subtle">{result.comment}</span>
+                    )}
+                  </td>
                   <td className="px-3 py-1.5 text-right font-medium text-content">
                     {formatPhysioValue(info.outputType, result.value, info.unit)}
                   </td>

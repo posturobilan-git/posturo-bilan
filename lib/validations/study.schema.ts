@@ -9,10 +9,13 @@ export const studyMeasureValueSchema = z.object({
 });
 
 // Un résultat de test physio : une seule valeur, dont le type dépend de
-// l'outputType du test (number pour VALUE, boolean pour YES_NO, string pour COMMENT).
+// l'outputType du test (number pour VALUE, boolean pour YES_NO / POSITIVE_NEGATIVE),
+// plus un commentaire libre optionnel commun à tous les types.
 export const studyPhysioResultSchema = z.object({
   physioTestId: z.string().uuid(),
   value: z.union([z.number(), z.boolean(), z.string().max(2000)]).nullable().optional(),
+  // Commentaire libre optionnel, indépendant du type de résultat.
+  comment: z.string().max(2000).nullable().optional(),
 });
 
 export const studySchema = z.object({
