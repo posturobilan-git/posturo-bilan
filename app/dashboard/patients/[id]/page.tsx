@@ -68,6 +68,8 @@ export default async function PatientPage(props: PageProps<"/dashboard/patients/
                   email: patient.email,
                   phone: patient.phone,
                 }}
+                studyCount={patientFull.studies.length}
+                isAnonymized={patient.isAnonymized}
               />
             )}
           </div>
