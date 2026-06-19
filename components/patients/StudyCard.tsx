@@ -59,6 +59,8 @@ export function StudyCard({
     .map((r) => ({ result: r, info: physioTestsById[r.physioTestId] }))
     .filter((r): r is { result: StudyPhysioResult; info: PhysioTestInfo } => Boolean(r.info))
     .sort((a, b) => a.info.name.localeCompare(b.info.name));
+  // Douleurs structurées, déjà ordonnées (order asc) par la requête.
+  const pains = study.pains ?? [];
   // Reports can be generated/sent once the study is finalised.
   const reportable = study.status !== "study_pending";
 
@@ -82,6 +84,38 @@ export function StudyCard({
         </div>
         <Badge status={study.status} />
       </div>
+
+      {pains.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-content-subtle">Douleurs</p>
+          <div className="space-y-2">
+            {pains.map((p) => {
+              const meta = [
+                p.type,
+                p.intensity ? `${p.intensity}/10` : null,
+                p.restAtRest ? "présente au repos" : null,
+                p.activity,
+                p.duration,
+              ].filter(Boolean);
+              return (
+                <div key={p.id} className="rounded-lg border border-border bg-surface-muted/40 px-3 py-2">
+                  <p className="text-sm font-medium text-content">{p.location}</p>
+                  {meta.length > 0 && (
+                    <p className="mt-0.5 text-xs text-content-muted">{meta.join(" · ")}</p>
+                  )}
+                  {(p.aggravatingFactors || p.relievingFactors) && (
+                    <p className="mt-1 text-xs text-content-subtle">
+                      {p.aggravatingFactors && <span>↑ {p.aggravatingFactors}</span>}
+                      {p.aggravatingFactors && p.relievingFactors && <span> · </span>}
+                      {p.relievingFactors && <span>↓ {p.relievingFactors}</span>}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {rows.length > 0 && (
         <div className="mt-4">
@@ -189,6 +223,20 @@ export function StudyCard({
         <div className="mt-3">
           <p className="text-xs font-medium uppercase tracking-wide text-content-subtle">Observations</p>
           <p className="mt-1 text-sm text-content">{study.observations}</p>
+        </div>
+      )}
+
+      {study.summary && (
+        <div className="mt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-content-subtle">Bilan</p>
+          <p className="mt-1 whitespace-pre-line text-sm text-content">{study.summary}</p>
+        </div>
+      )}
+
+      {study.recommendations && (
+        <div className="mt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-content-subtle">Recommandations</p>
+          <p className="mt-1 whitespace-pre-line text-sm text-content">{study.recommendations}</p>
         </div>
       )}
 

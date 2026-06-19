@@ -1,10 +1,36 @@
 import { create } from "zustand";
-import type { StudyMeasureValue, StudyRiderMeasureValue } from "@/types";
+import type { StudyMeasureValue, StudyRiderMeasureValue, StudyPainInput } from "@/types";
 import type { PhysioValue, StudyPhysioResult } from "@/lib/physio";
 
-// Steps: 1 Vélo · 2 Tests physio · 3 Mesures vélo avant · 4 Mesures cycliste ·
-// 5 Mesures vélo après · 6 Composants · 7 Exercices
-export type StudyStep = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+// Steps: 1 Vélo · 2 Douleurs · 3 Tests physio · 4 Mesures vélo avant ·
+// 5 Mesures cycliste · 6 Mesures vélo après · 7 Composants · 8 Exercices ·
+// 9 Récapitulatif & bilan
+export type StudyStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+/**
+ * Une douleur en cours de saisie. Identique à StudyPainInput mais avec une clé
+ * locale stable (`key`) pour le rendu React, indépendante de la persistance.
+ */
+export interface PainDraft extends StudyPainInput {
+  key: string;
+}
+
+let painKeySeq = 0;
+/** Crée un bloc douleur vierge (ou pré-rempli) avec une clé locale stable. */
+export function makePainDraft(partial: Partial<StudyPainInput> = {}): PainDraft {
+  return {
+    key: `pain-${painKeySeq++}`,
+    location: "",
+    type: "",
+    intensity: "",
+    restAtRest: false,
+    activity: "",
+    duration: "",
+    aggravatingFactors: "",
+    relievingFactors: "",
+    ...partial,
+  };
+}
 
 interface StudyStoreState {
   patientId: string;
@@ -26,7 +52,12 @@ interface StudyStoreState {
   physioResults: Record<string, PhysioValue>;
   // Commentaire libre optionnel par test physio (accordéon), indexé par physioTestId.
   physioComments: Record<string, string>;
+  // Douleurs structurées (étape Douleurs), dans l'ordre d'affichage.
+  pains: PainDraft[];
   observations: string;
+  // Étape Récapitulatif & bilan.
+  summary: string;
+  recommendations: string;
   selectedComponentIds: string[];
   selectedExerciseIds: string[];
 }
@@ -43,7 +74,12 @@ interface StudyStoreActions {
   removeExtraRiderMeasurement: (riderMeasurementId: string) => void;
   setPhysioValue: (physioTestId: string, value: PhysioValue) => void;
   setPhysioComment: (physioTestId: string, comment: string) => void;
+  addPain: () => void;
+  removePain: (key: string) => void;
+  setPainField: <K extends keyof StudyPainInput>(key: string, field: K, value: StudyPainInput[K]) => void;
   setObservations: (text: string) => void;
+  setSummary: (text: string) => void;
+  setRecommendations: (text: string) => void;
   toggleComponent: (id: string) => void;
   toggleExercise: (id: string) => void;
   setDraftStudyId: (id: string | null) => void;
@@ -61,7 +97,10 @@ const DEFAULT_STATE: StudyStoreState = {
   extraRiderMeasurementIds: [],
   physioResults: {},
   physioComments: {},
+  pains: [],
   observations: "",
+  summary: "",
+  recommendations: "",
   selectedComponentIds: [],
   selectedExerciseIds: [],
 };
@@ -102,6 +141,29 @@ export function physioResultsToArray(
     const comment = comments[physioTestId]?.trim() || null;
     return { physioTestId, value, comment };
   });
+}
+
+/**
+ * Serialises the pain drafts into the shape the action expects. Drops blocks
+ * with no `location` (empty rows the kiné never filled) and trims every field.
+ */
+export function painsToArray(pains: PainDraft[]): StudyPainInput[] {
+  const clean = (s: string) => {
+    const t = s.trim();
+    return t === "" ? undefined : t;
+  };
+  return pains
+    .filter((p) => p.location.trim() !== "")
+    .map((p) => ({
+      location: p.location.trim(),
+      type: clean(p.type ?? ""),
+      intensity: clean(p.intensity ?? ""),
+      restAtRest: p.restAtRest,
+      activity: clean(p.activity ?? ""),
+      duration: clean(p.duration ?? ""),
+      aggravatingFactors: clean(p.aggravatingFactors ?? ""),
+      relievingFactors: clean(p.relievingFactors ?? ""),
+    }));
 }
 
 export const useStudyStore = create<StudyStoreState & StudyStoreActions>((set) => ({
@@ -184,7 +246,21 @@ export const useStudyStore = create<StudyStoreState & StudyStoreActions>((set) =
       physioComments: { ...s.physioComments, [physioTestId]: comment },
     })),
 
+  addPain: () => set((s) => ({ pains: [...s.pains, makePainDraft()] })),
+
+  removePain: (key) =>
+    set((s) => ({ pains: s.pains.filter((p) => p.key !== key) })),
+
+  setPainField: (key, field, value) =>
+    set((s) => ({
+      pains: s.pains.map((p) => (p.key === key ? { ...p, [field]: value } : p)),
+    })),
+
   setObservations: (observations) => set({ observations }),
+
+  setSummary: (summary) => set({ summary }),
+
+  setRecommendations: (recommendations) => set({ recommendations }),
 
   toggleComponent: (id) =>
     set((s) => ({

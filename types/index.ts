@@ -2,6 +2,7 @@ import type {
   Patient,
   PatientIntake,
   Study,
+  StudyPain,
   Followup,
   BikeComponent,
   BikeType,
@@ -13,7 +14,20 @@ import type {
   ExerciseCategory,
 } from "@prisma/client";
 
-export type { StudyStatus, Role, ComponentCategory, ExerciseCategory };
+export type { StudyStatus, Role, ComponentCategory, ExerciseCategory, StudyPain };
+
+/** Une douleur structurée saisie/transmise au serveur (sans id ni order : l'ordre
+ * est dérivé de la position dans le tableau). */
+export interface StudyPainInput {
+  location: string;
+  type?: string;
+  intensity?: string;
+  restAtRest: boolean;
+  activity?: string;
+  duration?: string;
+  aggravatingFactors?: string;
+  relievingFactors?: string;
+}
 
 /** Une valeur de côte saisie pour une étude (avant/après). */
 export interface StudyMeasureValue {
@@ -64,6 +78,7 @@ export type StudyWithLibrary = Study & {
   bikeType: BikeType;
   componentsUsed: BikeComponent[];
   exercisesPrescribed: Exercise[];
+  pains: StudyPain[];
 };
 
 export type PatientWithRelations = Patient & {
@@ -86,6 +101,7 @@ export type StudyForReport = Study & {
   bikeType: BikeType;
   componentsUsed: BikeComponent[];
   exercisesPrescribed: Exercise[];
+  pains: StudyPain[];
   patient: Patient & { intake: PatientIntake | null };
   kine: User;
 };

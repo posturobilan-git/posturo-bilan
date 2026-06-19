@@ -62,8 +62,8 @@ interface Props {
   measureCount: number;
   onToggle: (id: string) => void;
   onBack: () => void;
-  onSubmit: () => void;
-  submitting: boolean;
+  onNext: () => void;
+  saving: boolean;
 }
 
 export function ExercisePicker({
@@ -74,8 +74,8 @@ export function ExercisePicker({
   measureCount,
   onToggle,
   onBack,
-  onSubmit,
-  submitting,
+  onNext,
+  saving,
 }: Props) {
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState<ExerciseCategory | "">("");
@@ -165,8 +165,8 @@ export function ExercisePicker({
 
       <div className="flex justify-between pt-2">
         <Button variant="secondary" onClick={onBack}>← Étape précédente</Button>
-        <Button onClick={onSubmit} loading={submitting}>
-          Soumettre l&apos;étude ✓
+        <Button onClick={onNext} loading={saving}>
+          Étape suivante →
         </Button>
       </div>
     </div>

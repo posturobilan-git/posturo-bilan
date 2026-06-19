@@ -63,7 +63,11 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
           patientId: id,
           ...(kine.role !== "ADMIN" && { kineId: kine.id }),
         },
-        include: { componentsUsed: true, exercisesPrescribed: true },
+        include: {
+          componentsUsed: true,
+          exercisesPrescribed: true,
+          pains: { orderBy: { order: "asc" } },
+        },
       })
     : null;
 
@@ -106,7 +110,19 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
         riderMeasureValues,
         physioResults,
         physioComments,
+        pains: study.pains.map((p) => ({
+          location: p.location,
+          type: p.type ?? "",
+          intensity: p.intensity ?? "",
+          restAtRest: p.restAtRest,
+          activity: p.activity ?? "",
+          duration: p.duration ?? "",
+          aggravatingFactors: p.aggravatingFactors ?? "",
+          relievingFactors: p.relievingFactors ?? "",
+        })),
         observations: study.observations ?? "",
+        summary: study.summary ?? "",
+        recommendations: study.recommendations ?? "",
         componentIds: study.componentsUsed.map((c) => c.id),
         exerciseIds: study.exercisesPrescribed.map((e) => e.id),
       }
