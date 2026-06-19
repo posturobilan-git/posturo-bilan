@@ -90,6 +90,7 @@ model User {
   components   BikeComponent[]
   bikeTypes    BikeType[]
   measurements Measurement[]
+  riderMeasurements RiderMeasurement[]
   physioTests  PhysioTest[]
   physioTestSections PhysioTestSection[]
   auditLogs    AuditLog[]
@@ -179,6 +180,7 @@ model BikeType {
 
   studies          Study[]
   measurementLinks BikeTypeMeasurement[]
+  riderMeasurementLinks BikeTypeRiderMeasurement[]
   physioTestLinks  BikeTypePhysioTest[]
   components        BikeComponent[]       @relation("BikeTypeComponents")
 
@@ -230,6 +232,50 @@ model BikeTypeMeasurement {
 
   @@id([bikeTypeId, measurementId])
   @@index([measurementId])
+}
+
+// Une mesure du cycliste relevée sur le vélo pendant une étude (KOPS, angle de
+// genou, angle de tronc, flexion de coude...). Distincte de `Measurement` (qui
+// mesure le vélo seul) : structure de configuration identique (tronc commun ou
+// spécifique à des types de vélo, ordre, isRequired), mais l'avant et l'après
+// sont saisis sur la même étape du formulaire d'étude. Gérée par l'admin (CRUD).
+model RiderMeasurement {
+  id          String   @id @default(uuid())
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  name        String              // "KOPS", "Angle du genou en bas de pédalage"...
+  unit        String              // "mm", "cm", "°"
+  category    MeasurementCategory @default(POSITION)
+  isCommon    Boolean             @default(false) // tronc commun (tous les vélos)
+  isActive    Boolean             @default(true)
+  isRequired  Boolean             @default(false) // saisie obligatoire dans l'étude
+
+  // Ordre d'affichage global du tronc commun (mesures communes uniquement).
+  commonOrder Int                 @default(0)
+
+  // Si non commune, liée à un ou plusieurs types de vélo via la table de
+  // configuration (qui porte aussi l'ordre d'affichage propre à chaque vélo).
+  bikeTypeLinks BikeTypeRiderMeasurement[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+}
+
+// Configuration des mesures du cycliste par type de vélo (même rôle que
+// BikeTypeMeasurement pour les côtes : sélection + ordre d'affichage).
+model BikeTypeRiderMeasurement {
+  bikeTypeId         String
+  bikeType           BikeType         @relation(fields: [bikeTypeId], references: [id], onDelete: Cascade)
+  riderMeasurementId String
+  riderMeasurement   RiderMeasurement @relation(fields: [riderMeasurementId], references: [id], onDelete: Cascade)
+
+  order Int @default(0)
+
+  @@id([bikeTypeId, riderMeasurementId])
+  @@index([riderMeasurementId])
 }
 
 // Un test physiologique relevé pendant une étude. Même logique que Measurement
@@ -314,6 +360,11 @@ model Study {
   // Valeurs des côtes saisies pour cette étude : avant/après par côte.
   // Tableau de { measurementId, before, after } — voir StudyMeasureValue.
   measureValues Json @default("[]")
+
+  // Valeurs des mesures du cycliste saisies pour cette étude : avant/après par
+  // mesure. Tableau de { riderMeasurementId, before, after } — voir
+  // StudyRiderMeasureValue. Avant et après sont saisis sur la même étape.
+  riderMeasureValues Json @default("[]")
 
   // Résultats des tests physiologiques : avant/après par test. Tableau de
   // { physioTestId, before, after } où before/after est number|boolean|string|null

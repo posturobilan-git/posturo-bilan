@@ -5,13 +5,16 @@ import { useRouter } from "next/navigation";
 import {
   useStudyStore,
   measureValuesToArray,
+  riderMeasureValuesToArray,
   physioResultsToArray,
+  type StudyStep,
 } from "@/lib/stores/studyStore";
 import { toast } from "@/lib/stores/toastStore";
 import { saveDraftStudy, submitStudy } from "@/actions/study.actions";
 import { StudyStepper } from "./StudyStepper";
 import { BikeTypeStep } from "./BikeTypeStep";
 import { MeasuresForm, type MeasurementForStudy } from "./MeasuresForm";
+import { RiderMeasuresForm, type RiderMeasurementForStudy } from "./RiderMeasuresForm";
 import { PhysioTestsForm, type PhysioTestForStudy } from "./PhysioTestsForm";
 import { ComponentPicker, type ComponentForStudy } from "./ComponentPicker";
 import { ExercisePicker } from "./ExercisePicker";
@@ -22,6 +25,7 @@ interface Props {
   patient: Patient & { intake: PatientIntake | null };
   bikeTypes: BikeType[];
   measurements: MeasurementForStudy[];
+  riderMeasurements: RiderMeasurementForStudy[];
   physioTests: PhysioTestForStudy[];
   components: ComponentForStudy[];
   exercises: Exercise[];
@@ -30,6 +34,7 @@ interface Props {
     studyId: string;
     bikeTypeId: string;
     measureValues: Record<string, { before: number | null; after: number | null }>;
+    riderMeasureValues: Record<string, { before: number | null; after: number | null }>;
     physioResults: Record<string, PhysioValue>;
     physioComments: Record<string, string>;
     observations: string;
@@ -42,6 +47,7 @@ export function StudyForm({
   patient,
   bikeTypes,
   measurements,
+  riderMeasurements,
   physioTests,
   components,
   exercises,
@@ -70,11 +76,28 @@ export function StudyForm({
       (id) => !configuredIds.has(id) && knownIds.has(id)
     );
 
+    // Same restore logic for the mesures du cycliste added on the fly.
+    const configuredRiderIds = new Set(
+      riderMeasurements
+        .filter(
+          (m) =>
+            m.isCommon ||
+            m.bikeTypeLinks.some((b) => b.bikeTypeId === initial?.bikeTypeId)
+        )
+        .map((m) => m.id)
+    );
+    const knownRiderIds = new Set(riderMeasurements.map((m) => m.id));
+    const extraRiderMeasurementIds = Object.keys(initial?.riderMeasureValues ?? {}).filter(
+      (id) => !configuredRiderIds.has(id) && knownRiderIds.has(id)
+    );
+
     store.init(patient.id, {
       draftStudyId: initial?.studyId ?? null,
       bikeTypeId: initial?.bikeTypeId ?? null,
       measureValues: initial?.measureValues ?? {},
       extraMeasurementIds,
+      riderMeasureValues: initial?.riderMeasureValues ?? {},
+      extraRiderMeasurementIds,
       physioResults: initial?.physioResults ?? {},
       physioComments: initial?.physioComments ?? {},
       observations: initial?.observations ?? "",
@@ -93,6 +116,7 @@ export function StudyForm({
       draftStudyId: store.draftStudyId ?? undefined,
       bikeTypeId: store.bikeTypeId ?? "",
       measureValues: measureValuesToArray(store.measureValues),
+      riderMeasureValues: riderMeasureValuesToArray(store.riderMeasureValues),
       physioResults: physioResultsToArray(store.physioResults, store.physioComments),
       observations: store.observations || undefined,
       componentIds: store.selectedComponentIds,
@@ -135,10 +159,24 @@ export function StudyForm({
     return missing;
   }
 
+  /** Required mesures du cycliste applicable to the bike type with no "before" yet. */
+  function missingRequiredRiderMeasures(): string[] {
+    const btId = store.bikeTypeId;
+    const missing: string[] = [];
+    for (const m of riderMeasurements) {
+      if (!m.isRequired) continue;
+      const applies = m.isCommon || m.bikeTypeLinks.some((b) => b.bikeTypeId === btId);
+      if (!applies) continue;
+      if (store.riderMeasureValues[m.id]?.before == null) missing.push(m.name);
+    }
+    return missing;
+  }
+
   /** Missing required fields owned by the given step (the one being left). */
   function missingForStep(step: number): string[] {
     if (step === 2) return missingRequiredTests(); // Tests physio
-    if (step === 3) return missingRequiredMeasures(); // Mesures avant
+    if (step === 3) return missingRequiredMeasures(); // Mesures vélo (avant)
+    if (step === 4) return missingRequiredRiderMeasures(); // Mesures cycliste
     return [];
   }
 
@@ -149,7 +187,7 @@ export function StudyForm({
    * required côte/test on the current step is still empty (drafts may stay
    * partial, but you can't step past an unfilled required field).
    */
-  function advanceTo(step: 2 | 3 | 4 | 5 | 6) {
+  function advanceTo(step: 2 | 3 | 4 | 5 | 6 | 7) {
     const missing = missingForStep(store.step);
     if (missing.length > 0) {
       toast.error(`Champs obligatoires manquants : ${missing.join(", ")}.`);
@@ -157,6 +195,29 @@ export function StudyForm({
     }
     startSave(async () => {
       if (await persistDraft()) store.setStep(step);
+    });
+  }
+
+  /**
+   * Jumps to an arbitrary step via the stepper. Going back is always allowed and
+   * instant. Going forward persists the draft first and refuses to skip over a
+   * step whose required côtes/tests are still empty (same guard as Next).
+   */
+  function goToStep(target: StudyStep) {
+    if (target === store.step) return;
+    if (target < store.step) {
+      store.setStep(target);
+      return;
+    }
+    for (let s = store.step; s < target; s++) {
+      const missing = missingForStep(s);
+      if (missing.length > 0) {
+        toast.error(`Champs obligatoires manquants : ${missing.join(", ")}.`);
+        return;
+      }
+    }
+    startSave(async () => {
+      if (await persistDraft()) store.setStep(target);
     });
   }
 
@@ -168,7 +229,11 @@ export function StudyForm({
 
   function handleSubmit() {
     // Final safety net — covers every required field regardless of step.
-    const missing = [...missingRequiredTests(), ...missingRequiredMeasures()];
+    const missing = [
+      ...missingRequiredTests(),
+      ...missingRequiredMeasures(),
+      ...missingRequiredRiderMeasures(),
+    ];
     if (missing.length > 0) {
       toast.error(`Champs obligatoires manquants : ${missing.join(", ")}.`);
       return;
@@ -179,6 +244,7 @@ export function StudyForm({
         draftStudyId: store.draftStudyId ?? undefined,
         bikeTypeId: store.bikeTypeId ?? "",
         measureValues: measureValuesToArray(store.measureValues),
+        riderMeasureValues: riderMeasureValuesToArray(store.riderMeasureValues),
         physioResults: physioResultsToArray(store.physioResults, store.physioComments),
         observations: store.observations || undefined,
         componentIds: store.selectedComponentIds,
@@ -193,7 +259,7 @@ export function StudyForm({
     });
   }
 
-  // Shared props for the two measurement phases (avant / après).
+  // Shared props for the two bike-measurement phases (avant / après).
   const measureStepProps = {
     measurements,
     bikeTypeId: store.bikeTypeId,
@@ -210,7 +276,7 @@ export function StudyForm({
 
   return (
     <div className="space-y-6">
-      <StudyStepper current={store.step} />
+      <StudyStepper current={store.step} onStepClick={goToStep} />
 
       {store.step === 1 && (
         <BikeTypeStep
@@ -247,26 +313,42 @@ export function StudyForm({
       )}
 
       {store.step === 4 && (
-        <MeasuresForm
-          {...measureStepProps}
-          phase="after"
+        <RiderMeasuresForm
+          riderMeasurements={riderMeasurements}
+          bikeTypeId={store.bikeTypeId}
+          values={store.riderMeasureValues}
+          extraRiderMeasurementIds={store.extraRiderMeasurementIds}
+          onSetValue={store.setRiderMeasureValue}
+          onAddExtra={store.addExtraRiderMeasurement}
+          onRemoveExtra={store.removeExtraRiderMeasurement}
           onBack={() => store.setStep(3)}
           onNext={() => advanceTo(5)}
+          onSaveDraft={handleSaveDraft}
+          saving={saving}
         />
       )}
 
       {store.step === 5 && (
-        <ComponentPicker
-          components={components}
-          bikeTypeId={store.bikeTypeId}
-          selected={store.selectedComponentIds}
-          onToggle={store.toggleComponent}
+        <MeasuresForm
+          {...measureStepProps}
+          phase="after"
           onBack={() => store.setStep(4)}
           onNext={() => advanceTo(6)}
         />
       )}
 
       {store.step === 6 && (
+        <ComponentPicker
+          components={components}
+          bikeTypeId={store.bikeTypeId}
+          selected={store.selectedComponentIds}
+          onToggle={store.toggleComponent}
+          onBack={() => store.setStep(5)}
+          onNext={() => advanceTo(7)}
+        />
+      )}
+
+      {store.step === 7 && (
         <ExercisePicker
           exercises={exercises}
           components={components}
@@ -274,7 +356,7 @@ export function StudyForm({
           selectedComponentIds={store.selectedComponentIds}
           measureCount={measureValuesToArray(store.measureValues).length}
           onToggle={store.toggleExercise}
-          onBack={() => store.setStep(5)}
+          onBack={() => store.setStep(6)}
           onSubmit={handleSubmit}
           submitting={submitting}
         />

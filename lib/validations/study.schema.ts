@@ -8,6 +8,14 @@ export const studyMeasureValueSchema = z.object({
   after: z.number().nullable().optional(),
 });
 
+// Une valeur de mesure du cycliste : avant/après. Les deux sont saisis sur la
+// même étape ; tous deux optionnels (saisie partielle autorisée en brouillon).
+export const studyRiderMeasureValueSchema = z.object({
+  riderMeasurementId: z.string().uuid(),
+  before: z.number().nullable().optional(),
+  after: z.number().nullable().optional(),
+});
+
 // Un résultat de test physio : une seule valeur, dont le type dépend de
 // l'outputType du test (number pour VALUE, boolean pour YES_NO / POSITIVE_NEGATIVE),
 // plus un commentaire libre optionnel commun à tous les types.
@@ -23,6 +31,7 @@ export const studySchema = z.object({
   draftStudyId: z.string().uuid().optional(),
   bikeTypeId: z.string().uuid({ message: "Sélectionnez un type de vélo." }),
   measureValues: z.array(studyMeasureValueSchema).default([]),
+  riderMeasureValues: z.array(studyRiderMeasureValueSchema).default([]),
   physioResults: z.array(studyPhysioResultSchema).default([]),
   observations: z.string().max(3000).optional(),
   componentIds: z.array(z.string().uuid()),

@@ -4,7 +4,13 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ReportActions } from "@/components/patients/ReportActions";
 import { StudyDeleteButton } from "@/components/patients/StudyDeleteButton";
-import type { StudyWithLibrary, StudyMeasureValue, MeasurementInfo } from "@/types";
+import { MeasureDelta } from "@/components/study/MeasureDelta";
+import type {
+  StudyWithLibrary,
+  StudyMeasureValue,
+  StudyRiderMeasureValue,
+  MeasurementInfo,
+} from "@/types";
 import {
   formatPhysioValue,
   hasPhysioValue,
@@ -22,12 +28,14 @@ export function StudyCard({
   patientId,
   canEdit,
   measurementsById,
+  riderMeasurementsById,
   physioTestsById,
 }: {
   study: StudyWithLibrary;
   patientId: string;
   canEdit: boolean;
   measurementsById: Record<string, MeasurementInfo>;
+  riderMeasurementsById: Record<string, MeasurementInfo>;
   physioTestsById: Record<string, PhysioTestInfo>;
 }) {
   const values = (study.measureValues as StudyMeasureValue[] | null) ?? [];
@@ -35,6 +43,13 @@ export function StudyCard({
   const rows = values
     .map((v) => ({ value: v, info: measurementsById[v.measurementId] }))
     .filter((r): r is { value: StudyMeasureValue; info: MeasurementInfo } => Boolean(r.info))
+    .sort((a, b) => a.info.name.localeCompare(b.info.name));
+
+  // Mesures du cycliste — same resolution, with the avant/après/delta layout.
+  const riderValues = (study.riderMeasureValues as StudyRiderMeasureValue[] | null) ?? [];
+  const riderRows = riderValues
+    .map((v) => ({ value: v, info: riderMeasurementsById[v.riderMeasurementId] }))
+    .filter((r): r is { value: StudyRiderMeasureValue; info: MeasurementInfo } => Boolean(r.info))
     .sort((a, b) => a.info.name.localeCompare(b.info.name));
 
   // Same resolution for the physio test results. Keep rows with a value OR a comment.
@@ -69,25 +84,58 @@ export function StudyCard({
       </div>
 
       {rows.length > 0 && (
-        <div className="mt-4 overflow-hidden rounded-lg border border-border">
-          <table className="min-w-full text-sm">
-            <thead className="bg-surface-muted">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-subtle">Côte</th>
-                <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-content-subtle">Avant</th>
-                <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-content-subtle">Après</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map(({ value, info }) => (
-                <tr key={value.measurementId}>
-                  <td className="px-3 py-1.5 text-content">{info.name}</td>
-                  <td className="px-3 py-1.5 text-right text-content-muted">{fmt(value.before, info.unit)}</td>
-                  <td className="px-3 py-1.5 text-right font-medium text-content">{fmt(value.after, info.unit)}</td>
+        <div className="mt-4">
+          <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-content-subtle">Mesures du vélo</p>
+          <div className="overflow-hidden rounded-lg border border-border">
+            <table className="min-w-full text-sm">
+              <thead className="bg-surface-muted">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-subtle">Mesure du vélo</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-content-subtle">Avant</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-content-subtle">Après</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-content-subtle">Δ</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rows.map(({ value, info }) => (
+                  <tr key={value.measurementId}>
+                    <td className="px-3 py-1.5 text-content">{info.name}</td>
+                    <td className="px-3 py-1.5 text-right text-content-muted">{fmt(value.before, info.unit)}</td>
+                    <td className="px-3 py-1.5 text-right font-medium text-content">{fmt(value.after, info.unit)}</td>
+                    <td className="px-3 py-1.5 text-right"><MeasureDelta before={value.before} after={value.after} unit={info.unit} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {riderRows.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-content-subtle">Mesures du cycliste sur vélo</p>
+          <div className="overflow-hidden rounded-lg border border-border">
+            <table className="min-w-full text-sm">
+              <thead className="bg-surface-muted">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-content-subtle">Mesure du cycliste</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-content-subtle">Avant</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-content-subtle">Après</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-content-subtle">Δ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {riderRows.map(({ value, info }) => (
+                  <tr key={value.riderMeasurementId}>
+                    <td className="px-3 py-1.5 text-content">{info.name}</td>
+                    <td className="px-3 py-1.5 text-right text-content-muted">{fmt(value.before, info.unit)}</td>
+                    <td className="px-3 py-1.5 text-right font-medium text-content">{fmt(value.after, info.unit)}</td>
+                    <td className="px-3 py-1.5 text-right"><MeasureDelta before={value.before} after={value.after} unit={info.unit} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

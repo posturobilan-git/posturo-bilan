@@ -76,8 +76,16 @@ async function assertStudyOwnership(studyId: string) {
  */
 async function missingRequiredFields(validated: StudyInput): Promise<string[]> {
   const { bikeTypeId } = validated;
-  const [reqMeasurements, reqTests] = await Promise.all([
+  const [reqMeasurements, reqRiderMeasurements, reqTests] = await Promise.all([
     prisma.measurement.findMany({
+      where: {
+        isActive: true,
+        isRequired: true,
+        OR: [{ isCommon: true }, { bikeTypeLinks: { some: { bikeTypeId } } }],
+      },
+      select: { id: true, name: true },
+    }),
+    prisma.riderMeasurement.findMany({
       where: {
         isActive: true,
         isRequired: true,
@@ -96,12 +104,18 @@ async function missingRequiredFields(validated: StudyInput): Promise<string[]> {
   ]);
 
   const beforeById = new Map(validated.measureValues.map((v) => [v.measurementId, v.before]));
+  const riderBeforeById = new Map(
+    validated.riderMeasureValues.map((v) => [v.riderMeasurementId, v.before])
+  );
   const resultById = new Map(validated.physioResults.map((r) => [r.physioTestId, r.value]));
   const hasValue = (v: unknown) => v !== null && v !== undefined && v !== "";
 
   const missing: string[] = [];
   for (const m of reqMeasurements) {
     if (beforeById.get(m.id) == null) missing.push(m.name);
+  }
+  for (const m of reqRiderMeasurements) {
+    if (riderBeforeById.get(m.id) == null) missing.push(m.name);
   }
   for (const t of reqTests) {
     if (!hasValue(resultById.get(t.id))) missing.push(t.name);
@@ -140,6 +154,7 @@ function studyDataFrom(validated: StudyInput) {
   return {
     bikeTypeId: validated.bikeTypeId,
     measureValues: validated.measureValues as Prisma.InputJsonValue,
+    riderMeasureValues: validated.riderMeasureValues as Prisma.InputJsonValue,
     physioResults: validated.physioResults as Prisma.InputJsonValue,
     observations: validated.observations ?? null,
   };

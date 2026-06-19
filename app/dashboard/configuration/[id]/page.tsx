@@ -4,8 +4,10 @@ import { getCurrentKine } from "@/lib/auth";
 import {
   getBikeTypeConfig,
   setBikeTypeMeasurements,
+  setBikeTypeRiderMeasurements,
   setBikeTypePhysioTests,
   setCommonMeasurementOrder,
+  setCommonRiderMeasurementOrder,
   setCommonPhysioTestOrder,
 } from "@/actions/bikeType.actions";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -29,6 +31,7 @@ export default async function BikeTypeConfigPage({
 
   // Bind the bike type id so each configurator just persists an ordered id list.
   const saveMeasurements = setBikeTypeMeasurements.bind(null, id);
+  const saveRiderMeasurements = setBikeTypeRiderMeasurements.bind(null, id);
   const savePhysioTests = setBikeTypePhysioTests.bind(null, id);
 
   return (
@@ -45,7 +48,7 @@ export default async function BikeTypeConfigPage({
 
       <PageHeader
         title={`Configuration — ${config.bikeType.name}`}
-        description="Choisissez les côtes et tests physio relevés pour ce type de vélo, et leur ordre d'affichage dans le formulaire d'étude."
+        description="Choisissez les mesures du vélo, les mesures du cycliste et les tests physio relevés pour ce type de vélo, et leur ordre d'affichage dans le formulaire d'étude."
       />
 
       <Tabs
@@ -54,17 +57,34 @@ export default async function BikeTypeConfigPage({
         tabs={[
           {
             id: "cotes",
-            label: "Côtes",
+            label: "Mesures du vélo",
             count: config.measurements.common.length + config.measurements.assigned.length,
             content: (
               <BikeTypeConfigurator
-                title="Côtes"
-                subtitle="Mesures relevées pendant l'étude (avant / après)."
+                title="Mesures du vélo"
+                subtitle="Mesures du vélo seul, relevées avant / après réglage."
                 common={config.measurements.common}
                 initialAssigned={config.measurements.assigned}
                 initialAvailable={config.measurements.available}
                 save={saveMeasurements}
                 saveCommon={setCommonMeasurementOrder}
+                canEdit
+              />
+            ),
+          },
+          {
+            id: "mesures-cycliste",
+            label: "Mesures du cycliste",
+            count: config.riderMeasurements.common.length + config.riderMeasurements.assigned.length,
+            content: (
+              <BikeTypeConfigurator
+                title="Mesures du cycliste sur vélo"
+                subtitle="Mesures du cycliste (KOPS, angles…), avant / après saisis sur la même étape."
+                common={config.riderMeasurements.common}
+                initialAssigned={config.riderMeasurements.assigned}
+                initialAvailable={config.riderMeasurements.available}
+                save={saveRiderMeasurements}
+                saveCommon={setCommonRiderMeasurementOrder}
                 canEdit
               />
             ),

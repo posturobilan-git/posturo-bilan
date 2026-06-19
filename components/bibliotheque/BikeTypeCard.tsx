@@ -43,7 +43,7 @@ export function BikeTypeCard({ bikeType, isAdmin }: { bikeType: BikeTypeWithCoun
         prefetch={false}
         className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-brand-600 transition-colors hover:text-brand-800"
       >
-        Configurer les côtes
+        Configurer l&apos;étude
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>

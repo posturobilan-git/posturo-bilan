@@ -94,6 +94,32 @@ const MEASUREMENTS: SeedMeasurement[] = [
   { name: "Avancée de selle (aéro)", unit: "mm", category: "SELLE", order: 31, isCommon: false, bikeTypes: ["Triathlon"] },
 ];
 
+// ─── Mesures du cycliste sur vélo ─────────────────────────────────────────────────
+// Même structure que les côtes du vélo, mais avant/après saisis sur la même étape.
+interface SeedRiderMeasurement {
+  name: string;
+  unit: string;
+  category: MeasurementCategory;
+  order: number;
+  isCommon: boolean;
+  isRequired?: boolean;
+  bikeTypes?: string[]; // si non commune
+}
+
+const RIDER_MEASUREMENTS: SeedRiderMeasurement[] = [
+  // Tronc commun (l'ordre `order` sert aussi de commonOrder pour les mesures communes)
+  { name: "KOPS (genou / axe de pédale)", unit: "mm", category: "POSITION", order: 1, isCommon: true, isRequired: true },
+  { name: "Angle du genou en bas de pédalage", unit: "°", category: "POSITION", order: 2, isCommon: true, isRequired: true },
+  { name: "Angle du genou en haut de pédalage", unit: "°", category: "POSITION", order: 3, isCommon: true },
+  { name: "Angle du tronc", unit: "°", category: "POSITION", order: 4, isCommon: true },
+  { name: "Flexion du coude", unit: "°", category: "POSITION", order: 5, isCommon: true },
+  // Spécifiques Route / Triathlon
+  { name: "Angle de la cheville (point bas)", unit: "°", category: "POSITION", order: 20, isCommon: false, bikeTypes: ["Route", "Triathlon"] },
+  { name: "Ouverture de hanche (aéro)", unit: "°", category: "POSITION", order: 21, isCommon: false, bikeTypes: ["Triathlon"] },
+  // Spécifiques VTT / Gravel
+  { name: "Recul du buste en descente", unit: "mm", category: "POSITION", order: 30, isCommon: false, bikeTypes: ["VTT", "Gravel"] },
+];
+
 // ─── Tests physiologiques ────────────────────────────────────────────────────────
 interface SeedPhysioTest {
   name: string;
@@ -126,6 +152,8 @@ interface SeedStudy {
   bikeType: string;
   status: StudyStatus;
   measures: StudyMeasures;
+  // Mesures du cycliste (avant/après), indexées par nom de RIDER_MEASUREMENTS.
+  riderMeasures?: Record<string, { before: number | null; after: number | null }>;
   componentNames: string[];
   exerciseNames: string[];
 }
@@ -181,6 +209,11 @@ const PATIENTS: SeedPatient[] = [
         bikeType: "Gravel",
         status: "study_completed",
         measures: { saddleHeight: 76, saddleSetback: 72, stemLength: 100, effectiveReach: 388, cleatAngle: -2, crankLength: 172.5, observations: "Recul de cale pour soulager le genou gauche." },
+        riderMeasures: {
+          "KOPS (genou / axe de pédale)": { before: 12, after: 4 },
+          "Angle du genou en bas de pédalage": { before: 142, after: 148 },
+          "Recul du buste en descente": { before: 30, after: 45 },
+        },
         componentNames: ["Selle Antares R3", "Cales SPD-SL"],
         exerciseNames: ["Renforcement VMO", "Mobilité hanche 90/90"],
       },
@@ -204,6 +237,12 @@ const PATIENTS: SeedPatient[] = [
         bikeType: "Triathlon",
         status: "report_sent",
         measures: { saddleHeight: 70, saddleSetback: 40, saddleAngle: -3, stemLength: 90, effectiveReach: 410, trunkAngle: 12, crankLength: 165, observations: "Selle avancée pour position aéro." },
+        riderMeasures: {
+          "KOPS (genou / axe de pédale)": { before: 8, after: 2 },
+          "Angle du genou en bas de pédalage": { before: 138, after: 145 },
+          "Angle du tronc": { before: 18, after: 12 },
+          "Ouverture de hanche (aéro)": { before: 52, after: 58 },
+        },
         componentNames: ["Selle SR", "Potence Pro PLT"],
         exerciseNames: ["Gainage planche", "Mobilité thoracique"],
       },
@@ -346,6 +385,40 @@ async function main() {
     measCreated++;
   }
 
+  // ── Mesures du cycliste sur vélo ──
+  let riderMeasCreated = 0;
+  for (const m of RIDER_MEASUREMENTS) {
+    const exists = await prisma.riderMeasurement.findFirst({ where: { name: m.name } });
+    if (exists) {
+      // Backfill obligatoire / ordre du tronc commun sur les mesures déjà seedées.
+      await prisma.riderMeasurement.update({
+        where: { id: exists.id },
+        data: { isRequired: m.isRequired ?? false, commonOrder: m.isCommon ? m.order : 0 },
+      });
+      continue;
+    }
+    await prisma.riderMeasurement.create({
+      data: {
+        name: m.name,
+        unit: m.unit,
+        category: m.category,
+        isCommon: m.isCommon,
+        isRequired: m.isRequired ?? false,
+        commonOrder: m.isCommon ? m.order : 0,
+        createdById: admin.id,
+        bikeTypeLinks: m.isCommon
+          ? undefined
+          : {
+              create: (m.bikeTypes ?? [])
+                .map((n) => bikeTypeByName.get(n))
+                .filter((id): id is string => Boolean(id))
+                .map((bikeTypeId) => ({ bikeTypeId, order: m.order })),
+            },
+      },
+    });
+    riderMeasCreated++;
+  }
+
   // ── Tests physiologiques ──
   let physioCreated = 0;
   for (const t of PHYSIO_TESTS) {
@@ -396,6 +469,23 @@ async function main() {
     if (id) measurementIdByLegacyKey.set(m.legacyKey, id);
   }
 
+  // Map: rider-measurement name → id (for converting the example studies' values).
+  const riderMeasurements = await prisma.riderMeasurement.findMany({ select: { id: true, name: true } });
+  const riderMeasurementIdByName = new Map(riderMeasurements.map((m) => [m.name, m.id]));
+
+  /** Converts a study's rider-measure map (by name) into before/after values. */
+  function riderMeasuresToValues(
+    riderMeasures: SeedStudy["riderMeasures"]
+  ): Array<{ riderMeasurementId: string; before: number | null; after: number | null }> {
+    const out: Array<{ riderMeasurementId: string; before: number | null; after: number | null }> = [];
+    for (const [name, v] of Object.entries(riderMeasures ?? {})) {
+      const riderMeasurementId = riderMeasurementIdByName.get(name);
+      if (!riderMeasurementId) continue;
+      out.push({ riderMeasurementId, before: v.before, after: v.after });
+    }
+    return out;
+  }
+
   /** Converts the example studies' fixed measures into before/after côte values. */
   function measuresToValues(measures: StudyMeasures): StudyMeasureValue[] {
     const out: StudyMeasureValue[] = [];
@@ -438,6 +528,7 @@ async function main() {
           bikeTypeId,
           status: s.status,
           measureValues: measuresToValues(numericMeasures) as unknown as Prisma.InputJsonValue,
+          riderMeasureValues: riderMeasuresToValues(s.riderMeasures) as unknown as Prisma.InputJsonValue,
           observations: observations ?? null,
           componentsUsed: {
             connect: s.componentNames
@@ -483,6 +574,7 @@ async function main() {
   console.log(
     `Seed terminé : ${btCreated}/${BIKE_TYPES.length} types de vélo, ` +
       `${sectionsCreated}/${PHYSIO_SECTIONS.length} sections physio, ${measCreated}/${MEASUREMENTS.length} côtes, ` +
+      `${riderMeasCreated}/${RIDER_MEASUREMENTS.length} mesures cycliste, ` +
       `${physioCreated}/${PHYSIO_TESTS.length} tests physio, ` +
       `${exCreated}/${EXERCISES.length} exercices, ${compCreated}/${COMPONENTS.length} composants ` +
       `(${compTypesLinked} associés à des types de vélo), ` +

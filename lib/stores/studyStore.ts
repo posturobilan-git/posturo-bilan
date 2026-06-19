@@ -1,10 +1,10 @@
 import { create } from "zustand";
-import type { StudyMeasureValue } from "@/types";
+import type { StudyMeasureValue, StudyRiderMeasureValue } from "@/types";
 import type { PhysioValue, StudyPhysioResult } from "@/lib/physio";
 
-// Steps: 1 Vélo · 2 Tests physio · 3 Mesures avant · 4 Mesures après ·
-// 5 Composants · 6 Exercices
-export type StudyStep = 1 | 2 | 3 | 4 | 5 | 6;
+// Steps: 1 Vélo · 2 Tests physio · 3 Mesures vélo avant · 4 Mesures cycliste ·
+// 5 Mesures vélo après · 6 Composants · 7 Exercices
+export type StudyStep = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 interface StudyStoreState {
   patientId: string;
@@ -16,6 +16,11 @@ interface StudyStoreState {
   // Côtes ajoutées à la volée pour CETTE étude uniquement (hors configuration
   // du type de vélo), dans l'ordre d'ajout.
   extraMeasurementIds: string[];
+  // Mesures du cycliste saisies, indexées par riderMeasurementId. Avant et après
+  // sont saisis sur la même étape.
+  riderMeasureValues: Record<string, { before: number | null; after: number | null }>;
+  // Mesures du cycliste ajoutées à la volée pour CETTE étude uniquement.
+  extraRiderMeasurementIds: string[];
   // Résultat (unique) des tests physio, indexé par physioTestId. La valeur est
   // number|boolean|string|null selon l'outputType du test.
   physioResults: Record<string, PhysioValue>;
@@ -33,6 +38,9 @@ interface StudyStoreActions {
   setMeasureValue: (measurementId: string, field: "before" | "after", value: number | null) => void;
   addExtraMeasurement: (measurementId: string) => void;
   removeExtraMeasurement: (measurementId: string) => void;
+  setRiderMeasureValue: (riderMeasurementId: string, field: "before" | "after", value: number | null) => void;
+  addExtraRiderMeasurement: (riderMeasurementId: string) => void;
+  removeExtraRiderMeasurement: (riderMeasurementId: string) => void;
   setPhysioValue: (physioTestId: string, value: PhysioValue) => void;
   setPhysioComment: (physioTestId: string, comment: string) => void;
   setObservations: (text: string) => void;
@@ -49,6 +57,8 @@ const DEFAULT_STATE: StudyStoreState = {
   bikeTypeId: null,
   measureValues: {},
   extraMeasurementIds: [],
+  riderMeasureValues: {},
+  extraRiderMeasurementIds: [],
   physioResults: {},
   physioComments: {},
   observations: "",
@@ -63,6 +73,15 @@ export function measureValuesToArray(
   return Object.entries(values)
     .filter(([, v]) => v.before != null || v.after != null)
     .map(([measurementId, v]) => ({ measurementId, before: v.before, after: v.after }));
+}
+
+/** Serialises the riderMeasureValues map into the array shape the action expects. */
+export function riderMeasureValuesToArray(
+  values: StudyStoreState["riderMeasureValues"]
+): StudyRiderMeasureValue[] {
+  return Object.entries(values)
+    .filter(([, v]) => v.before != null || v.after != null)
+    .map(([riderMeasurementId, v]) => ({ riderMeasurementId, before: v.before, after: v.after }));
 }
 
 /**
@@ -122,6 +141,36 @@ export const useStudyStore = create<StudyStoreState & StudyStoreActions>((set) =
       return {
         extraMeasurementIds: s.extraMeasurementIds.filter((id) => id !== measurementId),
         measureValues,
+      };
+    }),
+
+  setRiderMeasureValue: (riderMeasurementId, field, value) =>
+    set((s) => ({
+      riderMeasureValues: {
+        ...s.riderMeasureValues,
+        [riderMeasurementId]: {
+          before: s.riderMeasureValues[riderMeasurementId]?.before ?? null,
+          after: s.riderMeasureValues[riderMeasurementId]?.after ?? null,
+          [field]: value,
+        },
+      },
+    })),
+
+  addExtraRiderMeasurement: (riderMeasurementId) =>
+    set((s) =>
+      s.extraRiderMeasurementIds.includes(riderMeasurementId)
+        ? s
+        : { extraRiderMeasurementIds: [...s.extraRiderMeasurementIds, riderMeasurementId] }
+    ),
+
+  removeExtraRiderMeasurement: (riderMeasurementId) =>
+    set((s) => {
+      // Drop the row and any values typed into it.
+      const riderMeasureValues = { ...s.riderMeasureValues };
+      delete riderMeasureValues[riderMeasurementId];
+      return {
+        extraRiderMeasurementIds: s.extraRiderMeasurementIds.filter((id) => id !== riderMeasurementId),
+        riderMeasureValues,
       };
     }),
 

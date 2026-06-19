@@ -59,6 +59,7 @@ export interface ConfigLists {
 export interface BikeTypeConfig {
   bikeType: Pick<BikeType, "id" | "name">;
   measurements: ConfigLists;
+  riderMeasurements: ConfigLists;
   physioTests: ConfigLists;
 }
 
@@ -80,6 +81,9 @@ export async function getBikeTypeConfig(bikeTypeId: string): Promise<BikeTypeCon
     mCommon,
     mLinks,
     mOthers,
+    rmCommon,
+    rmLinks,
+    rmOthers,
     pCommon,
     pLinks,
     pOthers,
@@ -95,6 +99,21 @@ export async function getBikeTypeConfig(bikeTypeId: string): Promise<BikeTypeCon
       orderBy: { order: "asc" },
     }),
     prisma.measurement.findMany({
+      where: { isActive: true, isCommon: false, bikeTypeLinks: { none: { bikeTypeId } } },
+      select: { id: true, name: true, unit: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.riderMeasurement.findMany({
+      where: { isActive: true, isCommon: true },
+      select: { id: true, name: true, unit: true },
+      orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
+    }),
+    prisma.bikeTypeRiderMeasurement.findMany({
+      where: { bikeTypeId, riderMeasurement: { isActive: true, isCommon: false } },
+      include: { riderMeasurement: { select: { id: true, name: true, unit: true } } },
+      orderBy: { order: "asc" },
+    }),
+    prisma.riderMeasurement.findMany({
       where: { isActive: true, isCommon: false, bikeTypeLinks: { none: { bikeTypeId } } },
       select: { id: true, name: true, unit: true },
       orderBy: { name: "asc" },
@@ -134,6 +153,11 @@ export async function getBikeTypeConfig(bikeTypeId: string): Promise<BikeTypeCon
       common: mCommon.map(asMeasure),
       assigned: mLinks.map((l) => asMeasure(l.measurement)),
       available: mOthers.map(asMeasure),
+    },
+    riderMeasurements: {
+      common: rmCommon.map(asMeasure),
+      assigned: rmLinks.map((l) => asMeasure(l.riderMeasurement)),
+      available: rmOthers.map(asMeasure),
     },
     physioTests: {
       common: pCommon.map(asPhysio),
@@ -194,6 +218,59 @@ export async function setBikeTypeMeasurements(
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
     console.error("setBikeTypeMeasurements failed:", e);
+    return fail("Impossible d'enregistrer la configuration. Réessayez.");
+  }
+}
+
+/**
+ * Replaces the ordered set of (non-common) mesures du cycliste configured for a
+ * bike type. Mirrors setBikeTypeMeasurements; common mesures are implicit.
+ */
+export async function setBikeTypeRiderMeasurements(
+  bikeTypeId: string,
+  riderMeasurementIds: string[]
+): Promise<ActionResult<void>> {
+  try {
+    const admin = await requireAdmin();
+
+    const bikeType = await prisma.bikeType.findUnique({
+      where: { id: bikeTypeId },
+      select: { id: true },
+    });
+    if (!bikeType) return fail("Type de vélo introuvable.");
+
+    // Ignore any common mesures that slipped in — they apply to all bike types.
+    const valid = await prisma.riderMeasurement.findMany({
+      where: { id: { in: riderMeasurementIds }, isCommon: false },
+      select: { id: true },
+    });
+    const validIds = new Set(valid.map((m) => m.id));
+    const ordered = riderMeasurementIds.filter((id) => validIds.has(id));
+
+    await prisma.$transaction([
+      prisma.bikeTypeRiderMeasurement.deleteMany({ where: { bikeTypeId } }),
+      ...(ordered.length
+        ? [
+            prisma.bikeTypeRiderMeasurement.createMany({
+              data: ordered.map((riderMeasurementId, order) => ({ bikeTypeId, riderMeasurementId, order })),
+            }),
+          ]
+        : []),
+    ]);
+
+    await logAudit({
+      userId: admin.id,
+      action: "UPDATE",
+      entity: "bikeType",
+      entityId: bikeTypeId,
+      metadata: { config: "riderMeasurements", count: ordered.length },
+    });
+    revalidatePath(`/dashboard/configuration/${bikeTypeId}`);
+    revalidatePath("/dashboard/configuration");
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
+    console.error("setBikeTypeRiderMeasurements failed:", e);
     return fail("Impossible d'enregistrer la configuration. Réessayez.");
   }
 }
@@ -285,6 +362,41 @@ export async function setCommonMeasurementOrder(
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
     console.error("setCommonMeasurementOrder failed:", e);
+    return fail("Impossible d'enregistrer l'ordre du tronc commun. Réessayez.");
+  }
+}
+
+/** Mirrors setCommonMeasurementOrder for the common-trunk mesures du cycliste. */
+export async function setCommonRiderMeasurementOrder(
+  riderMeasurementIds: string[]
+): Promise<ActionResult<void>> {
+  try {
+    const admin = await requireAdmin();
+    const valid = await prisma.riderMeasurement.findMany({
+      where: { id: { in: riderMeasurementIds }, isCommon: true },
+      select: { id: true },
+    });
+    const validIds = new Set(valid.map((m) => m.id));
+    const ordered = riderMeasurementIds.filter((id) => validIds.has(id));
+
+    await prisma.$transaction(
+      ordered.map((id, commonOrder) =>
+        prisma.riderMeasurement.update({ where: { id }, data: { commonOrder } })
+      )
+    );
+
+    await logAudit({
+      userId: admin.id,
+      action: "UPDATE",
+      entity: "riderMeasurement",
+      entityId: "commonOrder",
+      metadata: { count: ordered.length },
+    });
+    revalidatePath("/dashboard/configuration");
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
+    console.error("setCommonRiderMeasurementOrder failed:", e);
     return fail("Impossible d'enregistrer l'ordre du tronc commun. Réessayez.");
   }
 }

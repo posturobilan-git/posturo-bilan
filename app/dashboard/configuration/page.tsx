@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentKine } from "@/lib/auth";
 import { getBikeTypes, getActiveBikeTypes } from "@/actions/bikeType.actions";
 import { getMeasurements } from "@/actions/measurement.actions";
+import { getRiderMeasurements } from "@/actions/riderMeasurement.actions";
 import { getPhysioTests } from "@/actions/physioTest.actions";
 import { getPhysioTestSections } from "@/actions/physioTestSection.actions";
 import { SectionsManagerModal } from "@/components/bibliotheque/SectionsManagerModal";
@@ -11,9 +12,11 @@ import { Tabs } from "@/components/ui/Tabs";
 import { SearchBar } from "@/components/patients/SearchBar";
 import { BikeTypeCard } from "@/components/bibliotheque/BikeTypeCard";
 import { MeasurementCard } from "@/components/bibliotheque/MeasurementCard";
+import { RiderMeasurementCard } from "@/components/bibliotheque/RiderMeasurementCard";
 import { PhysioTestCard } from "@/components/bibliotheque/PhysioTestCard";
 import { CreateBikeTypeModal } from "@/components/bibliotheque/CreateBikeTypeModal";
 import { CreateMeasurementModal } from "@/components/bibliotheque/CreateMeasurementModal";
+import { CreateRiderMeasurementModal } from "@/components/bibliotheque/CreateRiderMeasurementModal";
 import { CreatePhysioTestModal } from "@/components/bibliotheque/CreatePhysioTestModal";
 
 interface Props {
@@ -27,9 +30,10 @@ export default async function ConfigurationPage({ searchParams }: Props) {
   if (kine.role !== "ADMIN") redirect("/dashboard");
 
   const { q, tab } = await searchParams;
-  const [bikeTypes, measurements, physioTests, activeBikeTypes, sections] = await Promise.all([
+  const [bikeTypes, measurements, riderMeasurements, physioTests, activeBikeTypes, sections] = await Promise.all([
     getBikeTypes(),
     getMeasurements({ search: q }),
+    getRiderMeasurements({ search: q }),
     getPhysioTests({ search: q }),
     getActiveBikeTypes(),
     getPhysioTestSections(),
@@ -55,7 +59,7 @@ export default async function ConfigurationPage({ searchParams }: Props) {
     <div className="space-y-6">
       <PageHeader
         title="Configuration des études"
-        description="Types de vélo, côtes et tests physio relevés pendant les études posturales."
+        description="Types de vélo, mesures du vélo, mesures du cycliste et tests physio relevés pendant les études posturales."
       />
 
       <Tabs
@@ -70,7 +74,7 @@ export default async function ConfigurationPage({ searchParams }: Props) {
               <section className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-content-muted">
-                    Sélectionnez un type de vélo pour configurer les côtes et tests relevés dans son étude.
+                    Sélectionnez un type de vélo pour configurer les mesures et tests relevés dans son étude.
                   </p>
                   <CreateBikeTypeModal />
                 </div>
@@ -88,25 +92,54 @@ export default async function ConfigurationPage({ searchParams }: Props) {
           },
           {
             id: "cotes",
-            label: "Côtes",
+            label: "Mesures du vélo",
             count: measurements.length,
             content: (
               <section className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-content-muted">
-                    Toutes les côtes disponibles. Affectez-les à un type de vélo depuis sa configuration.
+                    Mesures du vélo seul (hauteur de selle, recul…), relevées avant / après réglage.
+                    Affectez-les à un type de vélo depuis sa configuration.
                   </p>
                   <CreateMeasurementModal bikeTypes={bikeTypeOptions} />
                 </div>
                 <Suspense>
-                  <SearchBar defaultValue={q} placeholder="Rechercher une côte…" />
+                  <SearchBar defaultValue={q} placeholder="Rechercher une mesure du vélo…" />
                 </Suspense>
                 {measurements.length === 0 ? (
-                  <EmptyState label={q ? "Aucune côte ne correspond." : "Aucune côte pour le moment."} raw />
+                  <EmptyState label={q ? "Aucune mesure ne correspond." : "Aucune mesure du vélo pour le moment."} raw />
                 ) : (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {measurements.map((m) => (
                       <MeasurementCard key={m.id} measurement={m} bikeTypes={bikeTypeOptions} isAdmin />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ),
+          },
+          {
+            id: "mesures-cycliste",
+            label: "Mesures du cycliste",
+            count: riderMeasurements.length,
+            content: (
+              <section className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-content-muted">
+                    Mesures du cycliste sur le vélo (KOPS, angles de genou / tronc…). Avant et après
+                    sont saisis sur la même étape de l&apos;étude.
+                  </p>
+                  <CreateRiderMeasurementModal bikeTypes={bikeTypeOptions} />
+                </div>
+                <Suspense>
+                  <SearchBar defaultValue={q} placeholder="Rechercher une mesure du cycliste…" />
+                </Suspense>
+                {riderMeasurements.length === 0 ? (
+                  <EmptyState label={q ? "Aucune mesure ne correspond." : "Aucune mesure du cycliste pour le moment."} raw />
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {riderMeasurements.map((m) => (
+                      <RiderMeasurementCard key={m.id} measurement={m} bikeTypes={bikeTypeOptions} isAdmin />
                     ))}
                   </div>
                 )}
