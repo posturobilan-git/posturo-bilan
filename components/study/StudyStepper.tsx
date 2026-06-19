@@ -2,12 +2,14 @@ import type { StudyStep } from "@/lib/stores/studyStore";
 
 const STEPS = [
   { n: 1, label: "Vélo" },
-  { n: 2, label: "Tests physio" },
-  { n: 3, label: "Mesures vélo · avant" },
-  { n: 4, label: "Mesures cycliste" },
-  { n: 5, label: "Mesures vélo · après" },
-  { n: 6, label: "Composants" },
-  { n: 7, label: "Exercices" },
+  { n: 2, label: "Douleurs" },
+  { n: 3, label: "Tests physio" },
+  { n: 4, label: "Mesures vélo · avant" },
+  { n: 5, label: "Mesures cycliste" },
+  { n: 6, label: "Mesures vélo · après" },
+  { n: 7, label: "Composants" },
+  { n: 8, label: "Exercices" },
+  { n: 9, label: "Récap & bilan" },
 ] as const;
 
 export function StudyStepper({

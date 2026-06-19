@@ -7,19 +7,29 @@ import {
   measureValuesToArray,
   riderMeasureValuesToArray,
   physioResultsToArray,
+  painsToArray,
+  makePainDraft,
   type StudyStep,
+  type PainDraft,
 } from "@/lib/stores/studyStore";
 import { toast } from "@/lib/stores/toastStore";
 import { saveDraftStudy, submitStudy } from "@/actions/study.actions";
 import { StudyStepper } from "./StudyStepper";
 import { BikeTypeStep } from "./BikeTypeStep";
+import { PainsForm } from "./PainsForm";
 import { MeasuresForm, type MeasurementForStudy } from "./MeasuresForm";
 import { RiderMeasuresForm, type RiderMeasurementForStudy } from "./RiderMeasuresForm";
 import { PhysioTestsForm, type PhysioTestForStudy } from "./PhysioTestsForm";
 import { ComponentPicker, type ComponentForStudy } from "./ComponentPicker";
 import { ExercisePicker } from "./ExercisePicker";
+import {
+  StudySummaryStep,
+  type RecapMeasureRow,
+  type RecapPhysioRow,
+} from "./StudySummaryStep";
 import type { BikeType, Exercise, Patient, PatientIntake } from "@prisma/client";
 import type { PhysioValue } from "@/lib/physio";
+import type { StudyPainInput } from "@/types";
 
 interface Props {
   patient: Patient & { intake: PatientIntake | null };
@@ -37,10 +47,19 @@ interface Props {
     riderMeasureValues: Record<string, { before: number | null; after: number | null }>;
     physioResults: Record<string, PhysioValue>;
     physioComments: Record<string, string>;
+    pains: StudyPainInput[];
     observations: string;
+    summary: string;
+    recommendations: string;
     componentIds: string[];
     exerciseIds: string[];
   };
+}
+
+/** Default pain blocks for a new study: one per declared injury, else one empty. */
+function painsFromIntake(injuries: string[]): PainDraft[] {
+  if (injuries.length === 0) return [makePainDraft()];
+  return injuries.map((location) => makePainDraft({ location }));
 }
 
 export function StudyForm({
@@ -91,6 +110,14 @@ export function StudyForm({
       (id) => !configuredRiderIds.has(id) && knownRiderIds.has(id)
     );
 
+    // Pains: editing keeps the saved set (or one empty block if none were saved);
+    // a new study pre-fills one block per injury declared at intake.
+    const pains = initial
+      ? initial.pains.length > 0
+        ? initial.pains.map((p) => makePainDraft(p))
+        : [makePainDraft()]
+      : painsFromIntake(patient.intake?.injuries ?? []);
+
     store.init(patient.id, {
       draftStudyId: initial?.studyId ?? null,
       bikeTypeId: initial?.bikeTypeId ?? null,
@@ -100,7 +127,10 @@ export function StudyForm({
       extraRiderMeasurementIds,
       physioResults: initial?.physioResults ?? {},
       physioComments: initial?.physioComments ?? {},
+      pains,
       observations: initial?.observations ?? "",
+      summary: initial?.summary ?? "",
+      recommendations: initial?.recommendations ?? "",
       selectedComponentIds: initial?.componentIds ?? [],
       selectedExerciseIds: initial?.exerciseIds ?? [],
     });
@@ -118,7 +148,10 @@ export function StudyForm({
       measureValues: measureValuesToArray(store.measureValues),
       riderMeasureValues: riderMeasureValuesToArray(store.riderMeasureValues),
       physioResults: physioResultsToArray(store.physioResults, store.physioComments),
+      pains: painsToArray(store.pains),
       observations: store.observations || undefined,
+      summary: store.summary || undefined,
+      recommendations: store.recommendations || undefined,
       componentIds: store.selectedComponentIds,
       exerciseIds: store.selectedExerciseIds,
     });
@@ -174,9 +207,9 @@ export function StudyForm({
 
   /** Missing required fields owned by the given step (the one being left). */
   function missingForStep(step: number): string[] {
-    if (step === 2) return missingRequiredTests(); // Tests physio
-    if (step === 3) return missingRequiredMeasures(); // Mesures vélo (avant)
-    if (step === 4) return missingRequiredRiderMeasures(); // Mesures cycliste
+    if (step === 3) return missingRequiredTests(); // Tests physio
+    if (step === 4) return missingRequiredMeasures(); // Mesures vélo (avant)
+    if (step === 5) return missingRequiredRiderMeasures(); // Mesures cycliste
     return [];
   }
 
@@ -187,7 +220,7 @@ export function StudyForm({
    * required côte/test on the current step is still empty (drafts may stay
    * partial, but you can't step past an unfilled required field).
    */
-  function advanceTo(step: 2 | 3 | 4 | 5 | 6 | 7) {
+  function advanceTo(step: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9) {
     const missing = missingForStep(store.step);
     if (missing.length > 0) {
       toast.error(`Champs obligatoires manquants : ${missing.join(", ")}.`);
@@ -246,7 +279,10 @@ export function StudyForm({
         measureValues: measureValuesToArray(store.measureValues),
         riderMeasureValues: riderMeasureValuesToArray(store.riderMeasureValues),
         physioResults: physioResultsToArray(store.physioResults, store.physioComments),
+        pains: painsToArray(store.pains),
         observations: store.observations || undefined,
+        summary: store.summary || undefined,
+        recommendations: store.recommendations || undefined,
         componentIds: store.selectedComponentIds,
         exerciseIds: store.selectedExerciseIds,
       });
@@ -274,6 +310,45 @@ export function StudyForm({
     saving,
   };
 
+  // ── Read-only recap rows for the final step ──────────────────────────────────
+  // Resolved from the store + metadata, mirroring the dossier patient display.
+
+  function buildMeasureRecap(
+    defs: { id: string; name: string; unit: string }[],
+    values: Record<string, { before: number | null; after: number | null }>
+  ): RecapMeasureRow[] {
+    const byId = new Map(defs.map((d) => [d.id, d]));
+    return Object.entries(values)
+      .map(([id, v]) => ({ id, def: byId.get(id), v }))
+      .filter((r): r is { id: string; def: { id: string; name: string; unit: string }; v: { before: number | null; after: number | null } } =>
+        Boolean(r.def) && (r.v.before != null || r.v.after != null)
+      )
+      .map(({ id, def, v }) => ({ id, name: def.name, unit: def.unit, before: v.before, after: v.after }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const measureRecap = buildMeasureRecap(measurements, store.measureValues);
+  const riderMeasureRecap = buildMeasureRecap(riderMeasurements, store.riderMeasureValues);
+
+  const physioById = new Map(physioTests.map((t) => [t.id, t]));
+  const physioRecap: RecapPhysioRow[] = [
+    ...new Set([
+      ...Object.keys(store.physioResults),
+      ...Object.keys(store.physioComments),
+    ]),
+  ]
+    .map((id) => {
+      const def = physioById.get(id);
+      const value = store.physioResults[id] ?? null;
+      const comment = store.physioComments[id]?.trim() || null;
+      return { id, def, value, comment };
+    })
+    .filter((r): r is { id: string; def: PhysioTestForStudy; value: PhysioValue; comment: string | null } =>
+      Boolean(r.def) && ((r.value !== null && r.value !== undefined && r.value !== "") || Boolean(r.comment))
+    )
+    .map((r) => ({ id: r.id, name: r.def.name, outputType: r.def.outputType, unit: r.def.unit, value: r.value, comment: r.comment }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <div className="space-y-6">
       <StudyStepper current={store.step} onStepClick={goToStep} />
@@ -289,13 +364,11 @@ export function StudyForm({
       )}
 
       {store.step === 2 && (
-        <PhysioTestsForm
-          physioTests={physioTests}
-          bikeTypeId={store.bikeTypeId}
-          results={store.physioResults}
-          comments={store.physioComments}
-          onSetValue={store.setPhysioValue}
-          onSetComment={store.setPhysioComment}
+        <PainsForm
+          pains={store.pains}
+          onAdd={store.addPain}
+          onRemove={store.removePain}
+          onSetField={store.setPainField}
           onBack={() => store.setStep(1)}
           onNext={() => advanceTo(3)}
           onSaveDraft={handleSaveDraft}
@@ -304,15 +377,30 @@ export function StudyForm({
       )}
 
       {store.step === 3 && (
-        <MeasuresForm
-          {...measureStepProps}
-          phase="before"
+        <PhysioTestsForm
+          physioTests={physioTests}
+          bikeTypeId={store.bikeTypeId}
+          results={store.physioResults}
+          comments={store.physioComments}
+          onSetValue={store.setPhysioValue}
+          onSetComment={store.setPhysioComment}
           onBack={() => store.setStep(2)}
           onNext={() => advanceTo(4)}
+          onSaveDraft={handleSaveDraft}
+          saving={saving}
         />
       )}
 
       {store.step === 4 && (
+        <MeasuresForm
+          {...measureStepProps}
+          phase="before"
+          onBack={() => store.setStep(3)}
+          onNext={() => advanceTo(5)}
+        />
+      )}
+
+      {store.step === 5 && (
         <RiderMeasuresForm
           riderMeasurements={riderMeasurements}
           bikeTypeId={store.bikeTypeId}
@@ -321,34 +409,34 @@ export function StudyForm({
           onSetValue={store.setRiderMeasureValue}
           onAddExtra={store.addExtraRiderMeasurement}
           onRemoveExtra={store.removeExtraRiderMeasurement}
-          onBack={() => store.setStep(3)}
-          onNext={() => advanceTo(5)}
+          onBack={() => store.setStep(4)}
+          onNext={() => advanceTo(6)}
           onSaveDraft={handleSaveDraft}
           saving={saving}
         />
       )}
 
-      {store.step === 5 && (
+      {store.step === 6 && (
         <MeasuresForm
           {...measureStepProps}
           phase="after"
-          onBack={() => store.setStep(4)}
-          onNext={() => advanceTo(6)}
-        />
-      )}
-
-      {store.step === 6 && (
-        <ComponentPicker
-          components={components}
-          bikeTypeId={store.bikeTypeId}
-          selected={store.selectedComponentIds}
-          onToggle={store.toggleComponent}
           onBack={() => store.setStep(5)}
           onNext={() => advanceTo(7)}
         />
       )}
 
       {store.step === 7 && (
+        <ComponentPicker
+          components={components}
+          bikeTypeId={store.bikeTypeId}
+          selected={store.selectedComponentIds}
+          onToggle={store.toggleComponent}
+          onBack={() => store.setStep(6)}
+          onNext={() => advanceTo(8)}
+        />
+      )}
+
+      {store.step === 8 && (
         <ExercisePicker
           exercises={exercises}
           components={components}
@@ -356,7 +444,22 @@ export function StudyForm({
           selectedComponentIds={store.selectedComponentIds}
           measureCount={measureValuesToArray(store.measureValues).length}
           onToggle={store.toggleExercise}
-          onBack={() => store.setStep(6)}
+          onBack={() => store.setStep(7)}
+          onNext={() => advanceTo(9)}
+          saving={saving}
+        />
+      )}
+
+      {store.step === 9 && (
+        <StudySummaryStep
+          measureRows={measureRecap}
+          riderMeasureRows={riderMeasureRecap}
+          physioRows={physioRecap}
+          summary={store.summary}
+          recommendations={store.recommendations}
+          onSetSummary={store.setSummary}
+          onSetRecommendations={store.setRecommendations}
+          onBack={() => store.setStep(8)}
           onSubmit={handleSubmit}
           submitting={submitting}
         />

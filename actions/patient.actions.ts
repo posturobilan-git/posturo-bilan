@@ -74,7 +74,12 @@ export async function getPatientDossier(id: string) {
       kine: { select: { name: true } },
       intake: true,
       studies: {
-        include: { bikeType: true, componentsUsed: true, exercisesPrescribed: true },
+        include: {
+          bikeType: true,
+          componentsUsed: true,
+          exercisesPrescribed: true,
+          pains: { orderBy: { order: "asc" } },
+        },
         orderBy: { createdAt: "desc" },
       },
       followups: { orderBy: { submittedAt: "asc" } },

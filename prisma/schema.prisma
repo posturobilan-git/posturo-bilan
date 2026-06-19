@@ -375,6 +375,16 @@ model Study {
   // antérieures à la refacto des côtes dynamiques). Plus alimenté.
   measures  Json?
 
+  // Douleurs structurées relevées/enrichies par le kiné pendant l'étude.
+  // Pré-remplies depuis PatientIntake.injuries, puis complétées (cf. StudyPain).
+  pains StudyPain[]
+
+  // Étape finale « Récapitulatif & bilan » : synthèse libre du kiné et
+  // recommandations non standardisées (distinctes des exercices de la
+  // bibliothèque, exercisesPrescribed).
+  summary         String? // « Bilan » — synthèse libre
+  recommendations String? // recommandations libres, hors bibliothèque
+
   // Liens vers bibliothèque
   componentsUsed       BikeComponent[] @relation("StudyComponents")
   exercisesPrescribed  Exercise[]      @relation("StudyExercises")
@@ -399,6 +409,30 @@ model Study {
   @@index([kineId])
   @@index([bikeTypeId])
   @@index([status])
+}
+
+// Une douleur structurée évaluée pendant l'étude (Douleur 1, 2, 3...). Une étude
+// peut en avoir plusieurs. Pré-remplie depuis PatientIntake.injuries (location),
+// puis enrichie par le kiné. Seul `location` est requis ; le reste est optionnel.
+model StudyPain {
+  id      String @id @default(uuid())
+  studyId String
+  study   Study  @relation(fields: [studyId], references: [id], onDelete: Cascade)
+
+  location           String  // ex: "Hanches"
+  type               String? // ex: "inflammatoires", "mécaniques"...
+  intensity          String? // ex: "4-5" sur une échelle /10 (texte libre)
+  restAtRest         Boolean @default(false) // douleur présente au repos ?
+  activity           String? // activité qui déclenche/affecte la douleur
+  duration           String? // durée de la douleur
+  aggravatingFactors String? // « Ce qui ↑ » — ce qui augmente la douleur
+  relievingFactors   String? // « Ce qui ↓ » — ce qui soulage la douleur
+  order              Int     @default(0) // Douleur 1, 2, 3...
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studyId])
 }
 
 model Followup {

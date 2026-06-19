@@ -26,6 +26,20 @@ export const studyPhysioResultSchema = z.object({
   comment: z.string().max(2000).nullable().optional(),
 });
 
+// Une douleur structurée saisie pendant l'étude. Seul `location` est requis ;
+// l'ordre (Douleur 1, 2, 3...) est dérivé de la position dans le tableau côté
+// serveur. Les blocs sans `location` sont filtrés avant validation.
+export const studyPainSchema = z.object({
+  location: z.string().min(1, { message: "La localisation est requise." }).max(200),
+  type: z.string().max(200).optional(),
+  intensity: z.string().max(50).optional(),
+  restAtRest: z.boolean().default(false),
+  activity: z.string().max(500).optional(),
+  duration: z.string().max(200).optional(),
+  aggravatingFactors: z.string().max(1000).optional(),
+  relievingFactors: z.string().max(1000).optional(),
+});
+
 export const studySchema = z.object({
   patientId: z.string().uuid(),
   draftStudyId: z.string().uuid().optional(),
@@ -33,7 +47,10 @@ export const studySchema = z.object({
   measureValues: z.array(studyMeasureValueSchema).default([]),
   riderMeasureValues: z.array(studyRiderMeasureValueSchema).default([]),
   physioResults: z.array(studyPhysioResultSchema).default([]),
+  pains: z.array(studyPainSchema).default([]),
   observations: z.string().max(3000).optional(),
+  summary: z.string().max(5000).optional(),
+  recommendations: z.string().max(5000).optional(),
   componentIds: z.array(z.string().uuid()),
   exerciseIds: z.array(z.string().uuid()),
 });

@@ -39,6 +39,21 @@ function buildRelations(componentIds: string[], exerciseIds: string[]) {
   };
 }
 
+/** Nested-create rows for a study's structured pains, ordered by array position. */
+function painsCreateData(pains: StudyInput["pains"]) {
+  return pains.map((p, i) => ({
+    location: p.location,
+    type: p.type ?? null,
+    intensity: p.intensity ?? null,
+    restAtRest: p.restAtRest,
+    activity: p.activity ?? null,
+    duration: p.duration ?? null,
+    aggravatingFactors: p.aggravatingFactors ?? null,
+    relievingFactors: p.relievingFactors ?? null,
+    order: i,
+  }));
+}
+
 /**
  * When an already-reported study is edited, the sent report is stale, so the
  * study drops back from report_sent to study_completed. No-op otherwise.
@@ -157,6 +172,8 @@ function studyDataFrom(validated: StudyInput) {
     riderMeasureValues: validated.riderMeasureValues as Prisma.InputJsonValue,
     physioResults: validated.physioResults as Prisma.InputJsonValue,
     observations: validated.observations ?? null,
+    summary: validated.summary ?? null,
+    recommendations: validated.recommendations ?? null,
   };
 }
 
@@ -234,6 +251,8 @@ export async function saveDraftStudy(
         data: {
           ...studyDataFrom(validated),
           ...buildRelations(validated.componentIds, validated.exerciseIds),
+          // Replace the structured pains wholesale (the form sends the full set).
+          pains: { deleteMany: {}, create: painsCreateData(validated.pains) },
           reportUrl: null,
           reportSentAt: null,
         },
@@ -295,6 +314,8 @@ export async function submitStudy(
         data: {
           ...studyDataFrom(validated),
           ...buildRelations(validated.componentIds, validated.exerciseIds),
+          // Replace the structured pains wholesale (the form sends the full set).
+          pains: { deleteMany: {}, create: painsCreateData(validated.pains) },
           reportUrl: null,
           reportSentAt: null,
         },
@@ -309,6 +330,7 @@ export async function submitStudy(
           patientId: validated.patientId,
           kineId: kine.id,
           ...studyDataFrom(validated),
+          pains: { create: painsCreateData(validated.pains) },
           componentsUsed: { connect: validated.componentIds.map((id) => ({ id })) },
           exercisesPrescribed: { connect: validated.exerciseIds.map((id) => ({ id })) },
         },

@@ -27,6 +27,7 @@ async function fetchStudyForReport(studyId: string): Promise<StudyForReport | nu
       bikeType: true,
       componentsUsed: true,
       exercisesPrescribed: true,
+      pains: { orderBy: { order: "asc" } },
       kine: true,
       patient: { include: { intake: true } },
     },

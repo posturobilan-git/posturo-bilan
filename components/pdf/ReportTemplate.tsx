@@ -89,6 +89,18 @@ const styles = StyleSheet.create({
 
   para: { marginTop: 4, color: DARK },
 
+  // pain card
+  painCard: {
+    borderWidth: 0.5,
+    borderColor: LIGHT,
+    borderRadius: 4,
+    padding: 8,
+    marginBottom: 6,
+  },
+  painName: { fontFamily: "Helvetica-Bold", fontSize: 10 },
+  painMeta: { color: GRAY, fontSize: 9, marginTop: 2 },
+  painFactor: { color: DARK, fontSize: 9, marginTop: 2 },
+
   // exercise card
   exerciseCard: {
     borderWidth: 0.5,
@@ -274,6 +286,35 @@ export function ReportTemplate({
 
         <KV label="Type de vélo" value={study.bikeType.name} />
 
+        {study.pains.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Douleurs évaluées</Text>
+            {study.pains.map((p) => {
+              const meta = [
+                p.type,
+                p.intensity ? `${p.intensity}/10` : null,
+                p.restAtRest ? "présente au repos" : null,
+                p.activity,
+                p.duration,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <View key={p.id} style={styles.painCard} wrap={false}>
+                  <Text style={styles.painName}>{p.location}</Text>
+                  {meta ? <Text style={styles.painMeta}>{meta}</Text> : null}
+                  {p.aggravatingFactors ? (
+                    <Text style={styles.painFactor}>↑ {p.aggravatingFactors}</Text>
+                  ) : null}
+                  {p.relievingFactors ? (
+                    <Text style={styles.painFactor}>↓ {p.relievingFactors}</Text>
+                  ) : null}
+                </View>
+              );
+            })}
+          </>
+        )}
+
         <Text style={styles.sectionTitle}>Mesures du vélo (avant / après / delta)</Text>
         {measureRows.length === 0 ? (
           <Text style={styles.para}>Aucune mesure du vélo renseignée.</Text>
@@ -324,6 +365,20 @@ export function ReportTemplate({
           <>
             <Text style={styles.sectionTitle}>Observations du kiné</Text>
             <Text style={styles.para}>{study.observations}</Text>
+          </>
+        )}
+
+        {study.summary && (
+          <>
+            <Text style={styles.sectionTitle}>Bilan</Text>
+            <Text style={styles.para}>{study.summary}</Text>
+          </>
+        )}
+
+        {study.recommendations && (
+          <>
+            <Text style={styles.sectionTitle}>Recommandations</Text>
+            <Text style={styles.para}>{study.recommendations}</Text>
           </>
         )}
 
