@@ -3,15 +3,20 @@ import { redirect } from "next/navigation";
 import { getCurrentKine } from "@/lib/auth";
 import { getBikeTypes, getActiveBikeTypes } from "@/actions/bikeType.actions";
 import { getMeasurements } from "@/actions/measurement.actions";
+import { getRiderMeasurements } from "@/actions/riderMeasurement.actions";
 import { getPhysioTests } from "@/actions/physioTest.actions";
+import { getPhysioTestSections } from "@/actions/physioTestSection.actions";
+import { SectionsManagerModal } from "@/components/bibliotheque/SectionsManagerModal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { SearchBar } from "@/components/patients/SearchBar";
 import { BikeTypeCard } from "@/components/bibliotheque/BikeTypeCard";
 import { MeasurementCard } from "@/components/bibliotheque/MeasurementCard";
+import { RiderMeasurementCard } from "@/components/bibliotheque/RiderMeasurementCard";
 import { PhysioTestCard } from "@/components/bibliotheque/PhysioTestCard";
 import { CreateBikeTypeModal } from "@/components/bibliotheque/CreateBikeTypeModal";
 import { CreateMeasurementModal } from "@/components/bibliotheque/CreateMeasurementModal";
+import { CreateRiderMeasurementModal } from "@/components/bibliotheque/CreateRiderMeasurementModal";
 import { CreatePhysioTestModal } from "@/components/bibliotheque/CreatePhysioTestModal";
 
 interface Props {
@@ -25,19 +30,36 @@ export default async function ConfigurationPage({ searchParams }: Props) {
   if (kine.role !== "ADMIN") redirect("/dashboard");
 
   const { q, tab } = await searchParams;
-  const [bikeTypes, measurements, physioTests, activeBikeTypes] = await Promise.all([
+  const [bikeTypes, measurements, riderMeasurements, physioTests, activeBikeTypes, sections] = await Promise.all([
     getBikeTypes(),
     getMeasurements({ search: q }),
+    getRiderMeasurements({ search: q }),
     getPhysioTests({ search: q }),
     getActiveBikeTypes(),
+    getPhysioTestSections(),
   ]);
   const bikeTypeOptions = activeBikeTypes.map((b) => ({ id: b.id, name: b.name }));
+  const sectionOptions = sections.map((s) => ({ id: s.id, name: s.name }));
+  const sectionRows = sections.map((s) => ({ id: s.id, name: s.name, testCount: s._count.physioTests }));
+
+  // Group physio tests by section for the library view; tests without a section
+  // fall into a trailing « Autres » group. Sections keep their configured order.
+  const SANS_SECTION = "__none__";
+  const physioGroups = [
+    ...sections.map((s) => ({ id: s.id, name: s.name })),
+    { id: SANS_SECTION, name: "Autres" },
+  ]
+    .map((g) => ({
+      ...g,
+      tests: physioTests.filter((t) => (t.section?.id ?? SANS_SECTION) === g.id),
+    }))
+    .filter((g) => g.tests.length > 0);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Configuration des études"
-        description="Types de vélo, côtes et tests physio relevés pendant les études posturales."
+        description="Types de vélo, mesures du vélo, mesures du cycliste et tests physio relevés pendant les études posturales."
       />
 
       <Tabs
@@ -52,7 +74,7 @@ export default async function ConfigurationPage({ searchParams }: Props) {
               <section className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-content-muted">
-                    Sélectionnez un type de vélo pour configurer les côtes et tests relevés dans son étude.
+                    Sélectionnez un type de vélo pour configurer les mesures et tests relevés dans son étude.
                   </p>
                   <CreateBikeTypeModal />
                 </div>
@@ -70,25 +92,54 @@ export default async function ConfigurationPage({ searchParams }: Props) {
           },
           {
             id: "cotes",
-            label: "Côtes",
+            label: "Mesures du vélo",
             count: measurements.length,
             content: (
               <section className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-content-muted">
-                    Toutes les côtes disponibles. Affectez-les à un type de vélo depuis sa configuration.
+                    Mesures du vélo seul (hauteur de selle, recul…), relevées avant / après réglage.
+                    Affectez-les à un type de vélo depuis sa configuration.
                   </p>
                   <CreateMeasurementModal bikeTypes={bikeTypeOptions} />
                 </div>
                 <Suspense>
-                  <SearchBar defaultValue={q} placeholder="Rechercher une côte…" />
+                  <SearchBar defaultValue={q} placeholder="Rechercher une mesure du vélo…" />
                 </Suspense>
                 {measurements.length === 0 ? (
-                  <EmptyState label={q ? "Aucune côte ne correspond." : "Aucune côte pour le moment."} raw />
+                  <EmptyState label={q ? "Aucune mesure ne correspond." : "Aucune mesure du vélo pour le moment."} raw />
                 ) : (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {measurements.map((m) => (
                       <MeasurementCard key={m.id} measurement={m} bikeTypes={bikeTypeOptions} isAdmin />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ),
+          },
+          {
+            id: "mesures-cycliste",
+            label: "Mesures du cycliste",
+            count: riderMeasurements.length,
+            content: (
+              <section className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm text-content-muted">
+                    Mesures du cycliste sur le vélo (KOPS, angles de genou / tronc…). Avant et après
+                    sont saisis sur la même étape de l&apos;étude.
+                  </p>
+                  <CreateRiderMeasurementModal bikeTypes={bikeTypeOptions} />
+                </div>
+                <Suspense>
+                  <SearchBar defaultValue={q} placeholder="Rechercher une mesure du cycliste…" />
+                </Suspense>
+                {riderMeasurements.length === 0 ? (
+                  <EmptyState label={q ? "Aucune mesure ne correspond." : "Aucune mesure du cycliste pour le moment."} raw />
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {riderMeasurements.map((m) => (
+                      <RiderMeasurementCard key={m.id} measurement={m} bikeTypes={bikeTypeOptions} isAdmin />
                     ))}
                   </div>
                 )}
@@ -103,9 +154,13 @@ export default async function ConfigurationPage({ searchParams }: Props) {
               <section className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-content-muted">
-                    Tous les tests disponibles, selon le type de résultat (valeur, oui/non, commentaire).
+                    Tous les tests disponibles, regroupés par section et selon le type de résultat
+                    (valeur, oui/non, positif/négatif, commentaire).
                   </p>
-                  <CreatePhysioTestModal bikeTypes={bikeTypeOptions} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SectionsManagerModal sections={sectionRows} />
+                    <CreatePhysioTestModal bikeTypes={bikeTypeOptions} sections={sectionOptions} />
+                  </div>
                 </div>
                 <Suspense>
                   <SearchBar defaultValue={q} placeholder="Rechercher un test…" />
@@ -113,9 +168,24 @@ export default async function ConfigurationPage({ searchParams }: Props) {
                 {physioTests.length === 0 ? (
                   <EmptyState label={q ? "Aucun test ne correspond." : "Aucun test physio pour le moment."} raw />
                 ) : (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {physioTests.map((t) => (
-                      <PhysioTestCard key={t.id} physioTest={t} bikeTypes={bikeTypeOptions} isAdmin />
+                  <div className="space-y-6">
+                    {physioGroups.map((group) => (
+                      <div key={group.id} className="space-y-3">
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-content-subtle">
+                          {group.name}
+                        </h3>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                          {group.tests.map((t) => (
+                            <PhysioTestCard
+                              key={t.id}
+                              physioTest={t}
+                              bikeTypes={bikeTypeOptions}
+                              sections={sectionOptions}
+                              isAdmin
+                            />
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}

@@ -1,4 +1,5 @@
 import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
+import { formatDelta } from "@/lib/measures";
 import type { StudyForReport } from "@/types";
 
 export interface ReportMeasureRow {
@@ -8,10 +9,12 @@ export interface ReportMeasureRow {
   after: number | null;
 }
 
-/** Physio test row — the value is pre-formatted (Oui/Non, valeur + unité, texte). */
+/** Physio test row — the value is pre-formatted (Oui/Non, Positif/Négatif, valeur + unité). */
 export interface ReportPhysioRow {
   name: string;
   value: string;
+  /** Optional free-text note entered by the kiné during the study. */
+  comment?: string | null;
 }
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -61,6 +64,7 @@ const styles = StyleSheet.create({
   tHead: { flexDirection: "row", backgroundColor: "#F3F4F6", paddingVertical: 4, paddingHorizontal: 6 },
   tRow: { flexDirection: "row", paddingVertical: 4, paddingHorizontal: 6, borderBottomWidth: 0.5, borderBottomColor: LIGHT },
   tColName: { width: "50%", color: DARK },
+  tComment: { color: GRAY, fontSize: 8, marginTop: 1 },
   tColNameHead: { width: "50%", color: GRAY, fontSize: 9, textTransform: "uppercase" },
   tColVal: { width: "25%", textAlign: "right", fontFamily: "Helvetica-Bold" },
   tColValHead: { width: "25%", textAlign: "right", color: GRAY, fontSize: 9, textTransform: "uppercase" },
@@ -171,13 +175,39 @@ function fmtVal(value: number | null, unit: string): string {
   return value == null ? "—" : `${value} ${unit}`;
 }
 
+/** Avant / après / delta table shared by both measurement types. */
+function MeasureTable({ rows }: { rows: ReportMeasureRow[] }) {
+  return (
+    <>
+      <View style={styles.tHead}>
+        <Text style={[styles.tColNameHead, { width: "40%" }]}>Mesure</Text>
+        <Text style={[styles.tColValHead, { width: "20%" }]}>Avant</Text>
+        <Text style={[styles.tColValHead, { width: "20%" }]}>Après</Text>
+        <Text style={[styles.tColValHead, { width: "20%" }]}>Delta</Text>
+      </View>
+      {rows.map((r, i) => (
+        <View key={i} style={styles.tRow}>
+          <Text style={[styles.tColName, { width: "40%" }]}>{r.name}</Text>
+          <Text style={[styles.tColVal, { width: "20%" }]}>{fmtVal(r.before, r.unit)}</Text>
+          <Text style={[styles.tColVal, { width: "20%" }]}>{fmtVal(r.after, r.unit)}</Text>
+          <Text style={[styles.tColVal, { width: "20%", color: GRAY }]}>
+            {formatDelta(r.before, r.after, r.unit) ?? "—"}
+          </Text>
+        </View>
+      ))}
+    </>
+  );
+}
+
 export function ReportTemplate({
   study,
   measureRows,
+  riderMeasureRows,
   physioRows,
 }: {
   study: StudyForReport;
   measureRows: ReportMeasureRow[];
+  riderMeasureRows: ReportMeasureRow[];
   physioRows: ReportPhysioRow[];
 }) {
   const { patient, kine } = study;
@@ -244,23 +274,17 @@ export function ReportTemplate({
 
         <KV label="Type de vélo" value={study.bikeType.name} />
 
-        <Text style={styles.sectionTitle}>Côtes relevées (avant / après)</Text>
+        <Text style={styles.sectionTitle}>Mesures du vélo (avant / après / delta)</Text>
         {measureRows.length === 0 ? (
-          <Text style={styles.para}>Aucune côte renseignée.</Text>
+          <Text style={styles.para}>Aucune mesure du vélo renseignée.</Text>
         ) : (
+          <MeasureTable rows={measureRows} />
+        )}
+
+        {riderMeasureRows.length > 0 && (
           <>
-            <View style={styles.tHead}>
-              <Text style={styles.tColNameHead}>Côte</Text>
-              <Text style={styles.tColValHead}>Avant</Text>
-              <Text style={styles.tColValHead}>Après</Text>
-            </View>
-            {measureRows.map((r, i) => (
-              <View key={i} style={styles.tRow}>
-                <Text style={styles.tColName}>{r.name}</Text>
-                <Text style={styles.tColVal}>{fmtVal(r.before, r.unit)}</Text>
-                <Text style={styles.tColVal}>{fmtVal(r.after, r.unit)}</Text>
-              </View>
-            ))}
+            <Text style={styles.sectionTitle}>Mesures du cycliste sur vélo (avant / après / delta)</Text>
+            <MeasureTable rows={riderMeasureRows} />
           </>
         )}
 
@@ -273,7 +297,10 @@ export function ReportTemplate({
             </View>
             {physioRows.map((r, i) => (
               <View key={i} style={styles.tRow}>
-                <Text style={styles.tColName}>{r.name}</Text>
+                <View style={{ width: "50%" }}>
+                  <Text style={{ color: DARK }}>{r.name}</Text>
+                  {r.comment ? <Text style={styles.tComment}>{r.comment}</Text> : null}
+                </View>
                 <Text style={[styles.tColVal, { width: "50%" }]}>{r.value}</Text>
               </View>
             ))}

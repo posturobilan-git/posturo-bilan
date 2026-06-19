@@ -9,7 +9,7 @@ import { ReportTemplate, type ReportMeasureRow, type ReportPhysioRow } from "@/c
 import { ReportEmail } from "@/lib/emails/ReportEmail";
 import { isLocalEnv } from "@/lib/env";
 import { formatPhysioValue, hasPhysioValue, type StudyPhysioResult } from "@/lib/physio";
-import type { StudyForReport, StudyMeasureValue } from "@/types";
+import type { StudyForReport, StudyMeasureValue, StudyRiderMeasureValue } from "@/types";
 
 const CABINET = process.env.CABINET_NAME || "PosturoBilan";
 const FROM = resendFrom();
@@ -51,9 +51,30 @@ async function buildMeasureRows(study: StudyForReport): Promise<ReportMeasureRow
     .map(({ v, m }) => ({ name: m.name, unit: m.unit, before: v.before ?? null, after: v.after ?? null }));
 }
 
+/** Resolves a study's stored mesures du cycliste into labelled before/after rows. */
+async function buildRiderMeasureRows(study: StudyForReport): Promise<ReportMeasureRow[]> {
+  const values = (study.riderMeasureValues as StudyRiderMeasureValue[] | null) ?? [];
+  if (values.length === 0) return [];
+
+  const measurements = await prisma.riderMeasurement.findMany({
+    where: { id: { in: values.map((v) => v.riderMeasurementId) } },
+    select: { id: true, name: true, unit: true },
+  });
+  const byId = new Map(measurements.map((m) => [m.id, m]));
+
+  return values
+    .map((v) => ({ v, m: byId.get(v.riderMeasurementId) }))
+    .filter((r): r is { v: StudyRiderMeasureValue; m: (typeof measurements)[number] } => Boolean(r.m))
+    .sort((a, b) => a.m.name.localeCompare(b.m.name))
+    .map(({ v, m }) => ({ name: m.name, unit: m.unit, before: v.before ?? null, after: v.after ?? null }));
+}
+
 /** Resolves a study's stored physio results into pre-formatted rows. */
 async function buildPhysioRows(study: StudyForReport): Promise<ReportPhysioRow[]> {
-  const results = ((study.physioResults as StudyPhysioResult[] | null) ?? []).filter(hasPhysioValue);
+  // Keep results that carry a value OR a free-text comment (both go in the report).
+  const results = ((study.physioResults as StudyPhysioResult[] | null) ?? []).filter(
+    (r) => hasPhysioValue(r) || Boolean(r.comment?.trim())
+  );
   if (results.length === 0) return [];
 
   const tests = await prisma.physioTest.findMany({
@@ -68,7 +89,8 @@ async function buildPhysioRows(study: StudyForReport): Promise<ReportPhysioRow[]
     .sort((a, b) => a.t.name.localeCompare(b.t.name))
     .map(({ r, t }) => ({
       name: t.name,
-      value: formatPhysioValue(t.outputType, r.value ?? null, t.unit),
+      value: hasPhysioValue(r) ? formatPhysioValue(t.outputType, r.value ?? null, t.unit) : "—",
+      comment: r.comment?.trim() || null,
     }));
 }
 
@@ -95,12 +117,18 @@ export async function generateReportForStudy(
   }
 
   try {
-    const [measureRows, physioRows] = await Promise.all([
+    const [measureRows, riderMeasureRows, physioRows] = await Promise.all([
       buildMeasureRows(study),
+      buildRiderMeasureRows(study),
       buildPhysioRows(study),
     ]);
     const pdfBuffer = await renderToBuffer(
-      <ReportTemplate study={study} measureRows={measureRows} physioRows={physioRows} />
+      <ReportTemplate
+        study={study}
+        measureRows={measureRows}
+        riderMeasureRows={riderMeasureRows}
+        physioRows={physioRows}
+      />
     );
     const url = await storePdf(`reports/${studyId}.pdf`, pdfBuffer);
 
@@ -154,12 +182,18 @@ export async function sendReportForStudy(
   try {
     // Re-render for the email attachment (current data == generated data,
     // since editing the study resets the report).
-    const [measureRows, physioRows] = await Promise.all([
+    const [measureRows, riderMeasureRows, physioRows] = await Promise.all([
       buildMeasureRows(study),
+      buildRiderMeasureRows(study),
       buildPhysioRows(study),
     ]);
     const pdfBuffer = await renderToBuffer(
-      <ReportTemplate study={study} measureRows={measureRows} physioRows={physioRows} />
+      <ReportTemplate
+        study={study}
+        measureRows={measureRows}
+        riderMeasureRows={riderMeasureRows}
+        physioRows={physioRows}
+      />
     );
 
     let emailed = false;

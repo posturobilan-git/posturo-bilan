@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/lib/stores/toastStore";
-import { updatePatient, deletePatient } from "@/actions/patient.actions";
+import { updatePatient, deletePatient, hardDeletePatient } from "@/actions/patient.actions";
 
 interface PatientFields {
   id: string;
@@ -32,12 +32,31 @@ function Field({ label, name, ...props }: FieldProps) {
   );
 }
 
-export function PatientHeaderActions({ patient }: { patient: PatientFields }) {
+export function PatientHeaderActions({
+  patient,
+  studyCount,
+  isAnonymized,
+}: {
+  patient: PatientFields;
+  studyCount: number;
+  isAnonymized: boolean;
+}) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const fullName = `${patient.firstName} ${patient.lastName}`;
+  const hasStudies = studyCount > 0;
+  const nameMatches = confirmation.trim() === fullName;
+
+  function openDelete() {
+    setError(null);
+    setConfirmation("");
+    setDeleteOpen(true);
+  }
 
   function handleEdit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -62,7 +81,8 @@ export function PatientHeaderActions({ patient }: { patient: PatientFields }) {
     });
   }
 
-  function handleDelete() {
+  // No studies → straightforward permanent delete of the patient record.
+  function handleSafeDelete() {
     setError(null);
     startTransition(async () => {
       const result = await deletePatient(patient.id);
@@ -76,12 +96,48 @@ export function PatientHeaderActions({ patient }: { patient: PatientFields }) {
     });
   }
 
+  // Studies exist, RGPD route → wipe PII, keep the (anonymous) clinical studies.
+  function handleAnonymize() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch(`/api/gdpr/anonymize/${patient.id}`, { method: "DELETE" });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setError(body.error ?? "Échec de l'anonymisation.");
+          return;
+        }
+        toast.success("Patient anonymisé.");
+        setDeleteOpen(false);
+        router.refresh();
+      } catch {
+        setError("Échec de l'anonymisation.");
+      }
+    });
+  }
+
+  // Studies exist, hard-delete route → remove the patient AND every study/report.
+  function handleHardDelete() {
+    if (!nameMatches) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await hardDeletePatient(patient.id, confirmation);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      toast.success("Patient et données associées supprimés définitivement.");
+      router.push("/dashboard/patients");
+      router.refresh();
+    });
+  }
+
   return (
     <>
       <Button variant="secondary" size="sm" onClick={() => { setError(null); setEditOpen(true); }}>
         Modifier
       </Button>
-      <Button variant="danger" size="sm" onClick={() => { setError(null); setConfirmDelete(true); }}>
+      <Button variant="danger" size="sm" onClick={openDelete}>
         Supprimer
       </Button>
 
@@ -129,38 +185,103 @@ export function PatientHeaderActions({ patient }: { patient: PatientFields }) {
         </div>
       )}
 
-      {/* Delete confirmation */}
-      {confirmDelete && (
+      {/* Delete modal — branches on whether the patient has studies */}
+      {deleteOpen && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(false); }}
+          onClick={(e) => { if (e.target === e.currentTarget) setDeleteOpen(false); }}
         >
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-surface shadow-2xl sm:rounded-xl">
             <div className="border-b border-border px-6 py-4">
               <h2 className="text-lg font-semibold text-content">Supprimer ce patient ?</h2>
             </div>
-            <div className="space-y-3 px-6 py-5 text-sm text-content-muted">
-              <p>
-                Le dossier de <strong className="text-content">{patient.firstName} {patient.lastName}</strong> sera
-                <strong className="text-danger-600"> supprimé définitivement</strong>. Cette action est
-                irréversible.
-              </p>
-              <p className="text-content-subtle">
-                Si une étude posturale existe, la suppression sera bloquée — utilisez plutôt
-                l&apos;anonymisation RGPD.
-              </p>
-              {error && (
-                <p className="rounded-md bg-danger-50 px-3 py-2 text-danger-700">{error}</p>
-              )}
-            </div>
-            <div className="flex justify-end gap-3 border-t border-border px-6 py-4">
-              <Button variant="secondary" onClick={() => setConfirmDelete(false)}>
-                Annuler
-              </Button>
-              <Button variant="danger" loading={pending} onClick={handleDelete}>
-                Supprimer définitivement
-              </Button>
-            </div>
+
+            {!hasStudies ? (
+              /* ── No studies: simple permanent delete ── */
+              <>
+                <div className="space-y-3 px-6 py-5 text-sm text-content-muted">
+                  <p>
+                    Le dossier de <strong className="text-content">{fullName}</strong> sera
+                    <strong className="text-danger-600"> supprimé définitivement</strong>. Ce patient
+                    n&apos;a aucune étude. Cette action est irréversible.
+                  </p>
+                  {error && (
+                    <p className="rounded-md bg-danger-50 px-3 py-2 text-danger-700">{error}</p>
+                  )}
+                </div>
+                <div className="flex justify-end gap-3 border-t border-border px-6 py-4">
+                  <Button variant="secondary" onClick={() => setDeleteOpen(false)}>Annuler</Button>
+                  <Button variant="danger" loading={pending} onClick={handleSafeDelete}>
+                    Supprimer définitivement
+                  </Button>
+                </div>
+              </>
+            ) : (
+              /* ── Studies exist: choose anonymisation (RGPD) or hard delete ── */
+              <div className="space-y-4 px-6 py-5">
+                <p className="text-sm text-content-muted">
+                  Ce patient a <strong className="text-content">{studyCount} étude{studyCount > 1 ? "s" : ""}</strong>.
+                  Choisissez comment procéder.
+                </p>
+
+                {!isAnonymized && (
+                  <div className="rounded-lg border border-border bg-surface-muted/40 p-4">
+                    <h3 className="text-sm font-semibold text-content">Anonymisation RGPD <span className="font-normal text-content-subtle">— recommandé</span></h3>
+                    <p className="mt-1 text-sm text-content-muted">
+                      Efface les données personnelles (nom, email, téléphone, accueil) mais
+                      <strong> conserve les études</strong> de façon anonyme.
+                    </p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="mt-3"
+                      loading={pending}
+                      onClick={handleAnonymize}
+                    >
+                      Anonymiser
+                    </Button>
+                  </div>
+                )}
+
+                <div className="rounded-lg border border-danger-500/40 bg-danger-50/40 p-4">
+                  <h3 className="text-sm font-semibold text-danger-700">Suppression définitive</h3>
+                  <p className="mt-1 text-sm text-content-muted">
+                    Supprime le patient <strong>et ses {studyCount} étude{studyCount > 1 ? "s" : ""}</strong>{" "}
+                    (rapports inclus). <strong className="text-danger-600">Irréversible.</strong>
+                  </p>
+                  <label className="mt-3 flex flex-col gap-1.5">
+                    <span className="text-sm text-content-muted">
+                      Pour confirmer, tapez <strong className="select-all text-content">{fullName}</strong> :
+                    </span>
+                    <input
+                      value={confirmation}
+                      onChange={(e) => setConfirmation(e.target.value)}
+                      autoComplete="off"
+                      placeholder={fullName}
+                      className="rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-content focus:border-danger-500 focus:outline-none focus:ring-1 focus:ring-danger-500"
+                    />
+                  </label>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    className="mt-3"
+                    disabled={!nameMatches}
+                    loading={pending}
+                    onClick={handleHardDelete}
+                  >
+                    Supprimer définitivement
+                  </Button>
+                </div>
+
+                {error && (
+                  <p className="rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-700">{error}</p>
+                )}
+
+                <div className="flex justify-end border-t border-border pt-4">
+                  <Button variant="secondary" onClick={() => setDeleteOpen(false)}>Annuler</Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -12,6 +12,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { logAudit } from "@/lib/audit";
 import { inviteExpiryFromNow } from "@/lib/legal";
+import { deleteReport } from "@/lib/storage";
 import { requireKine, requirePatientOwnership } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { Prisma, type Patient } from "@prisma/client";
@@ -215,5 +216,72 @@ export async function deletePatient(patientId: string): Promise<ActionResult<voi
     if (e instanceof Error && e.message === "Patient introuvable.") return fail(e.message);
     console.error("deletePatient failed:", e);
     return fail("Impossible de supprimer le patient. Réessayez.");
+  }
+}
+
+/**
+ * Suppression définitive (hard delete) d'un patient ET de toutes ses données
+ * liées : études (+ rapports PDF), suivis, accueil. Contourne volontairement le
+ * garde-fou RGPD de `deletePatient` — réservé au kiné propriétaire ou à un ADMIN,
+ * exige une confirmation tapée (nom complet du patient) et est tracé.
+ * Action IRRÉVERSIBLE.
+ */
+export async function hardDeletePatient(
+  patientId: string,
+  confirmation: string
+): Promise<ActionResult<void>> {
+  try {
+    const { user, patient: owned } = await requirePatientOwnership(patientId);
+
+    const patient = await prisma.patient.findUnique({
+      where: { id: owned.id },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        studies: { select: { id: true, reportUrl: true } },
+      },
+    });
+    if (!patient) return fail("Patient introuvable.");
+
+    // Confirmation tapée : doit correspondre exactement au nom complet affiché.
+    const expected = `${patient.firstName} ${patient.lastName}`;
+    if (confirmation.trim() !== expected) {
+      return fail(`La confirmation ne correspond pas. Tapez exactement « ${expected} ».`);
+    }
+
+    const studyCount = patient.studies.length;
+
+    // Supprime d'abord les enfants qui référencent le patient (Restrict), puis le
+    // patient (l'accueil casse en cascade). Les liaisons m2m des études (composants
+    // / exercices) sont nettoyées automatiquement à la suppression des études.
+    await prisma.$transaction([
+      prisma.study.deleteMany({ where: { patientId } }),
+      prisma.followup.deleteMany({ where: { patientId } }),
+      prisma.patient.delete({ where: { id: patientId } }),
+    ]);
+
+    // Nettoyage best-effort des PDF stockés (ne bloque jamais la suppression).
+    await Promise.all(
+      patient.studies
+        .map((s) => s.reportUrl)
+        .filter((url): url is string => Boolean(url))
+        .map((url) => deleteReport(url))
+    );
+
+    await logAudit({
+      userId: user.id,
+      action: "DELETE",
+      entity: "patient",
+      entityId: patientId,
+      metadata: { hardDelete: true, studyCount },
+    });
+    revalidatePath("/dashboard/patients");
+    return ok(undefined);
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith("Accès refusé")) return fail(e.message);
+    if (e instanceof Error && e.message === "Patient introuvable.") return fail(e.message);
+    console.error("hardDeletePatient failed:", e);
+    return fail("Impossible de supprimer définitivement le patient. Réessayez.");
   }
 }

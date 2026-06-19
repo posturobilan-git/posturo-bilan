@@ -1,20 +1,24 @@
 "use client";
 
 import { useTransition } from "react";
-import { toggleMeasurement, deleteMeasurement, type MeasurementWithTypes } from "@/actions/measurement.actions";
+import {
+  toggleRiderMeasurement,
+  deleteRiderMeasurement,
+  type RiderMeasurementWithTypes,
+} from "@/actions/riderMeasurement.actions";
 import { toast } from "@/lib/stores/toastStore";
 import { MEASUREMENT_CATEGORY_LABELS } from "@/lib/labels";
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { IconButton } from "@/components/ui/IconButton";
 import { EyeIcon, EyeOffIcon } from "@/components/ui/icons";
-import { CreateMeasurementModal } from "./CreateMeasurementModal";
+import { CreateRiderMeasurementModal } from "./CreateRiderMeasurementModal";
 
-export function MeasurementCard({
+export function RiderMeasurementCard({
   measurement,
   bikeTypes,
   isAdmin,
 }: {
-  measurement: MeasurementWithTypes;
+  measurement: RiderMeasurementWithTypes;
   bikeTypes: { id: string; name: string }[];
   isAdmin: boolean;
 }) {
@@ -22,9 +26,9 @@ export function MeasurementCard({
 
   function handleToggle() {
     startTransition(async () => {
-      const result = await toggleMeasurement(measurement.id);
+      const result = await toggleRiderMeasurement(measurement.id);
       if (!result.ok) return toast.error(result.error);
-      toast.success(result.data.isActive ? "Mesure du vélo activée." : "Mesure du vélo désactivée.");
+      toast.success(result.data.isActive ? "Mesure activée." : "Mesure désactivée.");
     });
   }
 
@@ -70,7 +74,7 @@ export function MeasurementCard({
 
       {isAdmin && (
         <div className="mt-4 flex items-center justify-end gap-1 border-t border-border pt-3">
-          <CreateMeasurementModal measurement={measurement} bikeTypes={bikeTypes} />
+          <CreateRiderMeasurementModal measurement={measurement} bikeTypes={bikeTypes} />
           <IconButton
             icon={measurement.isActive ? <EyeOffIcon /> : <EyeIcon />}
             label={measurement.isActive ? "Désactiver" : "Activer"}
@@ -78,8 +82,8 @@ export function MeasurementCard({
             disabled={pending}
           />
           <DeleteButton
-            onConfirm={() => deleteMeasurement(measurement.id)}
-            successMessage="Mesure du vélo supprimée."
+            onConfirm={() => deleteRiderMeasurement(measurement.id)}
+            successMessage="Mesure supprimée."
           />
         </div>
       )}

@@ -34,7 +34,7 @@ function StudySummary({
     <div className="rounded-lg border border-brand-100 bg-brand-50 p-4 space-y-3 text-sm">
       <p className="font-semibold text-brand-900">Récapitulatif de l&apos;étude</p>
       <p className="text-brand-800">
-        {measureCount} côte{measureCount !== 1 ? "s" : ""} renseignée{measureCount !== 1 ? "s" : ""}
+        {measureCount} mesure{measureCount !== 1 ? "s" : ""} du vélo renseignée{measureCount !== 1 ? "s" : ""}
       </p>
       {selectedComponents.length > 0 && (
         <div>

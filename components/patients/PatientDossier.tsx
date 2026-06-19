@@ -123,11 +123,13 @@ function StudiesSection({
   patient,
   canEdit,
   measurementsById,
+  riderMeasurementsById,
   physioTestsById,
 }: {
   patient: PatientWithRelations;
   canEdit: boolean;
   measurementsById: Record<string, MeasurementInfo>;
+  riderMeasurementsById: Record<string, MeasurementInfo>;
   physioTestsById: Record<string, PhysioTestInfo>;
 }) {
   const { studies } = patient;
@@ -163,6 +165,7 @@ function StudiesSection({
               patientId={patient.id}
               canEdit={canEdit}
               measurementsById={measurementsById}
+              riderMeasurementsById={riderMeasurementsById}
               physioTestsById={physioTestsById}
             />
           ))}
@@ -266,11 +269,13 @@ export function PatientDossier({
   patient,
   canEdit = false,
   measurementsById = {},
+  riderMeasurementsById = {},
   physioTestsById = {},
 }: {
   patient: PatientWithRelations;
   canEdit?: boolean;
   measurementsById?: Record<string, MeasurementInfo>;
+  riderMeasurementsById?: Record<string, MeasurementInfo>;
   physioTestsById?: Record<string, PhysioTestInfo>;
 }) {
   const latestFollowup = patient.followups.at(-1);
@@ -290,6 +295,7 @@ export function PatientDossier({
         patient={patient}
         canEdit={canEdit}
         measurementsById={measurementsById}
+        riderMeasurementsById={riderMeasurementsById}
         physioTestsById={physioTestsById}
       />
       <EvolutionTable patient={patient} />

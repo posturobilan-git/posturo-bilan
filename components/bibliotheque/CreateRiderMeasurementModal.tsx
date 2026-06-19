@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { ModalPortal } from "@/components/ui/ModalPortal";
 import { PencilIcon } from "@/components/ui/icons";
-import { createMeasurement, updateMeasurement } from "@/actions/measurement.actions";
+import { createRiderMeasurement, updateRiderMeasurement } from "@/actions/riderMeasurement.actions";
 import { toast } from "@/lib/stores/toastStore";
 import { MEASUREMENT_CATEGORIES, MEASUREMENT_CATEGORY_LABELS } from "@/lib/labels";
 import type { MeasurementCategory } from "@prisma/client";
@@ -15,7 +15,7 @@ interface BikeTypeOption {
   name: string;
 }
 
-interface MeasurementValue {
+interface RiderMeasurementValue {
   id: string;
   name: string;
   unit: string;
@@ -25,11 +25,11 @@ interface MeasurementValue {
   bikeTypes: { id: string; name: string }[];
 }
 
-export function CreateMeasurementModal({
+export function CreateRiderMeasurementModal({
   measurement,
   bikeTypes,
 }: {
-  measurement?: MeasurementValue;
+  measurement?: RiderMeasurementValue;
   bikeTypes: BikeTypeOption[];
 }) {
   const isEdit = Boolean(measurement);
@@ -62,7 +62,7 @@ export function CreateMeasurementModal({
     const payload = {
       name: String(fd.get("name") ?? "").trim(),
       unit: String(fd.get("unit") ?? "").trim(),
-      category: String(fd.get("category") ?? "AUTRE") as MeasurementCategory,
+      category: String(fd.get("category") ?? "POSITION") as MeasurementCategory,
       isCommon,
       isRequired,
       bikeTypeIds: isCommon ? [] : selectedTypes,
@@ -71,13 +71,13 @@ export function CreateMeasurementModal({
     setError(null);
     startTransition(async () => {
       const result = isEdit
-        ? await updateMeasurement(measurement!.id, payload)
-        : await createMeasurement(payload);
+        ? await updateRiderMeasurement(measurement!.id, payload)
+        : await createRiderMeasurement(payload);
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      toast.success(isEdit ? "Mesure du vélo modifiée." : "Mesure du vélo créée.");
+      toast.success(isEdit ? "Mesure modifiée." : "Mesure créée.");
       setOpen(false);
     });
   }
@@ -92,7 +92,7 @@ export function CreateMeasurementModal({
           onClick={() => { reset(); setOpen(true); }}
         />
       ) : (
-        <Button className="w-full sm:w-auto" onClick={() => { reset(); setOpen(true); }}>+ Nouvelle mesure du vélo</Button>
+        <Button className="w-full sm:w-auto" onClick={() => { reset(); setOpen(true); }}>+ Nouvelle mesure du cycliste</Button>
       )}
 
       {open && (
@@ -104,7 +104,7 @@ export function CreateMeasurementModal({
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-surface shadow-2xl sm:rounded-xl">
             <div className="flex items-center justify-between border-b border-border px-6 py-4">
               <h2 className="text-lg font-semibold text-content">
-                {isEdit ? "Modifier la mesure du vélo" : "Nouvelle mesure du vélo"}
+                {isEdit ? "Modifier la mesure du cycliste" : "Nouvelle mesure du cycliste"}
               </h2>
               <button onClick={() => setOpen(false)} className="rounded-md p-1 text-content-subtle hover:bg-surface-muted" aria-label="Fermer">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -116,19 +116,19 @@ export function CreateMeasurementModal({
             <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium text-content">Nom <span className="text-danger-500">*</span></span>
-                <input name="name" required defaultValue={measurement?.name} placeholder="Hauteur de selle"
+                <input name="name" required defaultValue={measurement?.name} placeholder="KOPS, angle du genou…"
                   className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
               </label>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <label className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-content">Unité <span className="text-danger-500">*</span></span>
-                  <input name="unit" required defaultValue={measurement?.unit} placeholder="cm, mm, °"
+                  <input name="unit" required defaultValue={measurement?.unit} placeholder="mm, cm, °"
                     className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500" />
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-content">Catégorie</span>
-                  <select name="category" defaultValue={measurement?.category ?? "AUTRE"}
+                  <select name="category" defaultValue={measurement?.category ?? "POSITION"}
                     className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
                     {MEASUREMENT_CATEGORIES.map((c) => (
                       <option key={c} value={c}>{MEASUREMENT_CATEGORY_LABELS[c]}</option>

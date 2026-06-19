@@ -12,10 +12,12 @@ import { CreatePhysioTestModal } from "./CreatePhysioTestModal";
 export function PhysioTestCard({
   physioTest,
   bikeTypes,
+  sections,
   isAdmin,
 }: {
   physioTest: PhysioTestWithTypes;
   bikeTypes: { id: string; name: string }[];
+  sections: { id: string; name: string }[];
   isAdmin: boolean;
 }) {
   const [pending, startTransition] = useTransition();
@@ -50,6 +52,16 @@ export function PhysioTestCard({
       )}
 
       <div className="mt-3 flex flex-wrap gap-1.5">
+        {physioTest.section && (
+          <span className="rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-medium text-content-muted">
+            {physioTest.section.name}
+          </span>
+        )}
+        {physioTest.isRequired && (
+          <span className="rounded-full bg-warning-50 px-2.5 py-0.5 text-xs font-medium text-warning-700">
+            Obligatoire
+          </span>
+        )}
         {physioTest.isCommon ? (
           <span className="rounded-full bg-accent-50 px-2.5 py-0.5 text-xs font-medium text-accent-700">
             Tronc commun
@@ -69,7 +81,7 @@ export function PhysioTestCard({
 
       {isAdmin && (
         <div className="mt-4 flex items-center justify-end gap-1 border-t border-border pt-3">
-          <CreatePhysioTestModal physioTest={physioTest} bikeTypes={bikeTypes} />
+          <CreatePhysioTestModal physioTest={physioTest} bikeTypes={bikeTypes} sections={sections} />
           <IconButton
             icon={physioTest.isActive ? <EyeOffIcon /> : <EyeIcon />}
             label={physioTest.isActive ? "Désactiver" : "Activer"}

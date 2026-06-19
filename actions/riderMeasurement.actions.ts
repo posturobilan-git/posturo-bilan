@@ -5,21 +5,24 @@ import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
 import { requireKine, requireAdmin } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
-import { measurementSchema, type MeasurementInput } from "@/lib/validations/measurement.schema";
-import { Prisma, type Measurement, type BikeType } from "@prisma/client";
+import {
+  riderMeasurementSchema,
+  type RiderMeasurementInput,
+} from "@/lib/validations/riderMeasurement.schema";
+import { Prisma, type RiderMeasurement, type BikeType } from "@prisma/client";
 
-export type MeasurementWithTypes = Measurement & {
+export type RiderMeasurementWithTypes = RiderMeasurement & {
   bikeTypes: Pick<BikeType, "id" | "name">[];
 };
 
 // ─── Queries ────────────────────────────────────────────────────────────────────
 
-export async function getMeasurements(filters?: {
+export async function getRiderMeasurements(filters?: {
   search?: string;
-}): Promise<MeasurementWithTypes[]> {
+}): Promise<RiderMeasurementWithTypes[]> {
   const kine = await requireKine();
 
-  const rows = await prisma.measurement.findMany({
+  const rows = await prisma.riderMeasurement.findMany({
     where: {
       ...(kine.role !== "ADMIN" && { isActive: true }),
       ...(filters?.search && {
@@ -38,31 +41,33 @@ export async function getMeasurements(filters?: {
 }
 
 /**
- * Active côtes applicable to a study of the given bike type, in display order:
- * the common trunk first (alphabetical), then those explicitly configured for
- * this bike type in their configured order.
+ * Active mesures du cycliste applicable to a study of the given bike type, in
+ * display order: the common trunk first, then those configured for this bike
+ * type in their configured order. Mirrors getMeasurementsForBikeType.
  */
-export async function getMeasurementsForBikeType(bikeTypeId: string): Promise<Measurement[]> {
+export async function getRiderMeasurementsForBikeType(
+  bikeTypeId: string
+): Promise<RiderMeasurement[]> {
   await requireKine();
 
   const [common, links] = await Promise.all([
-    prisma.measurement.findMany({
+    prisma.riderMeasurement.findMany({
       where: { isActive: true, isCommon: true },
       orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
     }),
-    prisma.bikeTypeMeasurement.findMany({
-      where: { bikeTypeId, measurement: { isActive: true, isCommon: false } },
-      include: { measurement: true },
+    prisma.bikeTypeRiderMeasurement.findMany({
+      where: { bikeTypeId, riderMeasurement: { isActive: true, isCommon: false } },
+      include: { riderMeasurement: true },
       orderBy: { order: "asc" },
     }),
   ]);
 
-  return [...common, ...links.map((l) => l.measurement)];
+  return [...common, ...links.map((l) => l.riderMeasurement)];
 }
 
 // ─── Mutations (ADMIN only) ─────────────────────────────────────────────────────
 
-function relationData(input: MeasurementInput) {
+function relationData(input: RiderMeasurementInput) {
   return {
     name: input.name,
     unit: input.unit,
@@ -74,9 +79,9 @@ function relationData(input: MeasurementInput) {
   };
 }
 
-/** Next free display order for a côte appended to a given bike type's config. */
+/** Next free display order for a mesure appended to a given bike type's config. */
 async function nextOrderFor(bikeTypeId: string): Promise<number> {
-  const last = await prisma.bikeTypeMeasurement.findFirst({
+  const last = await prisma.bikeTypeRiderMeasurement.findFirst({
     where: { bikeTypeId },
     orderBy: { order: "desc" },
     select: { order: true },
@@ -84,43 +89,42 @@ async function nextOrderFor(bikeTypeId: string): Promise<number> {
   return (last?.order ?? -1) + 1;
 }
 
-export async function createMeasurement(
-  data: MeasurementInput
+export async function createRiderMeasurement(
+  data: RiderMeasurementInput
 ): Promise<ActionResult<{ id: string }>> {
-  const parsed = measurementSchema.safeParse(data);
+  const parsed = riderMeasurementSchema.safeParse(data);
   if (!parsed.success) return fail(formatZodError(parsed.error));
 
   try {
     const admin = await requireAdmin();
     const { bikeTypeIds, ...fields } = relationData(parsed.data);
 
-    // New côtes are appended to the end of each bike type's configuration.
     const links = await Promise.all(
       bikeTypeIds.map(async (bikeTypeId) => ({ bikeTypeId, order: await nextOrderFor(bikeTypeId) }))
     );
 
-    const measurement = await prisma.measurement.create({
+    const measurement = await prisma.riderMeasurement.create({
       data: {
         ...fields,
         createdById: admin.id,
         bikeTypeLinks: { create: links },
       },
     });
-    await logAudit({ userId: admin.id, action: "CREATE", entity: "measurement", entityId: measurement.id });
+    await logAudit({ userId: admin.id, action: "CREATE", entity: "riderMeasurement", entityId: measurement.id });
     revalidatePath("/dashboard/configuration");
     return ok({ id: measurement.id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
-    console.error("createMeasurement failed:", e);
-    return fail("Impossible de créer la côte. Réessayez.");
+    console.error("createRiderMeasurement failed:", e);
+    return fail("Impossible de créer la mesure. Réessayez.");
   }
 }
 
-export async function updateMeasurement(
+export async function updateRiderMeasurement(
   id: string,
-  data: MeasurementInput
+  data: RiderMeasurementInput
 ): Promise<ActionResult<{ id: string }>> {
-  const parsed = measurementSchema.safeParse(data);
+  const parsed = riderMeasurementSchema.safeParse(data);
   if (!parsed.success) return fail(formatZodError(parsed.error));
 
   try {
@@ -129,8 +133,8 @@ export async function updateMeasurement(
 
     // Reconcile bike-type links without disturbing the configured order of the
     // ones that stay: drop the removed links, append any newly-added ones.
-    const existing = await prisma.bikeTypeMeasurement.findMany({
-      where: { measurementId: id },
+    const existing = await prisma.bikeTypeRiderMeasurement.findMany({
+      where: { riderMeasurementId: id },
       select: { bikeTypeId: true },
     });
     const existingIds = new Set(existing.map((l) => l.bikeTypeId));
@@ -139,62 +143,62 @@ export async function updateMeasurement(
     const toAdd = bikeTypeIds.filter((b) => !existingIds.has(b));
     const added = await Promise.all(
       toAdd.map(async (bikeTypeId) => ({
-        measurementId: id,
+        riderMeasurementId: id,
         bikeTypeId,
         order: await nextOrderFor(bikeTypeId),
       }))
     );
 
     await prisma.$transaction([
-      prisma.measurement.update({ where: { id }, data: fields }),
-      prisma.bikeTypeMeasurement.deleteMany({
-        where: { measurementId: id, bikeTypeId: { in: toRemove } },
+      prisma.riderMeasurement.update({ where: { id }, data: fields }),
+      prisma.bikeTypeRiderMeasurement.deleteMany({
+        where: { riderMeasurementId: id, bikeTypeId: { in: toRemove } },
       }),
-      ...(added.length ? [prisma.bikeTypeMeasurement.createMany({ data: added })] : []),
+      ...(added.length ? [prisma.bikeTypeRiderMeasurement.createMany({ data: added })] : []),
     ]);
-    await logAudit({ userId: admin.id, action: "UPDATE", entity: "measurement", entityId: id });
+    await logAudit({ userId: admin.id, action: "UPDATE", entity: "riderMeasurement", entityId: id });
     revalidatePath("/dashboard/configuration");
     return ok({ id });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
-    console.error("updateMeasurement failed:", e);
-    return fail("Impossible de modifier la côte. Réessayez.");
+    console.error("updateRiderMeasurement failed:", e);
+    return fail("Impossible de modifier la mesure. Réessayez.");
   }
 }
 
-export async function deleteMeasurement(id: string): Promise<ActionResult<void>> {
+export async function deleteRiderMeasurement(id: string): Promise<ActionResult<void>> {
   try {
     const admin = await requireAdmin();
-    // Studies store côte values as JSON (no FK). Any value referencing a deleted
-    // côte is simply ignored when rendering, so studies stay intact.
-    await prisma.measurement.delete({ where: { id } });
-    await logAudit({ userId: admin.id, action: "DELETE", entity: "measurement", entityId: id });
+    // Studies store values as JSON (no FK). Any value referencing a deleted
+    // mesure is simply ignored when rendering, so studies stay intact.
+    await prisma.riderMeasurement.delete({ where: { id } });
+    await logAudit({ userId: admin.id, action: "DELETE", entity: "riderMeasurement", entityId: id });
     revalidatePath("/dashboard/configuration");
     return ok(undefined);
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
-      return fail("Côte introuvable.");
+      return fail("Mesure introuvable.");
     }
-    console.error("deleteMeasurement failed:", e);
-    return fail("Impossible de supprimer la côte. Réessayez.");
+    console.error("deleteRiderMeasurement failed:", e);
+    return fail("Impossible de supprimer la mesure. Réessayez.");
   }
 }
 
-export async function toggleMeasurement(id: string): Promise<ActionResult<{ isActive: boolean }>> {
+export async function toggleRiderMeasurement(id: string): Promise<ActionResult<{ isActive: boolean }>> {
   try {
     const admin = await requireAdmin();
-    const current = await prisma.measurement.findUnique({ where: { id }, select: { isActive: true } });
-    if (!current) return fail("Côte introuvable.");
+    const current = await prisma.riderMeasurement.findUnique({ where: { id }, select: { isActive: true } });
+    if (!current) return fail("Mesure introuvable.");
 
-    const updated = await prisma.measurement.update({
+    const updated = await prisma.riderMeasurement.update({
       where: { id },
       data: { isActive: !current.isActive },
     });
     await logAudit({
       userId: admin.id,
       action: "UPDATE",
-      entity: "measurement",
+      entity: "riderMeasurement",
       entityId: id,
       metadata: { isActive: updated.isActive },
     });
@@ -202,7 +206,7 @@ export async function toggleMeasurement(id: string): Promise<ActionResult<{ isAc
     return ok({ isActive: updated.isActive });
   } catch (e) {
     if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
-    console.error("toggleMeasurement failed:", e);
-    return fail("Impossible de modifier la côte. Réessayez.");
+    console.error("toggleRiderMeasurement failed:", e);
+    return fail("Impossible de modifier la mesure. Réessayez.");
   }
 }

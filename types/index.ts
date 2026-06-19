@@ -22,7 +22,14 @@ export interface StudyMeasureValue {
   after: number | null;
 }
 
-/** Métadonnées minimales d'une côte, pour résoudre les valeurs à l'affichage. */
+/** Une valeur de mesure du cycliste saisie pour une étude (avant/après). */
+export interface StudyRiderMeasureValue {
+  riderMeasurementId: string;
+  before: number | null;
+  after: number | null;
+}
+
+/** Métadonnées minimales d'une côte/mesure, pour résoudre les valeurs à l'affichage. */
 export interface MeasurementInfo {
   name: string;
   unit: string;

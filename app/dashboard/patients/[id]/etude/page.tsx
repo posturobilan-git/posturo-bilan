@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PatientSidebar } from "@/components/study/PatientSidebar";
 import { StudyForm } from "@/components/study/StudyForm";
-import type { StudyMeasureValue } from "@/types";
+import type { StudyMeasureValue, StudyRiderMeasureValue } from "@/types";
 import type { PhysioValue, StudyPhysioResult } from "@/lib/physio";
 
 export default async function EtudePage(props: PageProps<"/dashboard/patients/[id]/etude">) {
@@ -15,7 +15,7 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
   const { studyId } = await props.searchParams;
   const editStudyId = typeof studyId === "string" ? studyId : undefined;
 
-  const [patient, bikeTypes, measurements, physioTests, components, exercises] = await Promise.all([
+  const [patient, bikeTypes, measurements, riderMeasurements, physioTests, components, exercises] = await Promise.all([
     prisma.patient.findUnique({
       where: {
         id,
@@ -29,9 +29,17 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
       include: { bikeTypeLinks: { select: { bikeTypeId: true, order: true } } },
       orderBy: { name: "asc" },
     }),
-    prisma.physioTest.findMany({
+    prisma.riderMeasurement.findMany({
       where: { isActive: true },
       include: { bikeTypeLinks: { select: { bikeTypeId: true, order: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.physioTest.findMany({
+      where: { isActive: true },
+      include: {
+        bikeTypeLinks: { select: { bikeTypeId: true, order: true } },
+        section: { select: { id: true, name: true, order: true } },
+      },
       orderBy: { name: "asc" },
     }),
     prisma.bikeComponent.findMany({
@@ -76,10 +84,18 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
     measureValues[v.measurementId] = { before: v.before ?? null, after: v.after ?? null };
   }
 
-  // Same conversion for the stored physio results (one value per test).
+  // Same conversion for the stored mesures du cycliste.
+  const riderMeasureValues: Record<string, { before: number | null; after: number | null }> = {};
+  for (const v of (study?.riderMeasureValues as StudyRiderMeasureValue[] | null) ?? []) {
+    riderMeasureValues[v.riderMeasurementId] = { before: v.before ?? null, after: v.after ?? null };
+  }
+
+  // Same conversion for the stored physio results (one value per test) + comments.
   const physioResults: Record<string, PhysioValue> = {};
+  const physioComments: Record<string, string> = {};
   for (const r of (study?.physioResults as StudyPhysioResult[] | null) ?? []) {
     physioResults[r.physioTestId] = r.value ?? null;
+    if (r.comment) physioComments[r.physioTestId] = r.comment;
   }
 
   const initial = study
@@ -87,7 +103,9 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
         studyId: study.id,
         bikeTypeId: study.bikeTypeId,
         measureValues,
+        riderMeasureValues,
         physioResults,
+        physioComments,
         observations: study.observations ?? "",
         componentIds: study.componentsUsed.map((c) => c.id),
         exerciseIds: study.exercisesPrescribed.map((e) => e.id),
@@ -113,6 +131,7 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
             patient={patient}
             bikeTypes={bikeTypeOptions}
             measurements={measurements}
+            riderMeasurements={riderMeasurements}
             physioTests={physioTests}
             components={components}
             exercises={exercises}

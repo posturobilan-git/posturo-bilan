@@ -8,7 +8,7 @@ import type {
 
 export const PHYSIO_OUTPUT_TYPE_LABELS: Record<PhysioOutputType, string> = {
   YES_NO: "Oui / Non",
-  COMMENT: "Commentaire",
+  POSITIVE_NEGATIVE: "Positif / Négatif",
   VALUE: "Valeur",
 };
 

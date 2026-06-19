@@ -23,8 +23,9 @@ export default async function PatientPage(props: PageProps<"/dashboard/patients/
   const patientFull = patient as PatientWithRelations;
 
   // Resolve measurement & physio-test metadata so study cards can label values.
-  const [measurements, physioTests] = await Promise.all([
+  const [measurements, riderMeasurements, physioTests] = await Promise.all([
     prisma.measurement.findMany({ select: { id: true, name: true, unit: true } }),
+    prisma.riderMeasurement.findMany({ select: { id: true, name: true, unit: true } }),
     prisma.physioTest.findMany({
       select: { id: true, name: true, unit: true, outputType: true },
     }),
@@ -32,6 +33,10 @@ export default async function PatientPage(props: PageProps<"/dashboard/patients/
   const measurementsById: Record<string, MeasurementInfo> = {};
   for (const m of measurements) {
     measurementsById[m.id] = { name: m.name, unit: m.unit };
+  }
+  const riderMeasurementsById: Record<string, MeasurementInfo> = {};
+  for (const m of riderMeasurements) {
+    riderMeasurementsById[m.id] = { name: m.name, unit: m.unit };
   }
   const physioTestsById: Record<string, PhysioTestInfo> = {};
   for (const t of physioTests) {
@@ -68,6 +73,8 @@ export default async function PatientPage(props: PageProps<"/dashboard/patients/
                   email: patient.email,
                   phone: patient.phone,
                 }}
+                studyCount={patientFull.studies.length}
+                isAnonymized={patient.isAnonymized}
               />
             )}
           </div>
@@ -77,6 +84,7 @@ export default async function PatientPage(props: PageProps<"/dashboard/patients/
         patient={patientFull}
         canEdit={canEdit}
         measurementsById={measurementsById}
+        riderMeasurementsById={riderMeasurementsById}
         physioTestsById={physioTestsById}
       />
     </div>
