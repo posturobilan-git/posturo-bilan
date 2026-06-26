@@ -67,6 +67,7 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
           componentsUsed: true,
           exercisesPrescribed: true,
           pains: { orderBy: { order: "asc" } },
+          photos: { orderBy: [{ phase: "asc" }, { order: "asc" }] },
         },
       })
     : null;
@@ -119,6 +120,14 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
           duration: p.duration ?? "",
           aggravatingFactors: p.aggravatingFactors ?? "",
           relievingFactors: p.relievingFactors ?? "",
+        })),
+        // Existing photos are served (privately) via /api/photos/[id] for preview.
+        photos: study.photos.map((p) => ({
+          url: p.url,
+          previewUrl: `/api/photos/${p.id}`,
+          phase: p.phase,
+          angle: p.angle,
+          caption: p.caption ?? "",
         })),
         observations: study.observations ?? "",
         summary: study.summary ?? "",

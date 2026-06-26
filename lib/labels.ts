@@ -4,6 +4,8 @@ import type {
   StudyStatus,
   MeasurementCategory,
   PhysioOutputType,
+  PhotoPhase,
+  PhotoAngle,
 } from "@prisma/client";
 
 export const PHYSIO_OUTPUT_TYPE_LABELS: Record<PhysioOutputType, string> = {
@@ -29,6 +31,20 @@ export const MEASUREMENT_CATEGORY_LABELS: Record<MeasurementCategory, string> = 
 export const MEASUREMENT_CATEGORIES = Object.keys(
   MEASUREMENT_CATEGORY_LABELS
 ) as MeasurementCategory[];
+
+// Photos patient (prompt 25).
+export const PHOTO_PHASE_LABELS: Record<PhotoPhase, string> = {
+  BEFORE: "Avant réglage",
+  AFTER: "Après réglage",
+};
+
+export const PHOTO_ANGLE_LABELS: Record<PhotoAngle, string> = {
+  SIDE: "Profil",
+  FRONT: "Face",
+  BACK: "Dos",
+};
+
+export const PHOTO_ANGLES = Object.keys(PHOTO_ANGLE_LABELS) as PhotoAngle[];
 
 export const STUDY_STATUS_LABELS: Record<StudyStatus, string> = {
   study_pending: "Étude à faire",

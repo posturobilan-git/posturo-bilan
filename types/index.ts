@@ -3,6 +3,7 @@ import type {
   PatientIntake,
   Study,
   StudyPain,
+  StudyPhoto,
   Followup,
   BikeComponent,
   BikeType,
@@ -12,9 +13,20 @@ import type {
   Role,
   ComponentCategory,
   ExerciseCategory,
+  PhotoPhase,
+  PhotoAngle,
 } from "@prisma/client";
 
-export type { StudyStatus, Role, ComponentCategory, ExerciseCategory, StudyPain };
+export type { StudyStatus, Role, ComponentCategory, ExerciseCategory, StudyPain, StudyPhoto };
+
+/** Une photo patient saisie/transmise au serveur (sans id ni order : l'ordre est
+ * dérivé de la position dans le tableau, par phase). `url` = clé Blob privée. */
+export interface StudyPhotoInput {
+  url: string;
+  phase: PhotoPhase;
+  angle?: PhotoAngle | null;
+  caption?: string;
+}
 
 /** Une douleur structurée saisie/transmise au serveur (sans id ni order : l'ordre
  * est dérivé de la position dans le tableau). */
@@ -79,6 +91,7 @@ export type StudyWithLibrary = Study & {
   componentsUsed: BikeComponent[];
   exercisesPrescribed: Exercise[];
   pains: StudyPain[];
+  photos: StudyPhoto[];
 };
 
 export type PatientWithRelations = Patient & {
@@ -102,6 +115,7 @@ export type StudyForReport = Study & {
   componentsUsed: BikeComponent[];
   exercisesPrescribed: Exercise[];
   pains: StudyPain[];
+  photos: StudyPhoto[];
   patient: Patient & { intake: PatientIntake | null };
   kine: User;
 };

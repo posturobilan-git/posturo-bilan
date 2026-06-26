@@ -2,6 +2,8 @@
 
 import { Button } from "@/components/ui/Button";
 import { MeasureRow, MeasuresHeader } from "./MeasureRow";
+import { PhotoUpload } from "./PhotoUpload";
+import type { PhotoDraft } from "@/lib/stores/studyStore";
 import type { RiderMeasurement } from "@prisma/client";
 
 export type RiderMeasurementForStudy = RiderMeasurement & {
@@ -22,9 +24,14 @@ interface Props {
   values: Record<string, MeasureValue>;
   /** Mesures ajoutées à la volée pour cette étude uniquement. */
   extraRiderMeasurementIds: string[];
+  /** Photos patient (avant/après) — saisies sur cette étape. */
+  photos: PhotoDraft[];
   onSetValue: (riderMeasurementId: string, field: "before" | "after", value: number | null) => void;
   onAddExtra: (riderMeasurementId: string) => void;
   onRemoveExtra: (riderMeasurementId: string) => void;
+  onAddPhoto: (photo: PhotoDraft) => void;
+  onUpdatePhoto: (key: string, patch: Partial<Omit<PhotoDraft, "key">>) => void;
+  onRemovePhoto: (key: string) => void;
   onBack: () => void;
   onNext: () => void;
   onSaveDraft: () => void;
@@ -36,9 +43,13 @@ export function RiderMeasuresForm({
   bikeTypeId,
   values,
   extraRiderMeasurementIds,
+  photos,
   onSetValue,
   onAddExtra,
   onRemoveExtra,
+  onAddPhoto,
+  onUpdatePhoto,
+  onRemovePhoto,
   onBack,
   onNext,
   onSaveDraft,
@@ -139,6 +150,16 @@ export function RiderMeasuresForm({
           </select>
         </label>
       )}
+
+      {/* Photos patient avant/après — rattachées à l'étape mesures cycliste. */}
+      <div className="border-t border-border pt-5">
+        <PhotoUpload
+          photos={photos}
+          onAdd={onAddPhoto}
+          onUpdate={onUpdatePhoto}
+          onRemove={onRemovePhoto}
+        />
+      </div>
 
       <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="ghost" onClick={onBack}>← Étape précédente</Button>

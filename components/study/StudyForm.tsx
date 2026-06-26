@@ -8,9 +8,12 @@ import {
   riderMeasureValuesToArray,
   physioResultsToArray,
   painsToArray,
+  photosToArray,
   makePainDraft,
+  makePhotoDraft,
   type StudyStep,
   type PainDraft,
+  type PhotoDraft,
 } from "@/lib/stores/studyStore";
 import { toast } from "@/lib/stores/toastStore";
 import { saveDraftStudy, submitStudy } from "@/actions/study.actions";
@@ -27,6 +30,7 @@ import {
   type RecapMeasureRow,
   type RecapPhysioRow,
 } from "./StudySummaryStep";
+import type { ComparePhoto } from "./PhotoComparison";
 import type { BikeType, Exercise, Patient, PatientIntake } from "@prisma/client";
 import type { PhysioValue } from "@/lib/physio";
 import type { StudyPainInput } from "@/types";
@@ -48,6 +52,7 @@ interface Props {
     physioResults: Record<string, PhysioValue>;
     physioComments: Record<string, string>;
     pains: StudyPainInput[];
+    photos: Omit<PhotoDraft, "key">[];
     observations: string;
     summary: string;
     recommendations: string;
@@ -128,6 +133,7 @@ export function StudyForm({
       physioResults: initial?.physioResults ?? {},
       physioComments: initial?.physioComments ?? {},
       pains,
+      photos: (initial?.photos ?? []).map((p) => makePhotoDraft(p)),
       observations: initial?.observations ?? "",
       summary: initial?.summary ?? "",
       recommendations: initial?.recommendations ?? "",
@@ -149,6 +155,7 @@ export function StudyForm({
       riderMeasureValues: riderMeasureValuesToArray(store.riderMeasureValues),
       physioResults: physioResultsToArray(store.physioResults, store.physioComments),
       pains: painsToArray(store.pains),
+      photos: photosToArray(store.photos),
       observations: store.observations || undefined,
       summary: store.summary || undefined,
       recommendations: store.recommendations || undefined,
@@ -280,6 +287,7 @@ export function StudyForm({
         riderMeasureValues: riderMeasureValuesToArray(store.riderMeasureValues),
         physioResults: physioResultsToArray(store.physioResults, store.physioComments),
         pains: painsToArray(store.pains),
+        photos: photosToArray(store.photos),
         observations: store.observations || undefined,
         summary: store.summary || undefined,
         recommendations: store.recommendations || undefined,
@@ -329,6 +337,15 @@ export function StudyForm({
 
   const measureRecap = buildMeasureRecap(measurements, store.measureValues);
   const riderMeasureRecap = buildMeasureRecap(riderMeasurements, store.riderMeasureValues);
+
+  // Photos for the bilan comparison — split by phase, in capture order. previewUrl
+  // is the local objectURL (fresh upload) or /api/photos/[id] (existing).
+  const toCompare = (phase: "BEFORE" | "AFTER"): ComparePhoto[] =>
+    store.photos
+      .filter((p) => p.phase === phase && p.previewUrl)
+      .map((p) => ({ src: p.previewUrl, angle: p.angle, caption: p.caption || null }));
+  const beforePhotos = toCompare("BEFORE");
+  const afterPhotos = toCompare("AFTER");
 
   const physioById = new Map(physioTests.map((t) => [t.id, t]));
   const physioRecap: RecapPhysioRow[] = [
@@ -406,9 +423,13 @@ export function StudyForm({
           bikeTypeId={store.bikeTypeId}
           values={store.riderMeasureValues}
           extraRiderMeasurementIds={store.extraRiderMeasurementIds}
+          photos={store.photos}
           onSetValue={store.setRiderMeasureValue}
           onAddExtra={store.addExtraRiderMeasurement}
           onRemoveExtra={store.removeExtraRiderMeasurement}
+          onAddPhoto={store.addPhoto}
+          onUpdatePhoto={store.updatePhoto}
+          onRemovePhoto={store.removePhoto}
           onBack={() => store.setStep(4)}
           onNext={() => advanceTo(6)}
           onSaveDraft={handleSaveDraft}
@@ -455,6 +476,8 @@ export function StudyForm({
           measureRows={measureRecap}
           riderMeasureRows={riderMeasureRecap}
           physioRows={physioRecap}
+          beforePhotos={beforePhotos}
+          afterPhotos={afterPhotos}
           summary={store.summary}
           recommendations={store.recommendations}
           onSetSummary={store.setSummary}

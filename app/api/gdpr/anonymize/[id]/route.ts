@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
+import { deleteBlob } from "@/lib/storage";
 
 export async function DELETE(
   req: NextRequest,
@@ -26,10 +27,19 @@ export async function DELETE(
     return NextResponse.json({ error: "Patient déjà anonymisé" }, { status: 409 });
   }
 
-  // Anonymise identity + delete the intake (carries personal/medical data).
-  // Studies (measures) and followups (scores) are business data → kept.
+  // Patient photos are sensitive personal data (prompt 25) → must be deleted on
+  // anonymisation, blobs included. Collect their keys before dropping the rows.
+  const photos = await prisma.studyPhoto.findMany({
+    where: { study: { patientId: id } },
+    select: { url: true },
+  });
+
+  // Anonymise identity + delete the intake (carries personal/medical data) and
+  // the patient photos. Studies (measures) and followups (scores) are business
+  // data → kept.
   await prisma.$transaction([
     prisma.patientIntake.deleteMany({ where: { patientId: id } }),
+    prisma.studyPhoto.deleteMany({ where: { study: { patientId: id } } }),
     prisma.patient.update({
       where: { id },
       data: {
@@ -42,6 +52,9 @@ export async function DELETE(
       },
     }),
   ]);
+
+  // Remove the underlying blobs (best-effort — orphaned blobs are harmless).
+  await Promise.all(photos.map((p) => deleteBlob(p.url)));
 
   await logAudit({ userId: kine.id, action: "ANONYMIZE", entity: "patient", entityId: id });
 

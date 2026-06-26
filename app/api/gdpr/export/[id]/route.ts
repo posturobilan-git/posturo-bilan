@@ -21,7 +21,13 @@ export async function GET(
     where: { id },
     include: {
       intake: true,
-      studies: { include: { componentsUsed: true, exercisesPrescribed: true } },
+      studies: {
+        include: {
+          componentsUsed: true,
+          exercisesPrescribed: true,
+          pains: { orderBy: { order: "asc" } },
+        },
+      },
       followups: true,
     },
   });

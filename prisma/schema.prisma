@@ -74,6 +74,21 @@ enum PhysioOutputType {
   VALUE
 }
 
+// Phase d'une photo patient (prompt 25) : avant ou après réglage. Aligné sur le
+// flux temporel avant/après des mesures vélo.
+enum PhotoPhase {
+  BEFORE
+  AFTER
+}
+
+// Angle de prise de vue d'une photo patient — facultatif, utile pour comparer le
+// même angle avant/après.
+enum PhotoAngle {
+  SIDE
+  FRONT
+  BACK
+}
+
 // ─── MODELS ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -379,6 +394,10 @@ model Study {
   // Pré-remplies depuis PatientIntake.injuries, puis complétées (cf. StudyPain).
   pains StudyPain[]
 
+  // Photos du patient sur le vélo, avant/après réglage (prompt 25). Saisies sur
+  // l'étape « Mesures cycliste », affichées côte à côte dans le bilan + le PDF.
+  photos StudyPhoto[]
+
   // Étape finale « Récapitulatif & bilan » : synthèse libre du kiné et
   // recommandations non standardisées (distinctes des exercices de la
   // bibliothèque, exercisesPrescribed).
@@ -431,6 +450,27 @@ model StudyPain {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([studyId])
+}
+
+// Une photo du patient sur le vélo, prise pendant l'étude (prompt 25). Plusieurs
+// par étude (avant/après, angles différents). `url` stocke la *clé* Vercel Blob
+// (pathname), pas une URL publique : le store est privé, les images sont servies
+// aux kinés authentifiés via /api/photos/[id]. L'anonymisation RGPD supprime les
+// lignes ET les blobs associés.
+model StudyPhoto {
+  id      String @id @default(uuid())
+  studyId String
+  study   Study  @relation(fields: [studyId], references: [id], onDelete: Cascade)
+
+  url     String      // clé Blob privée (pathname), ex: studies/photos/<id>.jpg
+  phase   PhotoPhase  // avant / après réglage
+  angle   PhotoAngle? // côté / face / dos — facultatif
+  caption String?     // légende libre facultative
+  order   Int     @default(0) // ordre d'affichage au sein de la phase
+
+  createdAt DateTime @default(now())
 
   @@index([studyId])
 }

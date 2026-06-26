@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { ReportActions } from "@/components/patients/ReportActions";
 import { StudyDeleteButton } from "@/components/patients/StudyDeleteButton";
 import { MeasureDelta } from "@/components/study/MeasureDelta";
+import { PhotoComparison, type ComparePhoto } from "@/components/study/PhotoComparison";
 import type {
   StudyWithLibrary,
   StudyMeasureValue,
@@ -61,6 +62,13 @@ export function StudyCard({
     .sort((a, b) => a.info.name.localeCompare(b.info.name));
   // Douleurs structurées, déjà ordonnées (order asc) par la requête.
   const pains = study.pains ?? [];
+  // Photos avant/après — servies (privément) via /api/photos/[id], déjà ordonnées.
+  const toCompare = (phase: "BEFORE" | "AFTER"): ComparePhoto[] =>
+    (study.photos ?? [])
+      .filter((p) => p.phase === phase)
+      .map((p) => ({ src: `/api/photos/${p.id}`, angle: p.angle, caption: p.caption }));
+  const beforePhotos = toCompare("BEFORE");
+  const afterPhotos = toCompare("AFTER");
   // Reports can be generated/sent once the study is finalised.
   const reportable = study.status !== "study_pending";
 
@@ -237,6 +245,12 @@ export function StudyCard({
         <div className="mt-3">
           <p className="text-xs font-medium uppercase tracking-wide text-content-subtle">Recommandations</p>
           <p className="mt-1 whitespace-pre-line text-sm text-content">{study.recommendations}</p>
+        </div>
+      )}
+
+      {(beforePhotos.length > 0 || afterPhotos.length > 0) && (
+        <div className="mt-4">
+          <PhotoComparison before={beforePhotos} after={afterPhotos} />
         </div>
       )}
 

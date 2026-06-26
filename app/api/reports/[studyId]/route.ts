@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireKine } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { readReport } from "@/lib/storage";
+import { readBlob } from "@/lib/storage";
 
 /**
  * Streams a generated report PDF to the authenticated kiné who owns the
@@ -33,12 +33,12 @@ export async function GET(
     return new NextResponse("Accès refusé", { status: 403 });
   }
 
-  const pdf = await readReport(study.reportUrl);
+  const pdf = await readBlob(study.reportUrl);
   if (!pdf) {
     return new NextResponse("Rapport introuvable", { status: 404 });
   }
 
-  return new NextResponse(new Uint8Array(pdf), {
+  return new NextResponse(new Uint8Array(pdf.buffer), {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="rapport-${studyId}.pdf"`,

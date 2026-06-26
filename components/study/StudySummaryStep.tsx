@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/Button";
 import { MeasureDelta } from "./MeasureDelta";
+import { PhotoComparison, type ComparePhoto } from "./PhotoComparison";
 import { formatPhysioValue, type PhysioValue } from "@/lib/physio";
 import type { PhysioOutputType } from "@prisma/client";
 
@@ -64,6 +65,8 @@ interface Props {
   measureRows: RecapMeasureRow[];
   riderMeasureRows: RecapMeasureRow[];
   physioRows: RecapPhysioRow[];
+  beforePhotos: ComparePhoto[];
+  afterPhotos: ComparePhoto[];
   summary: string;
   recommendations: string;
   onSetSummary: (text: string) => void;
@@ -77,6 +80,8 @@ export function StudySummaryStep({
   measureRows,
   riderMeasureRows,
   physioRows,
+  beforePhotos,
+  afterPhotos,
   summary,
   recommendations,
   onSetSummary,
@@ -136,6 +141,8 @@ export function StudySummaryStep({
           )}
         </div>
       )}
+
+      <PhotoComparison before={beforePhotos} after={afterPhotos} />
 
       <label className="flex flex-col gap-1">
         <span className="text-xs font-medium text-content-muted">Bilan</span>

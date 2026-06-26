@@ -1,4 +1,4 @@
-import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import { formatDelta } from "@/lib/measures";
 import type { StudyForReport } from "@/types";
 
@@ -7,6 +7,19 @@ export interface ReportMeasureRow {
   unit: string;
   before: number | null;
   after: number | null;
+}
+
+/** A patient photo embedded in the report, as a base64 data URI (jpg/png). */
+export interface ReportPhoto {
+  dataUri: string;
+  angle: string | null; // pre-formatted label
+  caption: string | null;
+}
+
+/** A before/after pair sharing the same angle, aligned for the comparison. */
+export interface ReportPhotoPair {
+  before?: ReportPhoto;
+  after?: ReportPhoto;
 }
 
 /** Physio test row — the value is pre-formatted (Oui/Non, Positif/Négatif, valeur + unité). */
@@ -88,6 +101,14 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
 
   para: { marginTop: 4, color: DARK },
+
+  // photos avant / après (deux colonnes, paires alignées)
+  photoHead: { flexDirection: "row", marginTop: 4 },
+  photoHeadCell: { width: "50%", color: GRAY, fontSize: 9, textTransform: "uppercase" },
+  photoRow: { flexDirection: "row", marginBottom: 6 },
+  photoCell: { width: "50%", paddingRight: 6 },
+  photoImg: { width: "100%", height: 150, objectFit: "contain" },
+  photoCaption: { color: GRAY, fontSize: 8, marginTop: 2 },
 
   // pain card
   painCard: {
@@ -211,16 +232,31 @@ function MeasureTable({ rows }: { rows: ReportMeasureRow[] }) {
   );
 }
 
+/** One before/after photo cell — an image with an optional angle/caption line. */
+function PhotoCellPdf({ photo }: { photo?: ReportPhoto }) {
+  if (!photo) return <View style={styles.photoCell} />;
+  const meta = [photo.angle, photo.caption].filter(Boolean).join(" · ");
+  return (
+    <View style={styles.photoCell}>
+      {/* eslint-disable-next-line jsx-a11y/alt-text */}
+      <Image src={photo.dataUri} style={styles.photoImg} />
+      {meta ? <Text style={styles.photoCaption}>{meta}</Text> : null}
+    </View>
+  );
+}
+
 export function ReportTemplate({
   study,
   measureRows,
   riderMeasureRows,
   physioRows,
+  photoPairs,
 }: {
   study: StudyForReport;
   measureRows: ReportMeasureRow[];
   riderMeasureRows: ReportMeasureRow[];
   physioRows: ReportPhysioRow[];
+  photoPairs: ReportPhotoPair[];
 }) {
   const { patient, kine } = study;
   const intake = patient.intake;
@@ -379,6 +415,22 @@ export function ReportTemplate({
           <>
             <Text style={styles.sectionTitle}>Recommandations</Text>
             <Text style={styles.para}>{study.recommendations}</Text>
+          </>
+        )}
+
+        {photoPairs.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Photos avant / après</Text>
+            <View style={styles.photoHead}>
+              <Text style={styles.photoHeadCell}>Avant réglage</Text>
+              <Text style={styles.photoHeadCell}>Après réglage</Text>
+            </View>
+            {photoPairs.map((pair, i) => (
+              <View key={i} style={styles.photoRow} wrap={false}>
+                <PhotoCellPdf photo={pair.before} />
+                <PhotoCellPdf photo={pair.after} />
+              </View>
+            ))}
           </>
         )}
 
