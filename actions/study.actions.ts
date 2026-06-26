@@ -6,7 +6,7 @@ import { studySchema } from "@/lib/validations/study.schema";
 import { logAudit } from "@/lib/audit";
 import { requireKine, requirePatientOwnership } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
-import { deleteReport } from "@/lib/storage";
+import { deleteBlob } from "@/lib/storage";
 import { Prisma, StudyStatus } from "@prisma/client";
 import type { StudyListItem } from "@/types";
 import type { ListResult, PageQuery, SortDir } from "@/lib/pagination";
@@ -52,6 +52,35 @@ function painsCreateData(pains: StudyInput["pains"]) {
     relievingFactors: p.relievingFactors ?? null,
     order: i,
   }));
+}
+
+/**
+ * Nested-create rows for a study's patient photos (prompt 25), ordered by array
+ * position within each phase so the before[i]/after[i] pairs line up in the bilan.
+ */
+function photosCreateData(photos: StudyInput["photos"]) {
+  const next: Record<string, number> = { BEFORE: 0, AFTER: 0 };
+  return photos.map((p) => ({
+    url: p.url,
+    phase: p.phase,
+    angle: p.angle ?? null,
+    caption: p.caption ?? null,
+    order: next[p.phase]++,
+  }));
+}
+
+/**
+ * Blob keys of a study's current photos that are NOT in the incoming set — i.e.
+ * photos the kiné removed. Their blobs must be deleted to avoid orphans (and for
+ * RGPD hygiene). Computed before the wholesale row replace.
+ */
+async function removedPhotoKeys(studyId: string, keepUrls: string[]): Promise<string[]> {
+  const existing = await prisma.studyPhoto.findMany({
+    where: { studyId },
+    select: { url: true },
+  });
+  const keep = new Set(keepUrls);
+  return existing.filter((p) => !keep.has(p.url)).map((p) => p.url);
 }
 
 /**
@@ -245,6 +274,11 @@ export async function saveDraftStudy(
     if (validated.draftStudyId) {
       // Authorize before mutating: a KINE may only edit their own studies.
       await assertStudyOwnership(validated.draftStudyId);
+      // Photos the kiné dropped (compared to what's stored) → delete their blobs.
+      const removed = await removedPhotoKeys(
+        validated.draftStudyId,
+        validated.photos.map((p) => p.url)
+      );
       // Editing an existing study invalidates any previously generated report.
       await prisma.study.update({
         where: { id: validated.draftStudyId },
@@ -253,10 +287,13 @@ export async function saveDraftStudy(
           ...buildRelations(validated.componentIds, validated.exerciseIds),
           // Replace the structured pains wholesale (the form sends the full set).
           pains: { deleteMany: {}, create: painsCreateData(validated.pains) },
+          // Same wholesale replace for photos (rows only — blobs handled above/below).
+          photos: { deleteMany: {}, create: photosCreateData(validated.photos) },
           reportUrl: null,
           reportSentAt: null,
         },
       });
+      await Promise.all(removed.map(deleteBlob));
       await revertReportStatus(validated.draftStudyId);
       return ok({ studyId: validated.draftStudyId });
     }
@@ -268,6 +305,7 @@ export async function saveDraftStudy(
         patientId: validated.patientId,
         kineId: kine.id,
         ...studyDataFrom(validated),
+        photos: { create: photosCreateData(validated.photos) },
         componentsUsed: { connect: validated.componentIds.map((id) => ({ id })) },
         exercisesPrescribed: { connect: validated.exerciseIds.map((id) => ({ id })) },
       },
@@ -308,6 +346,11 @@ export async function submitStudy(
       // Authorize before mutating: a KINE may only edit their own studies.
       const { kine } = await assertStudyOwnership(validated.draftStudyId);
       kineId = kine.id;
+      // Photos the kiné dropped (compared to what's stored) → delete their blobs.
+      const removed = await removedPhotoKeys(
+        validated.draftStudyId,
+        validated.photos.map((p) => p.url)
+      );
       // Editing an existing study invalidates any previously generated report.
       await prisma.study.update({
         where: { id: validated.draftStudyId },
@@ -316,10 +359,13 @@ export async function submitStudy(
           ...buildRelations(validated.componentIds, validated.exerciseIds),
           // Replace the structured pains wholesale (the form sends the full set).
           pains: { deleteMany: {}, create: painsCreateData(validated.pains) },
+          // Same wholesale replace for photos (rows only — blobs handled above/below).
+          photos: { deleteMany: {}, create: photosCreateData(validated.photos) },
           reportUrl: null,
           reportSentAt: null,
         },
       });
+      await Promise.all(removed.map(deleteBlob));
       studyId = validated.draftStudyId;
     } else {
       // Creating a study: the target patient must belong to the acting kiné.
@@ -331,6 +377,7 @@ export async function submitStudy(
           kineId: kine.id,
           ...studyDataFrom(validated),
           pains: { create: painsCreateData(validated.pains) },
+          photos: { create: photosCreateData(validated.photos) },
           componentsUsed: { connect: validated.componentIds.map((id) => ({ id })) },
           exercisesPrescribed: { connect: validated.exerciseIds.map((id) => ({ id })) },
         },
@@ -373,15 +420,17 @@ export async function deleteStudy(studyId: string): Promise<ActionResult<void>> 
 
     const study = await prisma.study.findUnique({
       where: { id: studyId },
-      select: { id: true, kineId: true, patientId: true, reportUrl: true },
+      select: { id: true, kineId: true, patientId: true, reportUrl: true, photos: { select: { url: true } } },
     });
     if (!study) return fail("Étude introuvable.");
     if (kine.role !== "ADMIN" && study.kineId !== kine.id) {
       return fail("Accès refusé à cette étude.");
     }
 
+    // StudyPhoto rows cascade with the study; their blobs must be removed too.
     await prisma.study.delete({ where: { id: studyId } });
-    if (study.reportUrl) await deleteReport(study.reportUrl);
+    if (study.reportUrl) await deleteBlob(study.reportUrl);
+    await Promise.all(study.photos.map((p) => deleteBlob(p.url)));
 
     await logAudit({ userId: kine.id, action: "DELETE", entity: "study", entityId: studyId });
     revalidatePath(`/dashboard/patients/${study.patientId}`);

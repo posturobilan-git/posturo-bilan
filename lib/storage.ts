@@ -3,70 +3,93 @@ import { put, get, del } from "@vercel/blob";
 import { writeFile, mkdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 
+// Single storage layer for every binary the app persists (PDF reports + patient
+// photos). One branch decides cloud vs local for ALL of them:
+//
+// - Deployments (BLOB_READ_WRITE_TOKEN set) → Vercel Blob, PRIVATE access. Files
+//   are never publicly reachable; they are streamed to authenticated kinés via
+//   /api/reports/[studyId] and /api/photos/[id].
+// - Local dev (no token) → writes under `public/` (gitignored), so the whole
+//   flow — including patient-photo upload — works on a laptop without a Blob
+//   store, exactly like the report PDFs.
+//
+// The stored *key* (pathname) is what gets persisted (Study.reportUrl,
+// StudyPhoto.url).
+
+/** Best-effort content type from a key's extension (defaults to JPEG). */
+export function contentTypeFromKey(key: string): string {
+  const ext = key.split(".").pop()?.toLowerCase();
+  if (ext === "png") return "image/png";
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "heic" || ext === "heif") return "image/heic";
+  return "image/jpeg";
+}
+
+/** Absolute path of a key in the local dev fallback store. */
+function localPath(key: string): string {
+  return path.join(process.cwd(), "public", key);
+}
+
 /**
- * Stores a PDF and returns its storage *key* (e.g. `reports/<id>.pdf`).
- *
- * The Blob store is PRIVATE: files are never publicly accessible. They are
- * served to authenticated kinés through the streaming route at
- * `/api/reports/[studyId]`, which calls `readReport()` below. The returned key
- * is what gets persisted on `Study.reportUrl`.
- *
- * - Production / when BLOB_READ_WRITE_TOKEN is set → Vercel Blob (private, durable).
- * - Local dev without a Blob token → writes under `public/` (gitignored).
+ * Stores `buffer` under `key` and returns the key. Private Blob in the cloud,
+ * local filesystem in dev. Overwrites an existing key (report PDFs reuse a
+ * stable key; photo keys are unique).
  */
-export async function storePdf(key: string, buffer: Buffer): Promise<string> {
+export async function putBlob(key: string, buffer: Buffer, contentType: string): Promise<string> {
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     const { pathname } = await put(key, buffer, {
       access: "private",
-      contentType: "application/pdf",
+      contentType,
       allowOverwrite: true,
     });
     return pathname;
   }
 
   // Local filesystem fallback (dev only — Vercel's runtime FS is read-only).
-  const absPath = path.join(process.cwd(), "public", key);
+  const absPath = localPath(key);
   await mkdir(path.dirname(absPath), { recursive: true });
   await writeFile(absPath, buffer);
   return key;
 }
 
 /**
- * Reads a stored PDF back as a Buffer, from the private Blob store in the
- * cloud or from the local filesystem in dev. Returns null if not found.
+ * Reads a stored blob back as bytes + content type. Returns null if not found.
  */
-export async function readReport(key: string): Promise<Buffer | null> {
+export async function readBlob(
+  key: string
+): Promise<{ buffer: Buffer; contentType: string } | null> {
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     const result = await get(key, { access: "private" });
     if (!result || result.statusCode !== 200) return null;
     const bytes = await new Response(result.stream).arrayBuffer();
-    return Buffer.from(bytes);
+    return { buffer: Buffer.from(bytes), contentType: contentTypeFromKey(key) };
   }
 
   try {
-    return await readFile(path.join(process.cwd(), "public", key));
+    return { buffer: await readFile(localPath(key)), contentType: contentTypeFromKey(key) };
   } catch {
     return null;
   }
 }
 
 /**
- * Best-effort removal of a stored report PDF (called when its study is deleted).
- * Never throws — an orphaned file is harmless and must not block deletion.
+ * Best-effort removal of a stored blob by key (study deletion, photo edits, RGPD
+ * anonymisation). Never throws — an orphaned blob is harmless and must not block
+ * the operation.
  */
-export async function deleteReport(key: string): Promise<void> {
+export async function deleteBlob(key: string): Promise<void> {
   try {
     if (process.env.BLOB_READ_WRITE_TOKEN) {
       await del(key);
       return;
     }
-    await unlink(path.join(process.cwd(), "public", key));
+    await unlink(localPath(key));
   } catch {
     // Ignore: file already gone, or storage unavailable.
   }
 }
 
-/** True when report delivery uses durable cloud storage. */
-export function usingCloudStorage(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+/** Stores a generated report PDF — a thin, well-named wrapper over putBlob. */
+export function storePdf(key: string, buffer: Buffer): Promise<string> {
+  return putBlob(key, buffer, "application/pdf");
 }

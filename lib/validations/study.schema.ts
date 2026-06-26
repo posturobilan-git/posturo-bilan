@@ -40,6 +40,16 @@ export const studyPainSchema = z.object({
   relievingFactors: z.string().max(1000).optional(),
 });
 
+// Une photo patient attachée à l'étude (prompt 25). `url` est la clé Blob privée
+// renvoyée par l'upload direct ; l'ordre est dérivé de la position dans le tableau
+// (par phase) côté serveur.
+export const studyPhotoSchema = z.object({
+  url: z.string().min(1).max(1024),
+  phase: z.enum(["BEFORE", "AFTER"]),
+  angle: z.enum(["SIDE", "FRONT", "BACK"]).nullable().optional(),
+  caption: z.string().max(500).optional(),
+});
+
 export const studySchema = z.object({
   patientId: z.string().uuid(),
   draftStudyId: z.string().uuid().optional(),
@@ -48,6 +58,7 @@ export const studySchema = z.object({
   riderMeasureValues: z.array(studyRiderMeasureValueSchema).default([]),
   physioResults: z.array(studyPhysioResultSchema).default([]),
   pains: z.array(studyPainSchema).default([]),
+  photos: z.array(studyPhotoSchema).default([]),
   observations: z.string().max(3000).optional(),
   summary: z.string().max(5000).optional(),
   recommendations: z.string().max(5000).optional(),

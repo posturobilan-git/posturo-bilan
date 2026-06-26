@@ -12,7 +12,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { logAudit } from "@/lib/audit";
 import { inviteExpiryFromNow } from "@/lib/legal";
-import { deleteReport } from "@/lib/storage";
+import { deleteBlob } from "@/lib/storage";
 import { requireKine, requirePatientOwnership } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { Prisma, type Patient } from "@prisma/client";
@@ -79,6 +79,7 @@ export async function getPatientDossier(id: string) {
           componentsUsed: true,
           exercisesPrescribed: true,
           pains: { orderBy: { order: "asc" } },
+          photos: { orderBy: [{ phase: "asc" }, { order: "asc" }] },
         },
         orderBy: { createdAt: "desc" },
       },
@@ -244,7 +245,9 @@ export async function hardDeletePatient(
         id: true,
         firstName: true,
         lastName: true,
-        studies: { select: { id: true, reportUrl: true } },
+        studies: {
+          select: { id: true, reportUrl: true, photos: { select: { url: true } } },
+        },
       },
     });
     if (!patient) return fail("Patient introuvable.");
@@ -266,13 +269,13 @@ export async function hardDeletePatient(
       prisma.patient.delete({ where: { id: patientId } }),
     ]);
 
-    // Nettoyage best-effort des PDF stockés (ne bloque jamais la suppression).
-    await Promise.all(
-      patient.studies
-        .map((s) => s.reportUrl)
-        .filter((url): url is string => Boolean(url))
-        .map((url) => deleteReport(url))
-    );
+    // Nettoyage best-effort des blobs stockés — PDF de rapport + photos patient
+    // (ne bloque jamais la suppression).
+    const blobKeys = [
+      ...patient.studies.map((s) => s.reportUrl).filter((url): url is string => Boolean(url)),
+      ...patient.studies.flatMap((s) => s.photos.map((p) => p.url)),
+    ];
+    await Promise.all(blobKeys.map((key) => deleteBlob(key)));
 
     await logAudit({
       userId: user.id,

@@ -2,14 +2,17 @@ import "server-only";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { prisma } from "@/lib/db";
 import { getResend, resendFrom } from "@/lib/email";
-import { storePdf } from "@/lib/storage";
+import { storePdf, readBlob } from "@/lib/storage";
 import { logAudit } from "@/lib/audit";
 import { ok, fail, type ActionResult } from "@/lib/action-result";
-import { ReportTemplate, type ReportMeasureRow, type ReportPhysioRow } from "@/components/pdf/ReportTemplate";
+import { ReportTemplate, type ReportMeasureRow, type ReportPhysioRow, type ReportPhoto, type ReportPhotoPair } from "@/components/pdf/ReportTemplate";
 import { ReportEmail } from "@/lib/emails/ReportEmail";
 import { isLocalEnv } from "@/lib/env";
+import { PHOTO_ANGLE_LABELS } from "@/lib/labels";
+import { pairByAngle } from "@/lib/photos";
 import { formatPhysioValue, hasPhysioValue, type StudyPhysioResult } from "@/lib/physio";
 import type { StudyForReport, StudyMeasureValue, StudyRiderMeasureValue } from "@/types";
+import type { PhotoPhase, PhotoAngle } from "@prisma/client";
 
 const CABINET = process.env.CABINET_NAME || "PosturoBilan";
 const FROM = resendFrom();
@@ -95,6 +98,46 @@ async function buildPhysioRows(study: StudyForReport): Promise<ReportPhysioRow[]
     }));
 }
 
+/**
+ * Reads the study's patient photos from the private Blob store and turns them
+ * into base64 data URIs (prompt 25), split into before/after for the bilan
+ * comparison. Skips formats @react-pdf can't embed (only JPEG/PNG) and any blob
+ * that can't be read, so a missing photo never breaks report generation.
+ */
+async function buildPhotoData(studyId: string): Promise<ReportPhotoPair[]> {
+  const photos = await prisma.studyPhoto.findMany({
+    where: { studyId },
+    orderBy: [{ phase: "asc" }, { order: "asc" }],
+  });
+
+  type Loaded = { phase: PhotoPhase; angle: PhotoAngle | null; photo: ReportPhoto };
+  const loaded = (
+    await Promise.all(
+      photos.map(async (p): Promise<Loaded | null> => {
+        const ext = p.url.split(".").pop()?.toLowerCase();
+        if (ext !== "jpg" && ext !== "jpeg" && ext !== "png") return null;
+        const blob = await readBlob(p.url);
+        if (!blob) return null;
+        return {
+          phase: p.phase,
+          angle: p.angle,
+          photo: {
+            dataUri: `data:${blob.contentType};base64,${blob.buffer.toString("base64")}`,
+            angle: p.angle ? PHOTO_ANGLE_LABELS[p.angle] : null,
+            caption: p.caption,
+          },
+        };
+      })
+    )
+  ).filter((x): x is Loaded => x !== null);
+
+  // Pair so the same angle is side by side (prompt 25), then drop the raw angle.
+  return pairByAngle(
+    loaded.filter((x) => x.phase === "BEFORE"),
+    loaded.filter((x) => x.phase === "AFTER")
+  ).map((pair) => ({ before: pair.before?.photo, after: pair.after?.photo }));
+}
+
 // ─── Generate ─────────────────────────────────────────────────────────────────
 
 /**
@@ -118,10 +161,11 @@ export async function generateReportForStudy(
   }
 
   try {
-    const [measureRows, riderMeasureRows, physioRows] = await Promise.all([
+    const [measureRows, riderMeasureRows, physioRows, photoData] = await Promise.all([
       buildMeasureRows(study),
       buildRiderMeasureRows(study),
       buildPhysioRows(study),
+      buildPhotoData(study.id),
     ]);
     const pdfBuffer = await renderToBuffer(
       <ReportTemplate
@@ -129,6 +173,7 @@ export async function generateReportForStudy(
         measureRows={measureRows}
         riderMeasureRows={riderMeasureRows}
         physioRows={physioRows}
+        photoPairs={photoData}
       />
     );
     const url = await storePdf(`reports/${studyId}.pdf`, pdfBuffer);
@@ -183,10 +228,11 @@ export async function sendReportForStudy(
   try {
     // Re-render for the email attachment (current data == generated data,
     // since editing the study resets the report).
-    const [measureRows, riderMeasureRows, physioRows] = await Promise.all([
+    const [measureRows, riderMeasureRows, physioRows, photoData] = await Promise.all([
       buildMeasureRows(study),
       buildRiderMeasureRows(study),
       buildPhysioRows(study),
+      buildPhotoData(study.id),
     ]);
     const pdfBuffer = await renderToBuffer(
       <ReportTemplate
@@ -194,6 +240,7 @@ export async function sendReportForStudy(
         measureRows={measureRows}
         riderMeasureRows={riderMeasureRows}
         physioRows={physioRows}
+        photoPairs={photoData}
       />
     );
 

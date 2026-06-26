@@ -43,5 +43,6 @@ next-env.d.ts
 # clerk configuration (can include secrets)
 /.clerk/
 
-# locally generated PDF reports (dev storage fallback)
+# locally stored blobs (dev storage fallback): PDF reports + patient photos
 /public/reports/
+/public/studies/

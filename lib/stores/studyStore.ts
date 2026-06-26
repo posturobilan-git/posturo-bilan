@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import type { StudyMeasureValue, StudyRiderMeasureValue, StudyPainInput } from "@/types";
+import type { StudyMeasureValue, StudyRiderMeasureValue, StudyPainInput, StudyPhotoInput } from "@/types";
 import type { PhysioValue, StudyPhysioResult } from "@/lib/physio";
+import type { PhotoPhase, PhotoAngle } from "@prisma/client";
 
 // Steps: 1 Vélo · 2 Douleurs · 3 Tests physio · 4 Mesures vélo avant ·
 // 5 Mesures cycliste · 6 Mesures vélo après · 7 Composants · 8 Exercices ·
@@ -28,6 +29,35 @@ export function makePainDraft(partial: Partial<StudyPainInput> = {}): PainDraft 
     duration: "",
     aggravatingFactors: "",
     relievingFactors: "",
+    ...partial,
+  };
+}
+
+/**
+ * Une photo patient en cours d'édition (prompt 25). `url` est la clé Blob (vide
+ * tant que l'upload n'est pas terminé) ; `previewUrl` est l'objectURL local (photo
+ * fraîchement uploadée) ou /api/photos/[id] (photo déjà persistée), pour l'aperçu.
+ */
+export interface PhotoDraft {
+  key: string;
+  url: string;
+  previewUrl: string;
+  phase: PhotoPhase;
+  angle: PhotoAngle | null;
+  caption: string;
+}
+
+let photoKeySeq = 0;
+/** Crée un brouillon de photo avec une clé locale stable. `phase` est requise. */
+export function makePhotoDraft(
+  partial: Partial<Omit<PhotoDraft, "key">> & { phase: PhotoPhase }
+): PhotoDraft {
+  return {
+    key: `photo-${photoKeySeq++}`,
+    url: "",
+    previewUrl: "",
+    angle: null,
+    caption: "",
     ...partial,
   };
 }
@@ -60,6 +90,8 @@ interface StudyStoreState {
   recommendations: string;
   selectedComponentIds: string[];
   selectedExerciseIds: string[];
+  // Photos patient (avant/après), saisies sur l'étape « Mesures cycliste ».
+  photos: PhotoDraft[];
 }
 
 interface StudyStoreActions {
@@ -82,6 +114,9 @@ interface StudyStoreActions {
   setRecommendations: (text: string) => void;
   toggleComponent: (id: string) => void;
   toggleExercise: (id: string) => void;
+  addPhoto: (photo: PhotoDraft) => void;
+  updatePhoto: (key: string, patch: Partial<Omit<PhotoDraft, "key">>) => void;
+  removePhoto: (key: string) => void;
   setDraftStudyId: (id: string | null) => void;
   reset: () => void;
 }
@@ -103,6 +138,7 @@ const DEFAULT_STATE: StudyStoreState = {
   recommendations: "",
   selectedComponentIds: [],
   selectedExerciseIds: [],
+  photos: [],
 };
 
 /** Serialises the measureValues map into the array shape the action expects. */
@@ -163,6 +199,21 @@ export function painsToArray(pains: PainDraft[]): StudyPainInput[] {
       duration: clean(p.duration ?? ""),
       aggravatingFactors: clean(p.aggravatingFactors ?? ""),
       relievingFactors: clean(p.relievingFactors ?? ""),
+    }));
+}
+
+/**
+ * Serialises the photo drafts into the shape the action expects. Drops any whose
+ * upload hasn't finished (no blob key yet). Order is derived server-side per phase.
+ */
+export function photosToArray(photos: PhotoDraft[]): StudyPhotoInput[] {
+  return photos
+    .filter((p) => p.url !== "")
+    .map((p) => ({
+      url: p.url,
+      phase: p.phase,
+      angle: p.angle,
+      caption: p.caption.trim() || undefined,
     }));
 }
 
@@ -275,6 +326,16 @@ export const useStudyStore = create<StudyStoreState & StudyStoreActions>((set) =
         ? s.selectedExerciseIds.filter((e) => e !== id)
         : [...s.selectedExerciseIds, id],
     })),
+
+  addPhoto: (photo) => set((s) => ({ photos: [...s.photos, photo] })),
+
+  updatePhoto: (key, patch) =>
+    set((s) => ({
+      photos: s.photos.map((p) => (p.key === key ? { ...p, ...patch } : p)),
+    })),
+
+  removePhoto: (key) =>
+    set((s) => ({ photos: s.photos.filter((p) => p.key !== key) })),
 
   setDraftStudyId: (id) => set({ draftStudyId: id }),
 
