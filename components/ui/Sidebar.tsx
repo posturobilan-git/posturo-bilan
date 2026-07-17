@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
@@ -87,13 +88,14 @@ const adminNavItems = [
 function Brand() {
   return (
     <div className="flex h-16 items-center gap-2.5 border-b border-border px-6">
-      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white shadow-xs">
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <circle cx="6" cy="17" r="3.5" strokeWidth={1.8} />
-          <circle cx="18" cy="17" r="3.5" strokeWidth={1.8} />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6 17l4-7h5l3 7M10 10l-1.5-3H6.5M13 7h3.5" />
-        </svg>
-      </span>
+      <Image
+        src="/logo-posturovelo-1-1.png"
+        alt="Posturo Vélo"
+        width={36}
+        height={36}
+        className="h-9 w-9"
+        priority
+      />
       <span className="text-base font-semibold tracking-tight text-content">PosturoBilan</span>
     </div>
   );
@@ -207,13 +209,13 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
           </svg>
         </button>
         <span className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-white">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <circle cx="6" cy="17" r="3.5" strokeWidth={1.8} />
-              <circle cx="18" cy="17" r="3.5" strokeWidth={1.8} />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6 17l4-7h5l3 7M10 10l-1.5-3H6.5M13 7h3.5" />
-            </svg>
-          </span>
+          <Image
+            src="/logo-posturovelo-1-1.png"
+            alt="Posturo Vélo"
+            width={28}
+            height={28}
+            className="h-7 w-7"
+          />
           <span className="text-sm font-semibold tracking-tight text-content">PosturoBilan</span>
         </span>
         <UserButton />
