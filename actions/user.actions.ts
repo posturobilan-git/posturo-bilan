@@ -2,6 +2,7 @@
 
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { logAudit } from "@/lib/audit";
 import { clerkClient } from "@clerk/nextjs/server";
 import { headers } from "next/headers";
@@ -110,9 +111,21 @@ export async function refuseUser(userId: string): Promise<ActionResult<void>> {
       return fail("Ce compte a des patients assignés — réaffectez-les avant de le refuser.");
     }
 
+    // Delete the DB row before revoking Clerk. The Clerk API call can't be
+    // rolled back, so it must come last: if it went first and the DB delete
+    // then failed (e.g. a foreign key on AuditLog or another owned relation),
+    // the Clerk account would be gone for good while the DB row stayed stuck
+    // — its unique email permanently blocked from ever signing up again.
+    try {
+      await prisma.user.delete({ where: { id: userId } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+        return fail("Ce compte a des données liées (historique, bibliothèque…) — désactivez-le à la place.");
+      }
+      throw e;
+    }
     const clerk = await clerkClient();
     await clerk.users.deleteUser(user.clerkId);
-    await prisma.user.delete({ where: { id: userId } });
 
     await logAudit({
       userId: admin.id,
