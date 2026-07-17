@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
@@ -43,9 +44,14 @@ function SiteHeader() {
     <header className="sticky top-0 z-10 border-b border-border bg-canvas/80 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight text-content">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white">
-            <BikeIcon className="h-5 w-5" />
-          </span>
+          <Image
+            src="/logo-posturovelo-1-1.png"
+            alt={CABINET}
+            width={36}
+            height={36}
+            className="h-9 w-9"
+            priority
+          />
           {CABINET}
         </Link>
 
@@ -305,18 +311,6 @@ function ImagePlaceholder({ label, className = "" }: { label: string; className?
         <span className="text-sm font-medium">{label}</span>
       </span>
     </div>
-  );
-}
-
-/* ─── Icons ───────────────────────────────────────────────────────────────── */
-
-function BikeIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <circle cx="5.5" cy="17.5" r="3.5" />
-      <circle cx="18.5" cy="17.5" r="3.5" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 17.5 10 8h5l-2.5 9.5M10 8 8.5 5H6.5m6 3h4l1.5 4.5" />
-    </svg>
   );
 }
 
