@@ -2,6 +2,8 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { Prisma } from "@prisma/client";
 import { cache } from "react";
 import { prisma } from "@/lib/db";
+import { encryptFields, decryptFields, hashEmail } from "@/lib/crypto";
+import { USER_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
 /**
  * Returns the app User for the current Clerk session, syncing from Clerk on
@@ -19,7 +21,11 @@ export const getCurrentKine = cache(async () => {
   const { userId } = await auth();
   if (!userId) return null;
 
-  const existing = await prisma.user.findUnique({ where: { clerkId: userId } });
+  const existingRaw = await prisma.user.findUnique({ where: { clerkId: userId } });
+  // email/name sont chiffrés en base — déchiffrer avant toute comparaison avec
+  // les valeurs en clair renvoyées par Clerk, et avant de renvoyer l'utilisateur
+  // à l'appelant (déchiffrement transparent, voir lib/crypto.ts).
+  const existing = existingRaw && decryptFields(existingRaw, USER_ENCRYPTED_FIELDS);
 
   const clerkUser = await currentUser();
   if (!clerkUser) return existing;
@@ -35,7 +41,11 @@ export const getCurrentKine = cache(async () => {
   if (existing) {
     // Keep email/name in sync with Clerk; never touch the role here.
     if (existing.email !== email || existing.name !== name) {
-      return prisma.user.update({ where: { clerkId: userId }, data: { email, name } });
+      const updated = await prisma.user.update({
+        where: { clerkId: userId },
+        data: { ...encryptFields({ email, name }, USER_ENCRYPTED_FIELDS), emailHash: hashEmail(email) },
+      });
+      return decryptFields(updated, USER_ENCRYPTED_FIELDS);
     }
     return existing;
   }
@@ -49,12 +59,21 @@ export const getCurrentKine = cache(async () => {
   const role = userCount === 0 ? "ADMIN" : clerkRole ?? "PENDING";
 
   try {
-    return await prisma.user.create({ data: { clerkId: userId, email, name, role } });
+    const created = await prisma.user.create({
+      data: {
+        clerkId: userId,
+        ...encryptFields({ email, name }, USER_ENCRYPTED_FIELDS),
+        emailHash: hashEmail(email),
+        role,
+      },
+    });
+    return decryptFields(created, USER_ENCRYPTED_FIELDS);
   } catch (e) {
     // A concurrent request may have created the record between our findUnique
     // and create — re-read instead of failing.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return prisma.user.findUnique({ where: { clerkId: userId } });
+      const found = await prisma.user.findUnique({ where: { clerkId: userId } });
+      return found && decryptFields(found, USER_ENCRYPTED_FIELDS);
     }
     throw e;
   }

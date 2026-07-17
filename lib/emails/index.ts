@@ -11,6 +11,7 @@ import { ok, fail, type ActionResult } from "@/lib/action-result";
 import { generateAndDeliverReport } from "@/lib/report";
 import { AccueilEmail } from "@/lib/emails/AccueilEmail";
 import { FollowupEmail } from "@/lib/emails/FollowupEmail";
+import { decryptFields } from "@/lib/crypto";
 
 /**
  * Single home for every outbound transactional email. Each function fetches
@@ -56,7 +57,7 @@ async function deliver({ subject, react, to }: Sendable): Promise<ActionResult<{
  * the Cal.com webhook on a new booking.
  */
 export async function sendIntakeEmail(patientId: string): Promise<ActionResult<void>> {
-  const patient = await prisma.patient.findUnique({
+  const raw = await prisma.patient.findUnique({
     where: { id: patientId },
     select: {
       id: true,
@@ -68,7 +69,8 @@ export async function sendIntakeEmail(patientId: string): Promise<ActionResult<v
       inviteCompletedAt: true,
     },
   });
-  if (!patient) return fail("Patient introuvable.");
+  if (!raw) return fail("Patient introuvable.");
+  const patient = decryptFields(raw, ["firstName", "email"] as const);
   if (patient.isAnonymized) return fail("Patient anonymisé — envoi impossible.");
   if (patient.inviteCompletedAt) return fail("Le formulaire d'accueil a déjà été complété.");
 
@@ -117,7 +119,7 @@ export async function sendReportEmail(studyId: string): Promise<ActionResult<{ r
  * by the daily cron for every eligible study.
  */
 export async function sendFollowupEmail(studyId: string): Promise<ActionResult<void>> {
-  const study = await prisma.study.findUnique({
+  const raw = await prisma.study.findUnique({
     where: { id: studyId },
     select: {
       id: true,
@@ -128,9 +130,11 @@ export async function sendFollowupEmail(studyId: string): Promise<ActionResult<v
       patient: { select: { firstName: true, email: true, isAnonymized: true } },
     },
   });
-  if (!study) return fail("Étude introuvable.");
-  if (study.patient.isAnonymized) return fail("Patient anonymisé — envoi impossible.");
-  if (study.followupCompletedAt) return fail("Le suivi a déjà été complété.");
+  if (!raw) return fail("Étude introuvable.");
+  if (raw.patient.isAnonymized) return fail("Patient anonymisé — envoi impossible.");
+  if (raw.followupCompletedAt) return fail("Le suivi a déjà été complété.");
+
+  const study = { ...raw, patient: decryptFields(raw.patient, ["firstName", "email"] as const) };
 
   const token = study.followupToken ?? randomUUID();
   await prisma.study.update({ where: { id: study.id }, data: { followupToken: token } });

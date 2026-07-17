@@ -13,6 +13,8 @@ import { pairByAngle } from "@/lib/photos";
 import { formatPhysioValue, hasPhysioValue, type StudyPhysioResult } from "@/lib/physio";
 import type { StudyForReport, StudyMeasureValue, StudyRiderMeasureValue } from "@/types";
 import type { PhotoPhase, PhotoAngle } from "@prisma/client";
+import { decryptFields } from "@/lib/crypto";
+import { PATIENT_ENCRYPTED_FIELDS, INTAKE_ENCRYPTED_FIELDS, USER_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
 const CABINET = process.env.CABINET_NAME || "PosturoBilan";
 const FROM = resendFrom();
@@ -24,7 +26,7 @@ function buildAdjustments(study: StudyForReport): string[] {
 }
 
 async function fetchStudyForReport(studyId: string): Promise<StudyForReport | null> {
-  return (await prisma.study.findUnique({
+  const study = (await prisma.study.findUnique({
     where: { id: studyId },
     include: {
       bikeType: true,
@@ -35,6 +37,18 @@ async function fetchStudyForReport(studyId: string): Promise<StudyForReport | nu
       patient: { include: { intake: true } },
     },
   })) as StudyForReport | null;
+  if (!study) return null;
+
+  return {
+    ...study,
+    kine: decryptFields(study.kine, USER_ENCRYPTED_FIELDS),
+    patient: {
+      ...decryptFields(study.patient, PATIENT_ENCRYPTED_FIELDS),
+      intake: study.patient.intake
+        ? decryptFields(study.patient.intake, INTAKE_ENCRYPTED_FIELDS)
+        : null,
+    },
+  };
 }
 
 /** Resolves a study's stored côte values into labelled before/after rows. */

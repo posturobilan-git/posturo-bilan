@@ -9,8 +9,8 @@ import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result
 import { deleteBlob } from "@/lib/storage";
 import { Prisma, StudyStatus } from "@prisma/client";
 import type { StudyListItem } from "@/types";
-import type { ListResult, PageQuery, SortDir } from "@/lib/pagination";
-import { toSkipTake } from "@/lib/pagination";
+import type { ListResult, PageQuery } from "@/lib/pagination";
+import { decryptFields } from "@/lib/crypto";
 import { z } from "zod";
 
 type StudyInput = z.infer<typeof studySchema>;
@@ -206,19 +206,11 @@ function studyDataFrom(validated: StudyInput) {
   };
 }
 
-function studyOrderBy(sort: string, dir: SortDir): Prisma.StudyOrderByWithRelationInput {
-  switch (sort) {
-    case "status":
-      return { status: dir };
-    case "patient":
-      return { patient: { lastName: dir } };
-    case "createdAt":
-    default:
-      return { createdAt: dir };
-  }
-}
-
-/** All studies across patients, scoped to the kiné (ADMIN sees everything). */
+/**
+ * All studies across patients, scoped to the kiné (ADMIN sees everything).
+ * patient.firstName/lastName sont chiffrés — recherche et tri par patient se
+ * font en mémoire après déchiffrement, comme dans getPatients.
+ */
 export async function getStudies(filters?: {
   status?: StudyStatus;
   search?: string;
@@ -229,30 +221,52 @@ export async function getStudies(filters?: {
   const where: Prisma.StudyWhereInput = {
     ...(kine.role !== "ADMIN" && { kineId: kine.id }),
     ...(filters?.status && { status: filters.status }),
-    ...(filters?.search && {
-      patient: {
-        OR: [
-          { firstName: { contains: filters.search, mode: "insensitive" } },
-          { lastName: { contains: filters.search, mode: "insensitive" } },
-        ],
-      },
-    }),
   };
 
+  const raw = await prisma.study.findMany({
+    where,
+    include: {
+      bikeType: true,
+      patient: { select: { id: true, firstName: true, lastName: true, isAnonymized: true } },
+      kine: { select: { name: true } },
+    },
+  });
+
+  let items: StudyListItem[] = raw.map((s) => ({
+    ...s,
+    patient: decryptFields(s.patient, ["firstName", "lastName"] as const),
+    kine: decryptFields(s.kine, ["name"] as const),
+  }));
+
+  if (filters?.search) {
+    const q = filters.search.toLowerCase();
+    items = items.filter(
+      (s) =>
+        s.patient.firstName.toLowerCase().includes(q) ||
+        s.patient.lastName.toLowerCase().includes(q)
+    );
+  }
+
+  const total = items.length;
+
   const page = filters?.page;
-  const [items, total] = await Promise.all([
-    prisma.study.findMany({
-      where,
-      include: {
-        bikeType: true,
-        patient: { select: { id: true, firstName: true, lastName: true, isAnonymized: true } },
-        kine: { select: { name: true } },
-      },
-      orderBy: page ? studyOrderBy(page.sort, page.dir) : { createdAt: "desc" },
-      ...(page ? toSkipTake(page) : {}),
-    }),
-    prisma.study.count({ where }),
-  ]);
+  const dir = page?.dir === "asc" ? 1 : -1;
+  items = items.sort((a, b) => {
+    if (page?.sort === "patient") {
+      const an = `${a.patient.lastName} ${a.patient.firstName}`.toLowerCase();
+      const bn = `${b.patient.lastName} ${b.patient.firstName}`.toLowerCase();
+      return an < bn ? -dir : an > bn ? dir : 0;
+    }
+    if (page?.sort === "status") {
+      return a.status < b.status ? -dir : a.status > b.status ? dir : 0;
+    }
+    return a.createdAt < b.createdAt ? -dir : a.createdAt > b.createdAt ? dir : 0;
+  });
+
+  if (page) {
+    const start = (page.page - 1) * page.perPage;
+    items = items.slice(start, start + page.perPage);
+  }
 
   return { items, total };
 }

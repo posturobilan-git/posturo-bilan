@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
+import { decryptFields } from "@/lib/crypto";
+import { PATIENT_ENCRYPTED_FIELDS, INTAKE_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
 export async function GET(
   req: NextRequest,
@@ -17,7 +19,7 @@ export async function GET(
 
   const { id } = await context.params;
 
-  const patient = await prisma.patient.findUnique({
+  const raw = await prisma.patient.findUnique({
     where: { id },
     include: {
       intake: true,
@@ -32,7 +34,13 @@ export async function GET(
     },
   });
 
-  if (!patient) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!raw) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Export RGPD = droit d'accès du patient à ses données réelles → déchiffrer.
+  const patient = {
+    ...decryptFields(raw, PATIENT_ENCRYPTED_FIELDS),
+    intake: raw.intake ? decryptFields(raw.intake, INTAKE_ENCRYPTED_FIELDS) : null,
+  };
 
   await logAudit({ userId: kine.id, action: "EXPORT", entity: "patient", entityId: id });
 

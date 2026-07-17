@@ -10,6 +10,7 @@ import { Pagination } from "@/components/ui/Pagination";
 import { PatientTable } from "@/components/patients/PatientTable";
 import { NewPatientButton } from "@/components/patients/NewPatientButton";
 import { SearchBar } from "@/components/patients/SearchBar";
+import { decryptFields } from "@/lib/crypto";
 
 interface Props {
   searchParams: Promise<{ q?: string } & RawListParams>;
@@ -29,14 +30,18 @@ export default async function PatientsPage({ searchParams }: Props) {
   const { items: patients, total } = await getPatients({ search: q, page });
 
   // ADMIN can assign a new patient to any active kiné; KINE only ever creates
-  // for themselves so the list is fetched lazily for admins only.
+  // for themselves so the list is fetched lazily for admins only. `name` is
+  // chiffré : le tri alphabétique se fait en mémoire après déchiffrement.
   const kines =
     kine.role === "ADMIN"
-      ? await prisma.user.findMany({
-          where: { role: { in: ["ADMIN", "KINE"] } },
-          select: { id: true, name: true },
-          orderBy: { name: "asc" },
-        })
+      ? (
+          await prisma.user.findMany({
+            where: { role: { in: ["ADMIN", "KINE"] } },
+            select: { id: true, name: true },
+          })
+        )
+          .map((k) => decryptFields(k, ["name"] as const))
+          .sort((a, b) => a.name.localeCompare(b.name))
       : [];
 
   return (

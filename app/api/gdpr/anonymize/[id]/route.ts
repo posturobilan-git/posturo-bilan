@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { deleteBlob } from "@/lib/storage";
+import { hashEmail } from "@/lib/crypto";
 
 export async function DELETE(
   req: NextRequest,
@@ -44,6 +45,7 @@ export async function DELETE(
       where: { id },
       data: {
         email: `anonymized-${id}@deleted.local`,
+        emailHash: hashEmail(`anonymized-${id}@deleted.local`),
         firstName: "Anonymisé",
         lastName: "Patient",
         phone: null,

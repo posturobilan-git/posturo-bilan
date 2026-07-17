@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { PatientTable } from "@/components/patients/PatientTable";
+import { decryptFields } from "@/lib/crypto";
+import { PATIENT_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
 async function getStats(kineId: string, isAdmin: boolean) {
   const kineFilter = isAdmin ? {} : { kineId };
@@ -72,7 +74,7 @@ export default async function DashboardPage() {
   const isAdmin = kine.role === "ADMIN";
   const kineFilter = isAdmin ? {} : { kineId: kine.id };
 
-  const [stats, recentPatients] = await Promise.all([
+  const [stats, recentPatientsRaw] = await Promise.all([
     getStats(kine.id, isAdmin),
     prisma.patient.findMany({
       where: { ...kineFilter, isAnonymized: false },
@@ -81,6 +83,10 @@ export default async function DashboardPage() {
       take: 10,
     }),
   ]);
+  const recentPatients = recentPatientsRaw.map((p) => ({
+    ...decryptFields(p, PATIENT_ENCRYPTED_FIELDS),
+    kine: decryptFields(p.kine, ["name"] as const),
+  }));
 
   return (
     <div className="space-y-8">

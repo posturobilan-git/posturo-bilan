@@ -7,6 +7,8 @@ import { INTAKE_CGU_VERSION } from "@/lib/legal";
 import { logAudit } from "@/lib/audit";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
+import { encryptFields } from "@/lib/crypto";
+import { INTAKE_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
 /**
  * Public submission of the "formulaire d'accueil" by the patient.
@@ -50,18 +52,21 @@ export async function submitAccueilForm(
       return fail("Ce lien a expiré.");
     }
 
-    const intakeData = {
-      heightCm: intake.heightCm,
-      weightKg: intake.weightKg,
-      bikeType: intake.bikeType,
-      ridingLevel: intake.ridingLevel,
-      weeklyHours: intake.weeklyHours,
-      yearsRiding: intake.yearsRiding,
-      injuries: intake.injuries,
-      goals: intake.goals,
-      medicalNotes: intake.medicalNotes,
-      source: "custom_form",
-    };
+    const intakeData = encryptFields(
+      {
+        heightCm: intake.heightCm,
+        weightKg: intake.weightKg,
+        bikeType: intake.bikeType,
+        ridingLevel: intake.ridingLevel,
+        weeklyHours: intake.weeklyHours,
+        yearsRiding: intake.yearsRiding,
+        injuries: intake.injuries,
+        goals: intake.goals,
+        medicalNotes: intake.medicalNotes,
+        source: "custom_form",
+      },
+      INTAKE_ENCRYPTED_FIELDS
+    );
 
     // Save the intake, record the RGPD consent on the patient, and invalidate
     // the link — all atomically.

@@ -12,7 +12,8 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "setup-admin": "tsx scripts/setup-admin.ts"
+    "setup-admin": "tsx scripts/setup-admin.ts",
+    "migrate-encrypt": "tsx scripts/migrate-encrypt.ts"
   },
   "dependencies": {
     "@calcom/embed-react": "^1.5.3",
