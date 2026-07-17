@@ -7,6 +7,7 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
+import { hashEmail } from "@/lib/crypto";
 import { z } from "zod";
 
 type ActiveRole = "KINE" | "ADMIN";
@@ -142,7 +143,7 @@ export async function inviteKine(email: string): Promise<ActionResult<void>> {
   try {
     const admin = await requireAdmin();
 
-    const existing = await prisma.user.findUnique({ where: { email: address } });
+    const existing = await prisma.user.findUnique({ where: { emailHash: hashEmail(address) } });
     if (existing) return fail("Un utilisateur avec cet email existe déjà.");
 
     const clerk = await clerkClient();

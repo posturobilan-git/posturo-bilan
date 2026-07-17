@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
+import { decryptFields } from "@/lib/crypto";
 import { AccueilForm } from "./AccueilForm";
 
 export const metadata: Metadata = {
@@ -34,7 +35,7 @@ export default async function AccueilPage({
 }) {
   const { token } = await params;
 
-  const patient = await prisma.patient.findUnique({
+  const raw = await prisma.patient.findUnique({
     where: { inviteToken: token },
     select: {
       firstName: true,
@@ -43,6 +44,7 @@ export default async function AccueilPage({
       inviteCompletedAt: true,
     },
   });
+  const patient = raw && decryptFields(raw, ["firstName"] as const);
 
   if (!patient || patient.isAnonymized) {
     return (

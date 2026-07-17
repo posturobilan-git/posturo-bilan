@@ -12,6 +12,8 @@ import {
   Prisma,
 } from "@prisma/client";
 import type { StudyMeasures, StudyMeasureValue } from "../types";
+import { encryptFields, hashEmail } from "../lib/crypto";
+import { PATIENT_ENCRYPTED_FIELDS } from "../lib/crypto.constants";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -502,15 +504,16 @@ async function main() {
   let patientsCreated = 0;
   let studiesCreated = 0;
   for (const p of PATIENTS) {
-    const exists = await prisma.patient.findUnique({ where: { email: p.email } });
+    const exists = await prisma.patient.findUnique({ where: { emailHash: hashEmail(p.email) } });
     if (exists) continue;
 
     const patient = await prisma.patient.create({
       data: {
-        email: p.email,
-        firstName: p.firstName,
-        lastName: p.lastName,
-        phone: p.phone,
+        ...encryptFields(
+          { email: p.email, firstName: p.firstName, lastName: p.lastName, phone: p.phone },
+          PATIENT_ENCRYPTED_FIELDS
+        ),
+        emailHash: hashEmail(p.email),
         kineId: admin.id,
         intake: { create: { ...p.intake, injuries: p.intake.injuries ?? [], source: "manual" } },
       },

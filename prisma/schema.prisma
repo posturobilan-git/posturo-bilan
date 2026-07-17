@@ -94,8 +94,9 @@ enum PhotoAngle {
 model User {
   id        String   @id @default(uuid())
   clerkId   String   @unique
-  email     String   @unique
-  name      String
+  email     String   @unique // chiffré (AES-256-GCM) — voir lib/crypto.ts
+  emailHash String   @unique // sha256(email), utilisé pour les lookups (email chiffré = pas de WHERE email)
+  name      String   // chiffré
   role      Role     @default(PENDING)
   createdBy String?  // id du kiné admin qui a créé ce compte
 
@@ -122,7 +123,9 @@ model Patient {
   kine            User          @relation(fields: [kineId], references: [id])
 
   // Données de base (récupérées via le webhook de réservation Cal.com)
+  // firstName/lastName/email/phone sont chiffrés (AES-256-GCM) — voir lib/crypto.ts
   email           String        @unique
+  emailHash       String        @unique // sha256(email), utilisé pour les lookups (dédup webhook, RGPD)
   firstName       String
   lastName        String
   phone           String?
@@ -176,7 +179,7 @@ model PatientIntake {
   // Douleurs & objectifs
   injuries      String[]  // liste de douleurs déclarées
   goals         String?
-  medicalNotes  String?
+  medicalNotes  String?   // chiffré (AES-256-GCM) — voir lib/crypto.ts
 
   // Source des données
   source        String    @default("google_forms") // google_forms | custom_form | manual

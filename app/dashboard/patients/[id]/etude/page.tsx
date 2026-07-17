@@ -6,6 +6,8 @@ import { PatientSidebar } from "@/components/study/PatientSidebar";
 import { StudyForm } from "@/components/study/StudyForm";
 import type { StudyMeasureValue, StudyRiderMeasureValue } from "@/types";
 import type { PhysioValue, StudyPhysioResult } from "@/lib/physio";
+import { decryptFields } from "@/lib/crypto";
+import { PATIENT_ENCRYPTED_FIELDS, INTAKE_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
 export default async function EtudePage(props: PageProps<"/dashboard/patients/[id]/etude">) {
   const kine = await getCurrentKine();
@@ -15,7 +17,7 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
   const { studyId } = await props.searchParams;
   const editStudyId = typeof studyId === "string" ? studyId : undefined;
 
-  const [patient, bikeTypes, measurements, riderMeasurements, physioTests, components, exercises] = await Promise.all([
+  const [patientRaw, bikeTypes, measurements, riderMeasurements, physioTests, components, exercises] = await Promise.all([
     prisma.patient.findUnique({
       where: {
         id,
@@ -53,7 +55,11 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
     }),
   ]);
 
-  if (!patient) redirect("/dashboard/patients");
+  if (!patientRaw) redirect("/dashboard/patients");
+  const patient = {
+    ...decryptFields(patientRaw, PATIENT_ENCRYPTED_FIELDS),
+    intake: patientRaw.intake ? decryptFields(patientRaw.intake, INTAKE_ENCRYPTED_FIELDS) : null,
+  };
 
   // Editing: load the specific study (scoped). Creating: no initial data.
   const study = editStudyId

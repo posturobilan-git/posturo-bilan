@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
+import { decryptFields } from "@/lib/crypto";
 import { SuiviForm } from "./SuiviForm";
 
 export const metadata: Metadata = {
@@ -28,13 +29,14 @@ export default async function SuiviPage({
 }) {
   const { token } = await params;
 
-  const study = await prisma.study.findUnique({
+  const raw = await prisma.study.findUnique({
     where: { followupToken: token },
     select: {
       followupCompletedAt: true,
       patient: { select: { firstName: true, isAnonymized: true } },
     },
   });
+  const study = raw && { ...raw, patient: decryptFields(raw.patient, ["firstName"] as const) };
 
   if (!study || study.patient.isAnonymized) {
     return (

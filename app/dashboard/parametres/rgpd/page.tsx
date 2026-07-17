@@ -6,6 +6,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { SearchBar } from "@/components/patients/SearchBar";
 import { RgpdActions } from "@/components/rgpd/RgpdActions";
+import { decryptFields } from "@/lib/crypto";
+import { PATIENT_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
 interface Props {
   searchParams: Promise<{ q?: string }>;
@@ -23,20 +25,12 @@ export default async function RgpdPage({ searchParams }: Props) {
 
   const { q } = await searchParams;
 
-  const [patients, logs] = await Promise.all([
+  // firstName/lastName/email sont chiffrés — recherche en mémoire après
+  // déchiffrement (pas de WHERE ... contains possible sur ces colonnes).
+  const [patientsRaw, logsRaw] = await Promise.all([
     prisma.patient.findMany({
-      where: q
-        ? {
-            OR: [
-              { firstName: { contains: q, mode: "insensitive" } },
-              { lastName: { contains: q, mode: "insensitive" } },
-              { email: { contains: q, mode: "insensitive" } },
-            ],
-          }
-        : undefined,
       include: { _count: { select: { studies: true, followups: true } } },
       orderBy: { createdAt: "desc" },
-      take: 25,
     }),
     prisma.auditLog.findMany({
       where: { action: { in: ["EXPORT", "ANONYMIZE"] } },
@@ -45,6 +39,23 @@ export default async function RgpdPage({ searchParams }: Props) {
       take: 20,
     }),
   ]);
+
+  let patients = patientsRaw.map((p) => decryptFields(p, PATIENT_ENCRYPTED_FIELDS));
+  if (q) {
+    const needle = q.toLowerCase();
+    patients = patients.filter(
+      (p) =>
+        p.firstName.toLowerCase().includes(needle) ||
+        p.lastName.toLowerCase().includes(needle) ||
+        p.email.toLowerCase().includes(needle)
+    );
+  }
+  patients = patients.slice(0, 25);
+
+  const logs = logsRaw.map((log) => ({
+    ...log,
+    user: decryptFields(log.user, ["name"] as const),
+  }));
 
   return (
     <div className="space-y-8">

@@ -11,6 +11,7 @@ import {
   calWebhookSchema,
   extractAttendee,
 } from "@/lib/cal";
+import { encryptFields, hashEmail } from "@/lib/crypto";
 
 /**
  * Cal.com booking webhook.
@@ -72,11 +73,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const patient = await prisma.patient.upsert({
-      where: { email: attendee.email },
+      where: { emailHash: hashEmail(attendee.email) },
       create: {
-        email: attendee.email,
-        firstName: attendee.firstName,
-        lastName: attendee.lastName,
+        ...encryptFields(
+          { email: attendee.email, firstName: attendee.firstName, lastName: attendee.lastName },
+          ["email", "firstName", "lastName"] as const
+        ),
+        emailHash: hashEmail(attendee.email),
         kineId: kine.id,
         bookingId: attendee.bookingId,
         inviteToken: randomUUID(),

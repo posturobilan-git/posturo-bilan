@@ -3,6 +3,8 @@ import { getCurrentKine } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { IntakeForm } from "@/components/patients/IntakeForm";
+import { decryptFields } from "@/lib/crypto";
+import { PATIENT_ENCRYPTED_FIELDS, INTAKE_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
 export default async function IntakePage(props: PageProps<"/dashboard/patients/[id]/intake">) {
   const kine = await getCurrentKine();
@@ -10,7 +12,7 @@ export default async function IntakePage(props: PageProps<"/dashboard/patients/[
 
   const { id } = await props.params;
 
-  const patient = await prisma.patient.findUnique({
+  const raw = await prisma.patient.findUnique({
     where: {
       id,
       ...(kine.role !== "ADMIN" && { kineId: kine.id }),
@@ -18,7 +20,11 @@ export default async function IntakePage(props: PageProps<"/dashboard/patients/[
     include: { intake: true },
   });
 
-  if (!patient) redirect("/dashboard/patients");
+  if (!raw) redirect("/dashboard/patients");
+  const patient = {
+    ...decryptFields(raw, PATIENT_ENCRYPTED_FIELDS),
+    intake: raw.intake ? decryptFields(raw.intake, INTAKE_ENCRYPTED_FIELDS) : null,
+  };
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">

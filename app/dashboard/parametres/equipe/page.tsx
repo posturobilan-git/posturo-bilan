@@ -4,6 +4,8 @@ import { getCurrentKine } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EquipeClient, type PendingInvitation } from "@/components/parametres/EquipeClient";
+import { decryptFields } from "@/lib/crypto";
+import { USER_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
 async function getPendingInvitations(): Promise<PendingInvitation[]> {
   try {
@@ -30,7 +32,7 @@ export default async function EquipePage() {
   if (kine.role === "PENDING") redirect("/pending");
   if (kine.role !== "ADMIN") redirect("/dashboard");
 
-  const [pendingUsers, activeUsers, pendingInvitations] = await Promise.all([
+  const [pendingUsersRaw, activeUsersRaw, pendingInvitations] = await Promise.all([
     prisma.user.findMany({
       where: { role: "PENDING" },
       orderBy: { createdAt: "asc" },
@@ -50,6 +52,8 @@ export default async function EquipePage() {
     }),
     getPendingInvitations(),
   ]);
+  const pendingUsers = pendingUsersRaw.map((u) => decryptFields(u, USER_ENCRYPTED_FIELDS));
+  const activeUsers = activeUsersRaw.map((u) => decryptFields(u, USER_ENCRYPTED_FIELDS));
 
   return (
     <div className="space-y-6">

@@ -7,6 +7,8 @@ import { logAudit } from "@/lib/audit";
 import { requireKine } from "@/lib/auth";
 import { sendIntakeEmail as sendIntakeEmailCore } from "@/lib/emails";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
+import { encryptFields } from "@/lib/crypto";
+import { INTAKE_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 import { z } from "zod";
 
 type ManualIntakeInput = z.infer<typeof manualIntakeSchema>;
@@ -37,18 +39,21 @@ export async function saveIntake(
     });
     if (!patient) return fail("Patient introuvable.");
 
-    const intakeData = {
-      heightCm: intake.heightCm,
-      weightKg: intake.weightKg,
-      bikeType: intake.bikeType,
-      ridingLevel: intake.ridingLevel,
-      weeklyHours: intake.weeklyHours,
-      yearsRiding: intake.yearsRiding,
-      injuries: intake.injuries,
-      goals: intake.goals,
-      medicalNotes: intake.medicalNotes,
-      source: "manual",
-    };
+    const intakeData = encryptFields(
+      {
+        heightCm: intake.heightCm,
+        weightKg: intake.weightKg,
+        bikeType: intake.bikeType,
+        ridingLevel: intake.ridingLevel,
+        weeklyHours: intake.weeklyHours,
+        yearsRiding: intake.yearsRiding,
+        injuries: intake.injuries,
+        goals: intake.goals,
+        medicalNotes: intake.medicalNotes,
+        source: "manual",
+      },
+      INTAKE_ENCRYPTED_FIELDS
+    );
 
     await prisma.patientIntake.upsert({
       where: { patientId },

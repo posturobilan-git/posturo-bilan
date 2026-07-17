@@ -16,48 +16,61 @@ import { deleteBlob } from "@/lib/storage";
 import { requireKine, requirePatientOwnership } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
 import { Prisma, type Patient } from "@prisma/client";
-import type { ListResult, PageQuery, SortDir } from "@/lib/pagination";
-import { toSkipTake } from "@/lib/pagination";
+import type { ListResult, PageQuery } from "@/lib/pagination";
+import { encryptFields, decryptFields, hashEmail } from "@/lib/crypto";
+import { PATIENT_ENCRYPTED_FIELDS, INTAKE_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
-function patientOrderBy(sort: string, dir: SortDir): Prisma.PatientOrderByWithRelationInput[] {
-  switch (sort) {
-    case "name":
-      return [{ lastName: dir }, { firstName: dir }];
-    case "createdAt":
-    default:
-      return [{ createdAt: dir }];
-  }
-}
-
+/**
+ * firstName/lastName/email sont chiffrés en base — ni le tri ni la recherche
+ * ne peuvent plus se faire en SQL sur ces colonnes. On charge le périmètre du
+ * kiné (borné par patient de toute façon), on déchiffre, puis on filtre/trie/
+ * pagine en mémoire.
+ */
 export async function getPatients(filters?: {
   search?: string;
   page?: PageQuery;
 }) {
   const kine = await requireKine();
 
-  const where: Prisma.PatientWhereInput = {
-    ...(kine.role !== "ADMIN" && { kineId: kine.id }),
-    ...(filters?.search && {
-      OR: [
-        { firstName: { contains: filters.search, mode: "insensitive" } },
-        { lastName: { contains: filters.search, mode: "insensitive" } },
-        { email: { contains: filters.search, mode: "insensitive" } },
-      ],
-    }),
-  };
+  const raw = await prisma.patient.findMany({
+    where: kine.role !== "ADMIN" ? { kineId: kine.id } : undefined,
+    include: { kine: { select: { name: true } }, _count: { select: { studies: true } } },
+  });
+
+  let items = raw.map((p) => ({
+    ...decryptFields(p, PATIENT_ENCRYPTED_FIELDS),
+    kine: decryptFields(p.kine, ["name"] as const),
+  }));
+
+  if (filters?.search) {
+    const q = filters.search.toLowerCase();
+    items = items.filter(
+      (p) =>
+        p.firstName.toLowerCase().includes(q) ||
+        p.lastName.toLowerCase().includes(q) ||
+        p.email.toLowerCase().includes(q)
+    );
+  }
+
+  const total = items.length;
 
   const page = filters?.page;
-  const [items, total] = await Promise.all([
-    prisma.patient.findMany({
-      where,
-      include: { kine: { select: { name: true } }, _count: { select: { studies: true } } },
-      orderBy: page ? patientOrderBy(page.sort, page.dir) : { createdAt: "desc" },
-      ...(page ? toSkipTake(page) : {}),
-    }),
-    prisma.patient.count({ where }),
-  ]);
+  const dir = page?.dir === "asc" ? 1 : -1;
+  items = items.sort((a, b) => {
+    if (page?.sort === "name") {
+      const an = `${a.lastName} ${a.firstName}`.toLowerCase();
+      const bn = `${b.lastName} ${b.firstName}`.toLowerCase();
+      return an < bn ? -dir : an > bn ? dir : 0;
+    }
+    return a.createdAt < b.createdAt ? -dir : a.createdAt > b.createdAt ? dir : 0;
+  });
+
+  if (page) {
+    const start = (page.page - 1) * page.perPage;
+    items = items.slice(start, start + page.perPage);
+  }
 
   return { items, total } satisfies ListResult<(typeof items)[number]>;
 }
@@ -65,7 +78,7 @@ export async function getPatients(filters?: {
 export async function getPatientDossier(id: string) {
   const kine = await requireKine();
 
-  const patient = await prisma.patient.findUnique({
+  const raw = await prisma.patient.findUnique({
     where: {
       id,
       ...(kine.role !== "ADMIN" && { kineId: kine.id }),
@@ -86,6 +99,12 @@ export async function getPatientDossier(id: string) {
       followups: { orderBy: { submittedAt: "asc" } },
     },
   });
+
+  const patient = raw && {
+    ...decryptFields(raw, PATIENT_ENCRYPTED_FIELDS),
+    kine: decryptFields(raw.kine, ["name"] as const),
+    intake: raw.intake ? decryptFields(raw.intake, INTAKE_ENCRYPTED_FIELDS) : null,
+  };
 
   // Only record an actual view, not Next.js prefetches/cache-warming renders —
   // otherwise opening the patients list would log VIEW_SENSITIVE for every row.
@@ -133,7 +152,8 @@ export async function createPatient(
     // sent their tokenised link straight away (valid 30 days).
     const patient = await prisma.patient.create({
       data: {
-        ...fields,
+        ...encryptFields(fields, PATIENT_ENCRYPTED_FIELDS),
+        emailHash: hashEmail(fields.email),
         kineId: assignedKineId,
         inviteToken: randomUUID(),
         inviteExpiresAt: inviteExpiryFromNow(),
@@ -142,7 +162,7 @@ export async function createPatient(
 
     await logAudit({ userId: kine.id, action: "CREATE", entity: "patient", entityId: patient.id });
     revalidatePath("/dashboard/patients");
-    return ok(patient);
+    return ok(decryptFields(patient, PATIENT_ENCRYPTED_FIELDS));
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return fail("Un patient avec cet email existe déjà.");
@@ -164,7 +184,10 @@ export async function updatePatient(
 
     const updated = await prisma.patient.update({
       where: { id: patientId },
-      data: parsed.data,
+      data: {
+        ...encryptFields(parsed.data, PATIENT_ENCRYPTED_FIELDS),
+        ...(parsed.data.email && { emailHash: hashEmail(parsed.data.email) }),
+      },
     });
 
     await logAudit({
@@ -176,7 +199,7 @@ export async function updatePatient(
     });
     revalidatePath("/dashboard/patients");
     revalidatePath(`/dashboard/patients/${patientId}`);
-    return ok(updated);
+    return ok(decryptFields(updated, PATIENT_ENCRYPTED_FIELDS));
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return fail("Un patient avec cet email existe déjà.");
@@ -253,7 +276,8 @@ export async function hardDeletePatient(
     if (!patient) return fail("Patient introuvable.");
 
     // Confirmation tapée : doit correspondre exactement au nom complet affiché.
-    const expected = `${patient.firstName} ${patient.lastName}`;
+    const { firstName, lastName } = decryptFields(patient, ["firstName", "lastName"] as const);
+    const expected = `${firstName} ${lastName}`;
     if (confirmation.trim() !== expected) {
       return fail(`La confirmation ne correspond pas. Tapez exactement « ${expected} ».`);
     }
