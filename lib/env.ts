@@ -15,3 +15,13 @@ export function isLocalEnv(): boolean {
   if (process.env.APP_ENV) return process.env.APP_ENV === "local";
   return process.env.VERCEL !== "1";
 }
+
+/**
+ * Whether the public booking flow (`/reservation` + its CTAs) is live.
+ *
+ * Defaults to enabled; set `RESERVATION_ENABLED=false` to hide it while
+ * `NEXT_PUBLIC_CAL_LINK` isn't configured yet, without deleting any code.
+ */
+export function isReservationEnabled(): boolean {
+  return process.env.RESERVATION_ENABLED !== "false";
+}

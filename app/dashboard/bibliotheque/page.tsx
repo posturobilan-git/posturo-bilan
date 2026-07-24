@@ -3,7 +3,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { getCurrentKine } from "@/lib/auth";
 import { getExercises } from "@/actions/exercise.actions";
-import { getComponents } from "@/actions/component.actions";
+import { getComponents, getComponentAttributeFilterOptions } from "@/actions/component.actions";
+import { getAttributesByCategory, getComponentAttributes } from "@/actions/componentAttribute.actions";
+import { getCategories, getActiveCategories } from "@/actions/componentCategory.actions";
 import { getActiveBikeTypes } from "@/actions/bikeType.actions";
 import { EXERCISE_SORT_FIELDS, COMPONENT_SORT_FIELDS } from "@/lib/sort-fields";
 import { parsePageQuery, type RawListParams } from "@/lib/pagination";
@@ -12,17 +14,21 @@ import { Pagination } from "@/components/ui/Pagination";
 import { SortControl } from "@/components/ui/SortControl";
 import { SearchBar } from "@/components/patients/SearchBar";
 import { CategoryFilter } from "@/components/bibliotheque/CategoryFilter";
+import { ComponentCategoryPicker } from "@/components/bibliotheque/ComponentCategoryPicker";
+import { CategoryManagerModal, type CategoryRow } from "@/components/bibliotheque/CategoryManagerModal";
+import { ComponentAttributeFilters } from "@/components/bibliotheque/ComponentAttributeFilters";
 import { ExerciseCard } from "@/components/bibliotheque/ExerciseCard";
 import { ComponentCard } from "@/components/bibliotheque/ComponentCard";
 import { CreateExerciseModal } from "@/components/bibliotheque/CreateExerciseModal";
 import { CreateComponentModal } from "@/components/bibliotheque/CreateComponentModal";
-import {
-  EXERCISE_CATEGORY_LABELS,
-  COMPONENT_CATEGORY_LABELS,
-} from "@/lib/labels";
-import type { ExerciseCategory, ComponentCategory } from "@prisma/client";
+import { AttributeManagerModal, type AttributeRow } from "@/components/bibliotheque/AttributeManagerModal";
+import { ImportExportComponentsModal } from "@/components/bibliotheque/ImportExportComponentsModal";
+import { EXERCISE_CATEGORY_LABELS } from "@/lib/labels";
+import type { ExerciseCategory } from "@prisma/client";
 
 type Tab = "exercices" | "composants";
+
+const ATTR_PARAM_PREFIX = "attr_";
 
 interface Props {
   searchParams: Promise<{ tab?: string; q?: string; category?: string } & RawListParams>;
@@ -32,9 +38,40 @@ export default async function BibliothequePage({ searchParams }: Props) {
   const kine = await getCurrentKine();
   if (!kine) redirect("/sign-in");
 
-  const { tab, q, category, ...rest } = await searchParams;
+  const rawParams = (await searchParams) as Record<string, string | undefined>;
+  const { tab, q, category, ...rest } = rawParams;
   const activeTab: Tab = tab === "composants" ? "composants" : "exercices";
   const isAdmin = kine.role === "ADMIN";
+
+  // Filtres par attribut : une entrée `attr_<attributeId>=<valeur>` par attribut
+  // filtré — clés dynamiques, donc lues à part du reste (page/perPage/sort/dir).
+  const rawAttributeFilters = Object.entries(rawParams)
+    .filter(([key, value]) => key.startsWith(ATTR_PARAM_PREFIX) && value)
+    .map(([key, value]) => ({ attributeId: key.slice(ATTR_PARAM_PREFIX.length), value: value! }));
+  const attributeFilterValues = Object.fromEntries(rawAttributeFilters.map((f) => [f.attributeId, f.value]));
+
+  // Le filtrage/la config par attribut, comme l'import/export, ne s'appliquent
+  // qu'à une seule catégorie à la fois — pas de sens pour « Toutes catégories ».
+  // `category` est désormais l'id d'une ComponentCategory (plus un tag d'enum).
+  const selectedCategoryId = activeTab === "composants" && category ? category : null;
+
+  // The component editor needs the list of active bike types to associate,
+  // the active categories (picker + create-component form), and every
+  // category's active attributes for its dynamic fields.
+  const activeBikeTypes = activeTab === "composants" ? await getActiveBikeTypes() : [];
+  const bikeTypeOptions = activeBikeTypes.map((b) => ({ id: b.id, name: b.name }));
+  const activeCategories = activeTab === "composants" ? await getActiveCategories() : [];
+  const categoryOptions = activeCategories.map((c) => ({ id: c.id, name: c.name }));
+  const attributesByCategory = activeTab === "composants" ? await getAttributesByCategory() : {};
+
+  // Un attr_<id> laissé dans l'URL après un changement de catégorie (ou en mode
+  // "Toutes catégories") ne doit jamais s'appliquer — sinon il s'intersecte
+  // silencieusement avec la nouvelle catégorie et vide la liste sans qu'aucun
+  // filtre visible n'explique pourquoi.
+  const categoryAttributeIds = new Set(
+    (selectedCategoryId ? attributesByCategory[selectedCategoryId] : []).map((a) => a.id)
+  );
+  const attributeFilters = rawAttributeFilters.filter((f) => categoryAttributeIds.has(f.attributeId));
 
   const page =
     activeTab === "exercices"
@@ -47,17 +84,48 @@ export default async function BibliothequePage({ searchParams }: Props) {
       : null;
   const components =
     activeTab === "composants"
-      ? await getComponents({ search: q, category: category as ComponentCategory | undefined, page })
+      ? await getComponents({
+          search: q,
+          categoryId: selectedCategoryId ?? undefined,
+          attributeFilters,
+          page,
+        })
       : null;
 
-  // The component editor needs the list of active bike types to associate.
-  const activeBikeTypes = activeTab === "composants" ? await getActiveBikeTypes() : [];
-  const bikeTypeOptions = activeBikeTypes.map((b) => ({ id: b.id, name: b.name }));
+  const attributeFilterOptions = selectedCategoryId
+    ? await getComponentAttributeFilterOptions(selectedCategoryId)
+    : [];
+  const selectedCategoryLabel = categoryOptions.find((c) => c.id === selectedCategoryId)?.name ?? null;
 
-  const categoryOptions: [string, string][] =
-    activeTab === "exercices"
-      ? Object.entries(EXERCISE_CATEGORY_LABELS)
-      : Object.entries(COMPONENT_CATEGORY_LABELS);
+  // Le manager d'attributs doit voir actifs ET inactifs (pour pouvoir réactiver) —
+  // getComponentAttributes() renvoie les deux pour un ADMIN, contrairement à
+  // getAttributesByCategory() (actifs uniquement, utilisé par le formulaire de
+  // composant et les filtres).
+  const categoryAttributes =
+    selectedCategoryId && isAdmin ? await getComponentAttributes(selectedCategoryId) : [];
+  const categoryAttributeRows: AttributeRow[] = categoryAttributes.map((a) => ({
+    id: a.id,
+    name: a.name,
+    key: a.key,
+    type: a.type,
+    unit: a.unit,
+    options: a.options,
+    isRequired: a.isRequired,
+    isActive: a.isActive,
+    valueCount: a._count.values,
+  }));
+
+  // Toutes les catégories (actives + inactives) pour le gestionnaire admin.
+  const allCategories = activeTab === "composants" && isAdmin ? await getCategories() : [];
+  const categoryRows: CategoryRow[] = allCategories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    isActive: c.isActive,
+    componentCount: c._count.components,
+    attributeCount: c._count.attributes,
+  }));
+
+  const exerciseCategoryOptions: [string, string][] = Object.entries(EXERCISE_CATEGORY_LABELS);
 
   const sortOptions =
     activeTab === "exercices"
@@ -80,7 +148,20 @@ export default async function BibliothequePage({ searchParams }: Props) {
           isAdmin
             ? activeTab === "exercices"
               ? <CreateExerciseModal />
-              : <CreateComponentModal bikeTypes={bikeTypeOptions} />
+              : (
+                <div className="flex flex-wrap gap-2">
+                  <CreateComponentModal
+                    bikeTypes={bikeTypeOptions}
+                    categories={categoryOptions}
+                    attributesByCategory={attributesByCategory}
+                  />
+                  <AttributeManagerModal
+                    categoryId={selectedCategoryId}
+                    categoryLabel={selectedCategoryLabel}
+                    attributes={categoryAttributeRows}
+                  />
+                </div>
+              )
             : undefined
         }
       />
@@ -101,13 +182,45 @@ export default async function BibliothequePage({ searchParams }: Props) {
             />
           </Suspense>
         </div>
-        <Suspense>
-          <CategoryFilter options={categoryOptions} defaultValue={category} />
-        </Suspense>
+        {activeTab === "exercices" ? (
+          <Suspense>
+            <CategoryFilter options={exerciseCategoryOptions} defaultValue={category} />
+          </Suspense>
+        ) : null}
         <Suspense>
           <SortControl options={sortOptions} activeSort={page.sort} activeDir={page.dir} />
         </Suspense>
       </div>
+
+      {/* Composants : rangée de catégories (sélecteur primaire, pas un simple
+          filtre) + gestion admin, puis filtres par attribut + import/export. */}
+      {activeTab === "composants" && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Suspense>
+              <ComponentCategoryPicker categories={categoryOptions} selectedId={selectedCategoryId} />
+            </Suspense>
+            {isAdmin && <CategoryManagerModal categories={categoryRows} />}
+          </div>
+
+          {/* Les boutons Import/Export restent visibles (désactivés, avec
+              info-bulle) même sans catégorie sélectionnée — sinon rien ne
+              signale que ces outils existent avant d'en choisir une. */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-3">
+              <Suspense>
+                <ComponentAttributeFilters options={attributeFilterOptions} values={attributeFilterValues} />
+              </Suspense>
+            </div>
+            {isAdmin && (
+              <ImportExportComponentsModal
+                categoryId={selectedCategoryId}
+                categoryLabel={selectedCategoryLabel}
+              />
+            )}
+          </div>
+        </>
+      )}
 
       {/* Content */}
       {activeTab === "exercices" ? (
@@ -131,7 +244,14 @@ export default async function BibliothequePage({ searchParams }: Props) {
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {components!.items.map((c) => (
-              <ComponentCard key={c.id} component={c} bikeTypes={bikeTypeOptions} isAdmin={isAdmin} />
+              <ComponentCard
+                key={c.id}
+                component={c}
+                bikeTypes={bikeTypeOptions}
+                categories={categoryOptions}
+                attributesByCategory={attributesByCategory}
+                isAdmin={isAdmin}
+              />
             ))}
           </div>
           <Suspense>

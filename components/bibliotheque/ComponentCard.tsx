@@ -3,19 +3,23 @@
 import { useTransition } from "react";
 import { toggleComponent, deleteComponent, type ComponentWithCount } from "@/actions/component.actions";
 import { toast } from "@/lib/stores/toastStore";
-import { COMPONENT_CATEGORY_LABELS } from "@/lib/labels";
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { IconButton } from "@/components/ui/IconButton";
 import { EyeIcon, EyeOffIcon } from "@/components/ui/icons";
 import { CreateComponentModal } from "./CreateComponentModal";
+import type { ComponentAttribute } from "@prisma/client";
 
 export function ComponentCard({
   component,
   bikeTypes,
+  categories,
+  attributesByCategory,
   isAdmin,
 }: {
   component: ComponentWithCount;
   bikeTypes: { id: string; name: string }[];
+  categories: { id: string; name: string }[];
+  attributesByCategory: Record<string, ComponentAttribute[]>;
   isAdmin: boolean;
 }) {
   const [pending, startTransition] = useTransition();
@@ -33,7 +37,7 @@ export function ComponentCard({
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-semibold text-content">{component.name}</h3>
         <span className="flex-shrink-0 rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-700">
-          {COMPONENT_CATEGORY_LABELS[component.category]}
+          {component.category.name}
         </span>
       </div>
 
@@ -68,7 +72,12 @@ export function ComponentCard({
         </span>
         {isAdmin && (
           <div className="flex items-center gap-1">
-            <CreateComponentModal component={component} bikeTypes={bikeTypes} />
+            <CreateComponentModal
+              component={component}
+              bikeTypes={bikeTypes}
+              categories={categories}
+              attributesByCategory={attributesByCategory}
+            />
             <IconButton
               icon={component.isActive ? <EyeOffIcon /> : <EyeIcon />}
               label={component.isActive ? "Désactiver" : "Activer"}

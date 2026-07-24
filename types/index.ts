@@ -112,7 +112,7 @@ export type StudyWithRelations = Study & {
 /** Study with everything needed to render the PDF report. */
 export type StudyForReport = Study & {
   bikeType: BikeType;
-  componentsUsed: BikeComponent[];
+  componentsUsed: (BikeComponent & { category: { name: string } })[];
   exercisesPrescribed: Exercise[];
   pains: StudyPain[];
   photos: StudyPhoto[];

@@ -31,7 +31,7 @@ import {
   type RecapPhysioRow,
 } from "./StudySummaryStep";
 import type { ComparePhoto } from "./PhotoComparison";
-import type { BikeType, Exercise, Patient, PatientIntake } from "@prisma/client";
+import type { BikeType, ComponentAttribute, Exercise, Patient, PatientIntake } from "@prisma/client";
 import type { PhysioValue } from "@/lib/physio";
 import type { StudyPainInput } from "@/types";
 
@@ -42,6 +42,8 @@ interface Props {
   riderMeasurements: RiderMeasurementForStudy[];
   physioTests: PhysioTestForStudy[];
   components: ComponentForStudy[];
+  categories: { id: string; name: string }[];
+  attributesByCategory: Record<string, ComponentAttribute[]>;
   exercises: Exercise[];
   /** Pre-filled from an existing study, if any */
   initial?: {
@@ -74,6 +76,8 @@ export function StudyForm({
   riderMeasurements,
   physioTests,
   components,
+  categories,
+  attributesByCategory,
   exercises,
   initial,
 }: Props) {
@@ -449,6 +453,8 @@ export function StudyForm({
       {store.step === 7 && (
         <ComponentPicker
           components={components}
+          categories={categories}
+          attributesByCategory={attributesByCategory}
           bikeTypeId={store.bikeTypeId}
           selected={store.selectedComponentIds}
           onToggle={store.toggleComponent}

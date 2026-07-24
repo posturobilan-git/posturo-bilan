@@ -25,7 +25,7 @@ export async function GET(
       intake: true,
       studies: {
         include: {
-          componentsUsed: true,
+          componentsUsed: { include: { category: { select: { name: true } } } },
           exercisesPrescribed: true,
           pains: { orderBy: { order: "asc" } },
         },

@@ -1,6 +1,6 @@
 import type {
   ExerciseCategory,
-  ComponentCategory,
+  ComponentAttributeType,
   StudyStatus,
   MeasurementCategory,
   PhysioOutputType,
@@ -64,15 +64,17 @@ export const EXERCISE_CATEGORY_LABELS: Record<ExerciseCategory, string> = {
   AUTRE: "Autre",
 };
 
-export const COMPONENT_CATEGORY_LABELS: Record<ComponentCategory, string> = {
-  SELLE: "Selle",
-  POTENCE: "Potence",
-  CINTRE: "Cintre",
-  CALE_PIEDS: "Cale-pieds",
-  MANIVELLES: "Manivelles",
-  PEDALES: "Pédales",
-  AUTRE: "Autre",
+export const EXERCISE_CATEGORIES = Object.keys(EXERCISE_CATEGORY_LABELS) as ExerciseCategory[];
+// Component categories are now an admin-managed model (see actions/componentCategory.actions.ts),
+// not a static enum — no label map here anymore. Fetch via getCategories()/getActiveCategories().
+
+export const COMPONENT_ATTRIBUTE_TYPE_LABELS: Record<ComponentAttributeType, string> = {
+  NUMBER: "Nombre",
+  TEXT: "Texte",
+  BOOLEAN: "Oui / Non",
+  SELECT: "Liste",
 };
 
-export const EXERCISE_CATEGORIES = Object.keys(EXERCISE_CATEGORY_LABELS) as ExerciseCategory[];
-export const COMPONENT_CATEGORIES = Object.keys(COMPONENT_CATEGORY_LABELS) as ComponentCategory[];
+export const COMPONENT_ATTRIBUTE_TYPES = Object.keys(
+  COMPONENT_ATTRIBUTE_TYPE_LABELS
+) as ComponentAttributeType[];
