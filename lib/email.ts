@@ -22,5 +22,5 @@ export function getResend(): Resend {
  */
 export function resendFrom(): string {
   const raw = process.env.RESEND_FROM_EMAIL?.trim().replace(/^['"]|['"]$/g, "").trim();
-  return raw || "PosturoBilan <onboarding@resend.dev>";
+  return raw || "Posturo Vélo <onboarding@resend.dev>";
 }

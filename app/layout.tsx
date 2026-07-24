@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PosturoBilan",
+  title: "Posturo Vélo",
   description: "Application de bilan postural vélo pour kinésithérapeutes",
 };
 

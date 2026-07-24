@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const CABINET = process.env.CABINET_NAME || "PosturoBilan";
+const CABINET = process.env.CABINET_NAME || "Posturo Vélo";
 
 function Screen({
   title,

@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
 
 // ─── Reusable bits ──────────────────────────────────────────────────────────
 
-const CABINET = process.env.CABINET_NAME || "PosturoBilan";
+const CABINET = process.env.CABINET_NAME || "Posturo Vélo";
 
 function Header({ tag }: { tag: string }) {
   return (

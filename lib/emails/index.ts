@@ -24,7 +24,7 @@ import { decryptFields } from "@/lib/crypto";
  * testable without a mail provider.
  */
 
-const CABINET = process.env.CABINET_NAME || "PosturoBilan";
+const CABINET = process.env.CABINET_NAME || "Posturo Vélo";
 const FROM = resendFrom();
 
 type Sendable = { subject: string; react: ReactElement; to: string };

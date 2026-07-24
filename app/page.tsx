@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { isReservationEnabled } from "@/lib/env";
 
-const CABINET = process.env.CABINET_NAME || "PosturoBilan";
+const CABINET = process.env.CABINET_NAME || "Posturo Vélo";
 
 export const metadata: Metadata = {
   title: `${CABINET} — Étude posturale vélo`,
