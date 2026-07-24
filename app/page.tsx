@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
+import { isReservationEnabled } from "@/lib/env";
 
 const CABINET = process.env.CABINET_NAME || "PosturoBilan";
 

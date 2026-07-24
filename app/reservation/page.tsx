@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { isReservationEnabled } from "@/lib/env";
 import { ReservationEmbed } from "./ReservationEmbed";
 
 export const metadata: Metadata = {
@@ -8,6 +10,8 @@ export const metadata: Metadata = {
 const CABINET = process.env.CABINET_NAME || "PosturoBilan";
 
 export default function ReservationPage() {
+  if (!isReservationEnabled()) redirect("/");
+
   return (
     <main className="min-h-screen bg-canvas px-4 py-8">
       <div className="mx-auto w-full max-w-4xl">

@@ -8,6 +8,8 @@ import type { StudyMeasureValue, StudyRiderMeasureValue } from "@/types";
 import type { PhysioValue, StudyPhysioResult } from "@/lib/physio";
 import { decryptFields } from "@/lib/crypto";
 import { PATIENT_ENCRYPTED_FIELDS, INTAKE_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
+import { getAttributesByCategory } from "@/actions/componentAttribute.actions";
+import { getActiveCategories } from "@/actions/componentCategory.actions";
 
 export default async function EtudePage(props: PageProps<"/dashboard/patients/[id]/etude">) {
   const kine = await getCurrentKine();
@@ -17,7 +19,7 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
   const { studyId } = await props.searchParams;
   const editStudyId = typeof studyId === "string" ? studyId : undefined;
 
-  const [patientRaw, bikeTypes, measurements, riderMeasurements, physioTests, components, exercises] = await Promise.all([
+  const [patientRaw, bikeTypes, measurements, riderMeasurements, physioTests, components, exercises, attributesByCategory, categories] = await Promise.all([
     prisma.patient.findUnique({
       where: {
         id,
@@ -46,13 +48,19 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
     }),
     prisma.bikeComponent.findMany({
       where: { isActive: true },
-      include: { bikeTypes: { select: { id: true } } },
-      orderBy: [{ category: "asc" }, { name: "asc" }],
+      include: {
+        bikeTypes: { select: { id: true } },
+        category: { select: { name: true } },
+        attributeValues: { select: { attributeId: true, valueText: true, valueNumber: true, valueBoolean: true } },
+      },
+      orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
     }),
     prisma.exercise.findMany({
       where: { isActive: true },
       orderBy: [{ category: "asc" }, { name: "asc" }],
     }),
+    getAttributesByCategory(),
+    getActiveCategories(),
   ]);
 
   if (!patientRaw) redirect("/dashboard/patients");
@@ -165,7 +173,9 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
             riderMeasurements={riderMeasurements}
             physioTests={physioTests}
             components={components}
+            categories={categories}
             exercises={exercises}
+            attributesByCategory={attributesByCategory}
             initial={initial}
           />
         </div>

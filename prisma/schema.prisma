@@ -35,14 +35,13 @@ enum AuditAction {
   ANONYMIZE
 }
 
-enum ComponentCategory {
-  SELLE
-  POTENCE
-  CINTRE
-  CALE_PIEDS
-  MANIVELLES
-  PEDALES
-  AUTRE
+// Nature de la valeur d'un attribut de composant. Détermine le champ de saisie
+// dans le formulaire et la colonne remplie sur ComponentAttributeValue.
+enum ComponentAttributeType {
+  NUMBER
+  TEXT
+  BOOLEAN
+  SELECT
 }
 
 enum ExerciseCategory {
@@ -109,6 +108,8 @@ model User {
   riderMeasurements RiderMeasurement[]
   physioTests  PhysioTest[]
   physioTestSections PhysioTestSection[]
+  componentAttributes ComponentAttribute[]
+  componentCategories ComponentCategory[]
   auditLogs    AuditLog[]
 
   createdAt DateTime @default(now())
@@ -533,7 +534,8 @@ model BikeComponent {
   name        String
   brand       String?
   model       String?
-  category    ComponentCategory @default(AUTRE)
+  categoryId  String
+  category    ComponentCategory @relation(fields: [categoryId], references: [id])
   notes       String?
   isActive    Boolean           @default(true)
 
@@ -542,11 +544,87 @@ model BikeComponent {
 
   studies     Study[]           @relation("StudyComponents")
 
+  // Valeurs des attributs configurés pour la catégorie de ce composant (prompt 27).
+  attributeValues ComponentAttributeValue[]
+
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
   @@index([createdById])
-  @@index([category])
+  @@index([categoryId])
+}
+
+// Catégorie de composant (Selle, Potence, Cintre...), gérée par l'admin (CRUD +
+// réordonnancement). Table plutôt qu'un enum : l'admin doit pouvoir en ajouter
+// de nouvelles, pas seulement choisir parmi une liste figée.
+model ComponentCategory {
+  id          String   @id @default(uuid())
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  name        String   @unique
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+
+  components  BikeComponent[]
+  attributes  ComponentAttribute[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+  @@map("component_category")
+}
+
+// Attribut configurable pour une catégorie de composant (ex : Largeur, Forme,
+// Profil pour Selle). Gérée par l'admin (CRUD + réordonnancement par catégorie).
+// Un attribut appartient à une seule catégorie (contrairement aux côtes / tests
+// physio, partagés entre plusieurs types de vélo via une table de liaison), donc
+// pas de many-to-many à modéliser — juste une relation directe + un ordre scopé
+// par catégorie.
+model ComponentAttribute {
+  id          String                 @id @default(uuid())
+  createdById String
+  createdBy   User                   @relation(fields: [createdById], references: [id])
+
+  categoryId  String
+  category    ComponentCategory      @relation(fields: [categoryId], references: [id])
+  name        String                 // "Largeur constructeur"
+  key         String                 // slug technique, ex: largeur_constructeur
+  type        ComponentAttributeType @default(TEXT)
+  unit        String?                // pour NUMBER (mm, cm, degrés...)
+  options     String[]               @default([]) // pour SELECT
+  order       Int                    @default(0) // ordre d'affichage, scoped par catégorie
+  isRequired  Boolean                @default(false)
+  isActive    Boolean                @default(true)
+
+  values      ComponentAttributeValue[]
+
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@unique([categoryId, key])
+  @@index([createdById])
+  @@index([categoryId])
+}
+
+// Valeur d'un attribut pour un composant donné. Une seule des trois colonnes
+// typées est remplie, selon ComponentAttribute.type (NUMBER/TEXT/BOOLEAN → valeur
+// directe ; SELECT → texte de l'option choisie, dans la casse canonique définie
+// par ComponentAttribute.options). Des colonnes typées (plutôt qu'un Json) pour
+// permettre le filtrage exact/numérique par Prisma — voir Partie C du prompt 27.
+model ComponentAttributeValue {
+  componentId String
+  component   BikeComponent      @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  attributeId String
+  attribute   ComponentAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  valueText    String?
+  valueNumber  Float?
+  valueBoolean Boolean?
+
+  @@id([componentId, attributeId])
+  @@index([attributeId])
 }
 
 model AuditLog {

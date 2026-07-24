@@ -1,8 +1,6 @@
 "use client";
 
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
-import { COMPONENT_CATEGORY_LABELS } from "@/lib/labels";
-import type { ComponentCategory } from "@prisma/client";
 
 const COLORS = [
   "var(--color-brand-500)",
@@ -15,12 +13,12 @@ const COLORS = [
 ];
 
 interface Props {
-  data: { category: ComponentCategory; count: number }[];
+  data: { category: string; count: number }[];
 }
 
 export function CategoryPieChart({ data }: Props) {
   const chartData = data.map((d) => ({
-    name: COMPONENT_CATEGORY_LABELS[d.category],
+    name: d.category,
     value: d.count,
   }));
 

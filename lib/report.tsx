@@ -21,7 +21,7 @@ const FROM = resendFrom();
 
 function buildAdjustments(study: StudyForReport): string[] {
   return study.componentsUsed.map((c) =>
-    [c.category, c.name, c.brand].filter(Boolean).join(" — ")
+    [c.category.name, c.name, c.brand].filter(Boolean).join(" — ")
   );
 }
 
@@ -30,7 +30,7 @@ async function fetchStudyForReport(studyId: string): Promise<StudyForReport | nu
     where: { id: studyId },
     include: {
       bikeType: true,
-      componentsUsed: true,
+      componentsUsed: { include: { category: { select: { name: true } } } },
       exercisesPrescribed: true,
       pains: { orderBy: { order: "asc" } },
       kine: true,

@@ -1,6 +1,4 @@
-import { COMPONENT_CATEGORY_LABELS } from "@/lib/labels";
 import type { TopItem } from "@/lib/stats";
-import type { ComponentCategory } from "@prisma/client";
 
 export function ComponentsTable({ items }: { items: TopItem[] }) {
   if (items.length === 0) {
@@ -28,7 +26,7 @@ export function ComponentsTable({ items }: { items: TopItem[] }) {
             </td>
             <td className="px-4 py-2.5">
               <span className="rounded-full bg-accent-50 px-2 py-0.5 text-xs font-medium text-accent-700">
-                {COMPONENT_CATEGORY_LABELS[c.category as ComponentCategory] ?? c.category}
+                {c.category}
               </span>
             </td>
             <td className="px-4 py-2.5 text-right font-semibold text-content">{c.count}</td>

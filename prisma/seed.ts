@@ -5,7 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import {
   PrismaClient,
   ExerciseCategory,
-  ComponentCategory,
+  ComponentAttributeType,
   MeasurementCategory,
   PhysioOutputType,
   StudyStatus,
@@ -14,6 +14,7 @@ import {
 import type { StudyMeasures, StudyMeasureValue } from "../types";
 import { encryptFields, hashEmail } from "../lib/crypto";
 import { PATIENT_ENCRYPTED_FIELDS } from "../lib/crypto.constants";
+import { coerceAttributeValue, type AttributeValueTriple } from "../lib/csv/componentAttributeCoercion";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -21,6 +22,10 @@ const prisma = new PrismaClient({
 
 // ─── Types de vélo (gérés par l'admin) ──────────────────────────────────────────
 const BIKE_TYPES = ["Route", "VTT", "Gravel", "Triathlon", "Piste"];
+
+// ─── Catégories de composants (gérées par l'admin — prompt 27 v2) ────────────────
+// L'ordre du tableau définit l'ordre d'affichage.
+const COMPONENT_CATEGORIES_SEED = ["Selle", "Potence", "Cintre", "Cale-pieds", "Manivelles", "Pédales", "Autre"];
 
 // ─── Sections de tests physio (regroupement dans le formulaire) ───────────────────
 // L'ordre du tableau définit l'ordre d'affichage des groupes.
@@ -47,20 +52,102 @@ const COMPONENTS: Array<{
   name: string;
   brand?: string;
   model?: string;
-  category: ComponentCategory;
+  categoryName: string; // nom d'une entrée de COMPONENT_CATEGORIES_SEED
   notes?: string;
   bikeTypes?: string[]; // types compatibles ; vide = universel
 }> = [
-  { name: "Selle Arione R3", brand: "Fizik", model: "Arione R3", category: "SELLE", notes: "Selle longue, bassin peu mobile.", bikeTypes: ["Route", "Triathlon"] },
-  { name: "Selle Antares R3", brand: "Fizik", model: "Antares R3", category: "SELLE", notes: "Bassin à mobilité moyenne.", bikeTypes: ["Route", "Gravel"] },
-  { name: "Selle SR", brand: "Ergon", model: "SR Pro", category: "SELLE", notes: "Canal central, confort périnéal.", bikeTypes: ["Gravel", "VTT"] },
-  { name: "Potence SL-K", brand: "FSA", model: "SL-K", category: "POTENCE", notes: "Disponible 90–120 mm.", bikeTypes: ["Route", "Gravel"] },
-  { name: "Potence Pro PLT", brand: "Pro", model: "PLT", category: "POTENCE", bikeTypes: ["Route", "Triathlon"] },
-  { name: "Cintre Compact", brand: "Deda", model: "Zero100", category: "CINTRE", notes: "Drop court, reach 75 mm.", bikeTypes: ["Route"] },
-  { name: "Cales SPD-SL", brand: "Shimano", model: "SM-SH11", category: "CALE_PIEDS", notes: "Jeu 6°, jaune.", bikeTypes: ["Route", "Triathlon"] },
-  { name: "Cales SPD-SL fixes", brand: "Shimano", model: "SM-SH10", category: "CALE_PIEDS", notes: "Jeu 0°, rouge.", bikeTypes: ["Route"] },
-  { name: "Manivelles 170 mm", brand: "Shimano", model: "Ultegra R8000", category: "MANIVELLES", notes: "Pour petits gabarits." }, // universel
-  { name: "Pédales Keo", brand: "Look", model: "Keo 2 Max", category: "PEDALES", bikeTypes: ["Route", "Gravel"] },
+  { name: "Selle Arione R3", brand: "Fizik", model: "Arione R3", categoryName: "Selle", notes: "Selle longue, bassin peu mobile.", bikeTypes: ["Route", "Triathlon"] },
+  { name: "Selle Antares R3", brand: "Fizik", model: "Antares R3", categoryName: "Selle", notes: "Bassin à mobilité moyenne.", bikeTypes: ["Route", "Gravel"] },
+  { name: "Selle SR", brand: "Ergon", model: "SR Pro", categoryName: "Selle", notes: "Canal central, confort périnéal.", bikeTypes: ["Gravel", "VTT"] },
+  { name: "Potence SL-K", brand: "FSA", model: "SL-K", categoryName: "Potence", notes: "Disponible 90–120 mm.", bikeTypes: ["Route", "Gravel"] },
+  { name: "Potence Pro PLT", brand: "Pro", model: "PLT", categoryName: "Potence", bikeTypes: ["Route", "Triathlon"] },
+  { name: "Cintre Compact", brand: "Deda", model: "Zero100", categoryName: "Cintre", notes: "Drop court, reach 75 mm.", bikeTypes: ["Route"] },
+  { name: "Cales SPD-SL", brand: "Shimano", model: "SM-SH11", categoryName: "Cale-pieds", notes: "Jeu 6°, jaune.", bikeTypes: ["Route", "Triathlon"] },
+  { name: "Cales SPD-SL fixes", brand: "Shimano", model: "SM-SH10", categoryName: "Cale-pieds", notes: "Jeu 0°, rouge.", bikeTypes: ["Route"] },
+  { name: "Manivelles 170 mm", brand: "Shimano", model: "Ultegra R8000", categoryName: "Manivelles", notes: "Pour petits gabarits." }, // universel
+  { name: "Pédales Keo", brand: "Look", model: "Keo 2 Max", categoryName: "Pédales", bikeTypes: ["Route", "Gravel"] },
+];
+
+// ─── Attributs de composants (prompt 27) ─────────────────────────────────────────
+// Pré-configuration de la catégorie Selle uniquement — les autres catégories
+// seront configurées plus tard par l'admin.
+interface SeedComponentAttribute {
+  name: string;
+  key: string;
+  type: ComponentAttributeType;
+  unit?: string;
+  options?: string[];
+  order: number;
+}
+
+const SELLE_ATTRIBUTES: SeedComponentAttribute[] = [
+  { name: "Largeur constructeur", key: "largeur_constructeur", type: "NUMBER", unit: "mm", order: 0 },
+  { name: "Largeur mesurée", key: "largeur_mesuree", type: "NUMBER", unit: "mm", order: 1 },
+  { name: "Longueur", key: "longueur", type: "NUMBER", unit: "mm", order: 2 },
+  { name: "Forme", key: "forme", type: "SELECT", options: ["T", "V"], order: 3 },
+  { name: "Profil", key: "profil", type: "SELECT", options: ["Plate", "Hamac"], order: 4 },
+  { name: "Évasée", key: "evasee", type: "BOOLEAN", order: 5 },
+  { name: "Épaisseur", key: "epaisseur", type: "SELECT", options: ["+", "++", "+++"], order: 6 },
+  { name: "Commentaire", key: "commentaire", type: "TEXT", order: 7 },
+];
+
+// Quelques selles d'exemple avec leurs valeurs d'attributs, pour que l'export de
+// la catégorie Selle produise un fichier non vide dès le premier test. Valeurs
+// indexées par le `name` de SELLE_ATTRIBUTES (format brut : nombre en texte,
+// "true"/"false" pour les booléens — même format que le formulaire client).
+interface SeedComponentWithAttributes {
+  brand: string;
+  model: string;
+  bikeTypes: string[];
+  attributes: Record<string, string>;
+}
+
+const SELLE_EXAMPLES: SeedComponentWithAttributes[] = [
+  {
+    brand: "Fizik",
+    model: "Vento",
+    bikeTypes: ["Route", "Triathlon"],
+    attributes: {
+      "Largeur constructeur": "140",
+      "Largeur mesurée": "142",
+      "Longueur": "250",
+      "Forme": "T",
+      "Profil": "Plate",
+      "Évasée": "false",
+      "Épaisseur": "++",
+      "Commentaire": "Selle courte, nez fin.",
+    },
+  },
+  {
+    brand: "Selle Italia",
+    model: "Flite Boost",
+    bikeTypes: ["Route"],
+    attributes: {
+      "Largeur constructeur": "145",
+      "Largeur mesurée": "147",
+      "Longueur": "248",
+      "Forme": "T",
+      "Profil": "Plate",
+      "Évasée": "true",
+      "Épaisseur": "+",
+      "Commentaire": "Version boost, coques carbone.",
+    },
+  },
+  {
+    brand: "SMP",
+    model: "Well5",
+    bikeTypes: ["Route", "Gravel"],
+    attributes: {
+      "Largeur constructeur": "139",
+      "Largeur mesurée": "141",
+      "Longueur": "274",
+      "Forme": "V",
+      "Profil": "Hamac",
+      "Évasée": "false",
+      "Épaisseur": "+++",
+      "Commentaire": "Bec plongeant, décharge périnéale.",
+    },
+  },
 ];
 
 // ─── Côtes (mesures dynamiques) ──────────────────────────────────────────────────
@@ -292,6 +379,17 @@ async function main() {
   const idsForNames = (names: string[] = []) =>
     names.map((n) => bikeTypeByName.get(n)).filter((id): id is string => Boolean(id));
 
+  // ── Catégories de composants ──
+  let catCreated = 0;
+  for (const [i, name] of COMPONENT_CATEGORIES_SEED.entries()) {
+    const exists = await prisma.componentCategory.findFirst({ where: { name } });
+    if (exists) continue;
+    await prisma.componentCategory.create({ data: { name, order: i, createdById: admin.id } });
+    catCreated++;
+  }
+  const componentCategories = await prisma.componentCategory.findMany();
+  const categoryByName = new Map(componentCategories.map((c) => [c.name, c.id]));
+
   // ── Sections de tests physio ──
   let sectionsCreated = 0;
   for (const [i, name] of PHYSIO_SECTIONS.entries()) {
@@ -317,10 +415,13 @@ async function main() {
   for (const comp of COMPONENTS) {
     const exists = await prisma.bikeComponent.findFirst({ where: { name: comp.name } });
     if (exists) continue;
-    const { bikeTypes: compTypes, ...fields } = comp;
+    const { bikeTypes: compTypes, categoryName, ...fields } = comp;
+    const categoryId = categoryByName.get(categoryName);
+    if (!categoryId) continue; // catégorie introuvable — ne devrait pas arriver
     await prisma.bikeComponent.create({
       data: {
         ...fields,
+        categoryId,
         createdById: admin.id,
         bikeTypes: { connect: idsForNames(compTypes).map((id) => ({ id })) },
       },
@@ -342,6 +443,60 @@ async function main() {
       data: { bikeTypes: { connect: idsForNames(comp.bikeTypes).map((id) => ({ id })) } },
     });
     compTypesLinked++;
+  }
+
+  // ── Attributs de composants (catégorie Selle) ──
+  const selleCategoryId = categoryByName.get("Selle")!;
+  let compAttrCreated = 0;
+  for (const a of SELLE_ATTRIBUTES) {
+    const exists = await prisma.componentAttribute.findFirst({ where: { categoryId: selleCategoryId, key: a.key } });
+    if (exists) continue;
+    await prisma.componentAttribute.create({
+      data: {
+        categoryId: selleCategoryId,
+        name: a.name,
+        key: a.key,
+        type: a.type,
+        unit: a.unit ?? null,
+        options: a.options ?? [],
+        order: a.order,
+        createdById: admin.id,
+      },
+    });
+    compAttrCreated++;
+  }
+
+  // ── Exemples de selles avec valeurs d'attributs ──
+  const selleAttributes = await prisma.componentAttribute.findMany({ where: { categoryId: selleCategoryId } });
+  const selleAttributeByName = new Map(selleAttributes.map((a) => [a.name, a]));
+
+  let compAttrExamplesCreated = 0;
+  for (const example of SELLE_EXAMPLES) {
+    const name = `${example.brand} ${example.model}`;
+    const exists = await prisma.bikeComponent.findFirst({ where: { name } });
+    if (exists) continue;
+
+    const attributeValues = Object.entries(example.attributes)
+      .map(([attrName, raw]) => {
+        const attribute = selleAttributeByName.get(attrName);
+        if (!attribute) return null;
+        const coerced = coerceAttributeValue(attribute, raw);
+        return coerced.ok ? { attributeId: attribute.id, ...coerced.value } : null;
+      })
+      .filter((v): v is { attributeId: string } & AttributeValueTriple => v != null);
+
+    await prisma.bikeComponent.create({
+      data: {
+        name,
+        brand: example.brand,
+        model: example.model,
+        categoryId: selleCategoryId,
+        createdById: admin.id,
+        bikeTypes: { connect: idsForNames(example.bikeTypes).map((id) => ({ id })) },
+        attributeValues: { create: attributeValues },
+      },
+    });
+    compAttrExamplesCreated++;
   }
 
   // Resolve lookups once for the studies.
@@ -576,11 +731,14 @@ async function main() {
 
   console.log(
     `Seed terminé : ${btCreated}/${BIKE_TYPES.length} types de vélo, ` +
+      `${catCreated}/${COMPONENT_CATEGORIES_SEED.length} catégories de composants, ` +
       `${sectionsCreated}/${PHYSIO_SECTIONS.length} sections physio, ${measCreated}/${MEASUREMENTS.length} côtes, ` +
       `${riderMeasCreated}/${RIDER_MEASUREMENTS.length} mesures cycliste, ` +
       `${physioCreated}/${PHYSIO_TESTS.length} tests physio, ` +
       `${exCreated}/${EXERCISES.length} exercices, ${compCreated}/${COMPONENTS.length} composants ` +
       `(${compTypesLinked} associés à des types de vélo), ` +
+      `${compAttrCreated}/${SELLE_ATTRIBUTES.length} attributs Selle, ` +
+      `${compAttrExamplesCreated}/${SELLE_EXAMPLES.length} selles d'exemple avec attributs, ` +
       `${patientsCreated}/${PATIENTS.length} patients, ${studiesCreated} études créées, ` +
       `${backfilled} études migrées vers les côtes dynamiques (attribués à ${admin.email}).`
   );

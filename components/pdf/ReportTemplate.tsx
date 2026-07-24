@@ -562,7 +562,7 @@ export function ReportTemplate({
             {study.componentsUsed.map((c) => (
               <KV
                 key={c.id}
-                label={c.category}
+                label={c.category.name}
                 value={[c.name, c.brand, c.model].filter(Boolean).join(" — ")}
               />
             ))}
