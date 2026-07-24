@@ -64,9 +64,11 @@ function SiteHeader() {
           >
             Espace kiné
           </Link>
-          <PrimaryLink href="/reservation" size="sm">
-            Réserver
-          </PrimaryLink>
+          {isReservationEnabled() && (
+            <PrimaryLink href="/reservation" size="sm">
+              Réserver
+            </PrimaryLink>
+          )}
         </nav>
       </div>
     </header>
@@ -96,9 +98,11 @@ function Hero() {
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
-            <PrimaryLink href="/reservation" size="lg">
-              Réserver une étude posturale
-            </PrimaryLink>
+            {isReservationEnabled() && (
+              <PrimaryLink href="/reservation" size="lg">
+                Réserver une étude posturale
+              </PrimaryLink>
+            )}
             <Link
               href="#etapes"
               className="text-sm font-medium text-content-muted underline-offset-4 hover:text-content hover:underline"
@@ -239,14 +243,16 @@ function FinalCta() {
         <p className="mx-auto mt-3 max-w-xl text-brand-100">
           Texte d&apos;exemple : réservez votre étude posturale dès maintenant.
         </p>
-        <div className="mt-8 flex justify-center">
-          <Link
-            href="/reservation"
-            className="inline-flex h-12 items-center justify-center rounded-lg bg-white px-6 text-base font-medium text-brand-700 shadow-xs transition-colors hover:bg-brand-50"
-          >
-            Réserver une étude posturale
-          </Link>
-        </div>
+        {isReservationEnabled() && (
+          <div className="mt-8 flex justify-center">
+            <Link
+              href="/reservation"
+              className="inline-flex h-12 items-center justify-center rounded-lg bg-white px-6 text-base font-medium text-brand-700 shadow-xs transition-colors hover:bg-brand-50"
+            >
+              Réserver une étude posturale
+            </Link>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -263,9 +269,11 @@ function SiteFooter() {
           légales à venir.
         </p>
         <nav className="flex items-center gap-5">
-          <Link href="/reservation" className="hover:text-content">
-            Réserver
-          </Link>
+          {isReservationEnabled() && (
+            <Link href="/reservation" className="hover:text-content">
+              Réserver
+            </Link>
+          )}
           <Link href="/sign-in" className="hover:text-content">
             Espace kiné
           </Link>
