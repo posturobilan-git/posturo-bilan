@@ -16,7 +16,7 @@ import type { PhotoPhase, PhotoAngle } from "@prisma/client";
 import { decryptFields } from "@/lib/crypto";
 import { PATIENT_ENCRYPTED_FIELDS, INTAKE_ENCRYPTED_FIELDS, USER_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
-const CABINET = process.env.CABINET_NAME || "PosturoBilan";
+const CABINET = process.env.CABINET_NAME || "Posturo Vélo";
 const FROM = resendFrom();
 
 function buildAdjustments(study: StudyForReport): string[] {

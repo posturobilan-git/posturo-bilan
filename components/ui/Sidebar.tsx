@@ -96,7 +96,7 @@ function Brand() {
         className="h-9 w-9"
         priority
       />
-      <span className="text-base font-semibold tracking-tight text-content">PosturoBilan</span>
+      <span className="text-base font-semibold tracking-tight text-content">Posturo Vélo</span>
     </div>
   );
 }
@@ -216,7 +216,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
             height={28}
             className="h-7 w-7"
           />
-          <span className="text-sm font-semibold tracking-tight text-content">PosturoBilan</span>
+          <span className="text-sm font-semibold tracking-tight text-content">Posturo Vélo</span>
         </span>
         <UserButton />
       </header>

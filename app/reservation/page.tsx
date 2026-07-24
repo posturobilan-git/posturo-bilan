@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: "Réserver mon étude posturale",
 };
 
-const CABINET = process.env.CABINET_NAME || "PosturoBilan";
+const CABINET = process.env.CABINET_NAME || "Posturo Vélo";
 
 export default function ReservationPage() {
   if (!isReservationEnabled()) redirect("/");
