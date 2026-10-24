@@ -119,7 +119,7 @@ export type StudyWithRelations = Study & {
 export type StudyForReport = Study & {
   bikeType: BikeType;
   componentsUsed: (BikeComponent & { category: { name: string } })[];
-  exercisesPrescribed: Exercise[];
+  exercisesPrescribed: (Exercise & { category: { name: string } })[];
   pains: StudyPain[];
   photos: StudyPhoto[];
   patient: Patient & { intake: PatientIntake | null };

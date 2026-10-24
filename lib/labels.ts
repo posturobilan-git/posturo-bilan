@@ -1,5 +1,4 @@
 import type {
-  ExerciseCategory,
   ComponentAttributeType,
   StudyStatus,
   MeasurementCategory,
@@ -56,17 +55,9 @@ export const STUDY_STATUS_LABELS: Record<StudyStatus, string> = {
 
 export const STUDY_STATUSES = Object.keys(STUDY_STATUS_LABELS) as StudyStatus[];
 
-export const EXERCISE_CATEGORY_LABELS: Record<ExerciseCategory, string> = {
-  SOUPLESSE: "Souplesse",
-  RENFORCEMENT: "Renforcement",
-  MOBILITE: "Mobilité",
-  PROPRIOCEPTION: "Proprioception",
-  AUTRE: "Autre",
-};
-
-export const EXERCISE_CATEGORIES = Object.keys(EXERCISE_CATEGORY_LABELS) as ExerciseCategory[];
-// Component categories are now an admin-managed model (see actions/componentCategory.actions.ts),
-// not a static enum — no label map here anymore. Fetch via getCategories()/getActiveCategories().
+// Component and exercise categories are admin-managed models (see
+// actions/componentCategory.actions.ts and actions/exerciseCategory.actions.ts),
+// not static enums — no label map here. Fetch via getCategories()/getExerciseCategories().
 
 export const COMPONENT_ATTRIBUTE_TYPE_LABELS: Record<ComponentAttributeType, string> = {
   NUMBER: "Nombre",

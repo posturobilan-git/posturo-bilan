@@ -32,14 +32,14 @@ import { MeasuresForm, type MeasurementForStudy } from "./MeasuresForm";
 import { RiderMeasuresForm, type RiderMeasurementForStudy } from "./RiderMeasuresForm";
 import { PhysioTestsForm, type PhysioTestForStudy } from "./PhysioTestsForm";
 import { ComponentPicker, type ComponentForStudy } from "./ComponentPicker";
-import { ExercisePicker } from "./ExercisePicker";
+import { ExercisePicker, type ExerciseForStudy } from "./ExercisePicker";
 import {
   StudySummaryStep,
   type RecapMeasureRow,
   type RecapPhysioRow,
 } from "./StudySummaryStep";
 import type { ComparePhoto } from "./PhotoComparison";
-import type { BikeType, ComponentAttribute, Exercise, Patient, PatientIntake } from "@prisma/client";
+import type { BikeType, ComponentAttribute, Patient, PatientIntake } from "@prisma/client";
 import type { PhysioValue } from "@/lib/physio";
 import type { StudyPainInput } from "@/types";
 
@@ -52,7 +52,9 @@ interface Props {
   components: ComponentForStudy[];
   categories: { id: string; name: string }[];
   attributesByCategory: Record<string, ComponentAttribute[]>;
-  exercises: Exercise[];
+  exercises: ExerciseForStudy[];
+  /** Active exercise categories — the picker's filter. */
+  exerciseCategories: { id: string; name: string }[];
   /** Pre-filled from an existing study, if any */
   initial?: {
     studyId: string;
@@ -90,6 +92,7 @@ export function StudyForm({
   categories,
   attributesByCategory,
   exercises,
+  exerciseCategories,
   initial,
 }: Props) {
   const router = useRouter();
@@ -512,6 +515,7 @@ export function StudyForm({
       {store.step === 8 && (
         <ExercisePicker
           exercises={exercises}
+          categories={exerciseCategories}
           components={components}
           selected={store.selectedExerciseIds}
           selectedComponentIds={store.selectedComponentIds}

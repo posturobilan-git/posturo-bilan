@@ -32,7 +32,7 @@ async function fetchStudyForReport(studyId: string): Promise<StudyForReport | nu
     include: {
       bikeType: true,
       componentsUsed: { include: { category: { select: { name: true } } } },
-      exercisesPrescribed: true,
+      exercisesPrescribed: { include: { category: { select: { name: true } } } },
       pains: { orderBy: { order: "asc" } },
       kine: true,
       patient: { include: { intake: true } },

@@ -26,7 +26,7 @@ export async function GET(
       studies: {
         include: {
           componentsUsed: { include: { category: { select: { name: true } } } },
-          exercisesPrescribed: true,
+          exercisesPrescribed: { include: { category: { select: { name: true } } } },
           pains: { orderBy: { order: "asc" } },
         },
       },

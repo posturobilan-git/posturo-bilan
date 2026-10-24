@@ -4,7 +4,6 @@ loadEnvConfig(process.cwd());
 import { PrismaPg } from "@prisma/adapter-pg";
 import {
   PrismaClient,
-  ExerciseCategory,
   ComponentAttributeType,
   MeasurementCategory,
   PhysioOutputType,
@@ -31,21 +30,25 @@ const COMPONENT_CATEGORIES_SEED = ["Selle", "Potence", "Cintre", "Cale-pieds", "
 // L'ordre du tableau définit l'ordre d'affichage des groupes.
 const PHYSIO_SECTIONS = ["Tronc commun", "Genou", "Hanche", "Tests dynamiques"];
 
+// ─── Catégories d'exercices (gérées par l'admin — prompt 28) ─────────────────────
+// L'ordre du tableau définit l'ordre d'affichage.
+const EXERCISE_CATEGORIES_SEED = ["Souplesse", "Renforcement", "Mobilité", "Proprioception", "Autre"];
+
 const EXERCISES: Array<{
   name: string;
   description: string;
-  category: ExerciseCategory;
+  categoryName: string; // nom d'une entrée de EXERCISE_CATEGORIES_SEED
   frequency?: string;
   duration?: string;
 }> = [
-  { name: "Étirement du psoas", description: "Fente avant, bassin rétroversé, étirement de la chaîne antérieure de la hanche.", category: "SOUPLESSE", frequency: "2×/jour", duration: "30 s par côté" },
-  { name: "Gainage planche", description: "Maintien isométrique en appui avant-bras, dos neutre.", category: "RENFORCEMENT", frequency: "1×/jour", duration: "3 × 45 s" },
-  { name: "Mobilité thoracique", description: "Rotation du segment thoracique en quadrupédie, main derrière la tête.", category: "MOBILITE", frequency: "1×/jour", duration: "10 répétitions/côté" },
-  { name: "Renforcement VMO", description: "Extension de genou en fin d'amplitude pour le vaste médial oblique.", category: "RENFORCEMENT", frequency: "3×/semaine", duration: "3 × 15" },
-  { name: "Étirement ischio-jambiers", description: "Flexion de hanche jambe tendue, dos droit.", category: "SOUPLESSE", frequency: "2×/jour", duration: "30 s par jambe" },
-  { name: "Proprioception cheville", description: "Équilibre unipodal sur surface instable, yeux ouverts puis fermés.", category: "PROPRIOCEPTION", frequency: "1×/jour", duration: "3 × 30 s" },
-  { name: "Mobilité hanche 90/90", description: "Travail des rotations interne et externe de hanche en position assise.", category: "MOBILITE", frequency: "1×/jour", duration: "10 transitions" },
-  { name: "Renforcement moyen fessier", description: "Abduction de hanche en décubitus latéral, contrôle du bassin.", category: "RENFORCEMENT", frequency: "3×/semaine", duration: "3 × 15/côté" },
+  { name: "Étirement du psoas", description: "Fente avant, bassin rétroversé, étirement de la chaîne antérieure de la hanche.", categoryName: "Souplesse", frequency: "2×/jour", duration: "30 s par côté" },
+  { name: "Gainage planche", description: "Maintien isométrique en appui avant-bras, dos neutre.", categoryName: "Renforcement", frequency: "1×/jour", duration: "3 × 45 s" },
+  { name: "Mobilité thoracique", description: "Rotation du segment thoracique en quadrupédie, main derrière la tête.", categoryName: "Mobilité", frequency: "1×/jour", duration: "10 répétitions/côté" },
+  { name: "Renforcement VMO", description: "Extension de genou en fin d'amplitude pour le vaste médial oblique.", categoryName: "Renforcement", frequency: "3×/semaine", duration: "3 × 15" },
+  { name: "Étirement ischio-jambiers", description: "Flexion de hanche jambe tendue, dos droit.", categoryName: "Souplesse", frequency: "2×/jour", duration: "30 s par jambe" },
+  { name: "Proprioception cheville", description: "Équilibre unipodal sur surface instable, yeux ouverts puis fermés.", categoryName: "Proprioception", frequency: "1×/jour", duration: "3 × 30 s" },
+  { name: "Mobilité hanche 90/90", description: "Travail des rotations interne et externe de hanche en position assise.", categoryName: "Mobilité", frequency: "1×/jour", duration: "10 transitions" },
+  { name: "Renforcement moyen fessier", description: "Abduction de hanche en décubitus latéral, contrôle du bassin.", categoryName: "Renforcement", frequency: "3×/semaine", duration: "3 × 15/côté" },
 ];
 
 const COMPONENTS: Array<{
@@ -426,12 +429,26 @@ async function main() {
   const sections = await prisma.physioTestSection.findMany();
   const sectionByName = new Map(sections.map((s) => [s.name, s.id]));
 
+  // ── Catégories d'exercices ──
+  let exCatCreated = 0;
+  for (const [i, name] of EXERCISE_CATEGORIES_SEED.entries()) {
+    const exists = await prisma.exerciseCategory.findFirst({ where: { name } });
+    if (exists) continue;
+    await prisma.exerciseCategory.create({ data: { name, order: i, createdById: admin.id } });
+    exCatCreated++;
+  }
+  const exerciseCategories = await prisma.exerciseCategory.findMany();
+  const exerciseCategoryByName = new Map(exerciseCategories.map((c) => [c.name, c.id]));
+
   // ── Exercices ──
   let exCreated = 0;
   for (const ex of EXERCISES) {
     const exists = await prisma.exercise.findFirst({ where: { name: ex.name } });
     if (exists) continue;
-    await prisma.exercise.create({ data: { ...ex, createdById: admin.id } });
+    const { categoryName, ...fields } = ex;
+    const categoryId = exerciseCategoryByName.get(categoryName);
+    if (!categoryId) continue; // catégorie introuvable — ne devrait pas arriver
+    await prisma.exercise.create({ data: { ...fields, categoryId, createdById: admin.id } });
     exCreated++;
   }
 
@@ -787,6 +804,7 @@ async function main() {
       `${sectionsCreated}/${PHYSIO_SECTIONS.length} sections physio, ${measCreated}/${MEASUREMENTS.length} côtes, ` +
       `${riderMeasCreated}/${RIDER_MEASUREMENTS.length} mesures cycliste, ` +
       `${physioCreated}/${PHYSIO_TESTS.length} tests physio (${commonLinksAdded} liens du tronc commun ajoutés), ` +
+      `${exCatCreated}/${EXERCISE_CATEGORIES_SEED.length} catégories d'exercices, ` +
       `${exCreated}/${EXERCISES.length} exercices, ${compCreated}/${COMPONENTS.length} composants ` +
       `(${compTypesLinked} associés à des types de vélo), ` +
       `${compAttrCreated}/${SELLE_ATTRIBUTES.length} attributs Selle, ` +

@@ -6,6 +6,7 @@ import { getExercises } from "@/actions/exercise.actions";
 import { getComponents, getComponentAttributeFilterOptions } from "@/actions/component.actions";
 import { getAttributesByCategory, getComponentAttributes } from "@/actions/componentAttribute.actions";
 import { getCategories, getActiveCategories } from "@/actions/componentCategory.actions";
+import { getExerciseCategories, getActiveExerciseCategories } from "@/actions/exerciseCategory.actions";
 import { getActiveBikeTypes } from "@/actions/bikeType.actions";
 import { EXERCISE_SORT_FIELDS, COMPONENT_SORT_FIELDS } from "@/lib/sort-fields";
 import { parsePageQuery, type RawListParams } from "@/lib/pagination";
@@ -13,9 +14,12 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Pagination } from "@/components/ui/Pagination";
 import { SortControl } from "@/components/ui/SortControl";
 import { SearchBar } from "@/components/patients/SearchBar";
-import { CategoryFilter } from "@/components/bibliotheque/CategoryFilter";
-import { ComponentCategoryPicker } from "@/components/bibliotheque/ComponentCategoryPicker";
+import { CategoryPicker } from "@/components/bibliotheque/CategoryPicker";
 import { CategoryManagerModal, type CategoryRow } from "@/components/bibliotheque/CategoryManagerModal";
+import {
+  ExerciseCategoryManagerModal,
+  type ExerciseCategoryRow,
+} from "@/components/bibliotheque/ExerciseCategoryManagerModal";
 import { ComponentAttributeFilters } from "@/components/bibliotheque/ComponentAttributeFilters";
 import { ExerciseCard } from "@/components/bibliotheque/ExerciseCard";
 import { ComponentCard } from "@/components/bibliotheque/ComponentCard";
@@ -23,8 +27,6 @@ import { CreateExerciseModal } from "@/components/bibliotheque/CreateExerciseMod
 import { CreateComponentModal } from "@/components/bibliotheque/CreateComponentModal";
 import { AttributeManagerModal, type AttributeRow } from "@/components/bibliotheque/AttributeManagerModal";
 import { ImportExportComponentsModal } from "@/components/bibliotheque/ImportExportComponentsModal";
-import { EXERCISE_CATEGORY_LABELS } from "@/lib/labels";
-import type { ExerciseCategory } from "@prisma/client";
 
 type Tab = "exercices" | "composants";
 
@@ -52,8 +54,10 @@ export default async function BibliothequePage({ searchParams }: Props) {
 
   // Le filtrage/la config par attribut, comme l'import/export, ne s'appliquent
   // qu'à une seule catégorie à la fois — pas de sens pour « Toutes catégories ».
-  // `category` est désormais l'id d'une ComponentCategory (plus un tag d'enum).
+  // `category` est l'id d'une ComponentCategory (onglet Composants) ou d'une
+  // ExerciseCategory (onglet Exercices) — jamais un tag d'enum.
   const selectedCategoryId = activeTab === "composants" && category ? category : null;
+  const selectedExerciseCategoryId = activeTab === "exercices" && category ? category : null;
 
   // The component editor needs the list of active bike types to associate,
   // the active categories (picker + create-component form), and every
@@ -78,9 +82,21 @@ export default async function BibliothequePage({ searchParams }: Props) {
       ? parsePageQuery(rest, { sortFields: EXERCISE_SORT_FIELDS, defaultSort: "name", defaultDir: "asc" })
       : parsePageQuery(rest, { sortFields: COMPONENT_SORT_FIELDS, defaultSort: "name", defaultDir: "asc" });
 
+  // Catégories d'exercices : les actives alimentent les puces et le formulaire
+  // d'exercice ; l'admin voit aussi les inactives dans le gestionnaire.
+  const activeExerciseCategories = activeTab === "exercices" ? await getActiveExerciseCategories() : [];
+  const exerciseCategoryOptions = activeExerciseCategories.map((c) => ({ id: c.id, name: c.name }));
+  const allExerciseCategories = activeTab === "exercices" && isAdmin ? await getExerciseCategories() : [];
+  const exerciseCategoryRows: ExerciseCategoryRow[] = allExerciseCategories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    isActive: c.isActive,
+    exerciseCount: c._count.exercises,
+  }));
+
   const exercises =
     activeTab === "exercices"
-      ? await getExercises({ search: q, category: category as ExerciseCategory | undefined, page })
+      ? await getExercises({ search: q, categoryId: selectedExerciseCategoryId ?? undefined, page })
       : null;
   const components =
     activeTab === "composants"
@@ -125,8 +141,6 @@ export default async function BibliothequePage({ searchParams }: Props) {
     attributeCount: c._count.attributes,
   }));
 
-  const exerciseCategoryOptions: [string, string][] = Object.entries(EXERCISE_CATEGORY_LABELS);
-
   const sortOptions =
     activeTab === "exercices"
       ? [
@@ -147,7 +161,7 @@ export default async function BibliothequePage({ searchParams }: Props) {
         action={
           isAdmin
             ? activeTab === "exercices"
-              ? <CreateExerciseModal />
+              ? <CreateExerciseModal categories={exerciseCategoryOptions} />
               : (
                 <div className="flex flex-wrap gap-2">
                   <CreateComponentModal
@@ -182,15 +196,24 @@ export default async function BibliothequePage({ searchParams }: Props) {
             />
           </Suspense>
         </div>
-        {activeTab === "exercices" ? (
-          <Suspense>
-            <CategoryFilter options={exerciseCategoryOptions} defaultValue={category} />
-          </Suspense>
-        ) : null}
         <Suspense>
           <SortControl options={sortOptions} activeSort={page.sort} activeDir={page.dir} />
         </Suspense>
       </div>
+
+      {/* Exercices : rangée de catégories (sélecteur primaire) + gestion admin. */}
+      {activeTab === "exercices" && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Suspense>
+            <CategoryPicker
+              categories={exerciseCategoryOptions}
+              selectedId={selectedExerciseCategoryId}
+              ariaLabel="Catégorie d'exercice"
+            />
+          </Suspense>
+          {isAdmin && <ExerciseCategoryManagerModal categories={exerciseCategoryRows} />}
+        </div>
+      )}
 
       {/* Composants : rangée de catégories (sélecteur primaire, pas un simple
           filtre) + gestion admin, puis filtres par attribut + import/export. */}
@@ -198,7 +221,11 @@ export default async function BibliothequePage({ searchParams }: Props) {
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Suspense>
-              <ComponentCategoryPicker categories={categoryOptions} selectedId={selectedCategoryId} />
+              <CategoryPicker
+                categories={categoryOptions}
+                selectedId={selectedCategoryId}
+                ariaLabel="Catégorie de composant"
+              />
             </Suspense>
             {isAdmin && <CategoryManagerModal categories={categoryRows} />}
           </div>
@@ -230,7 +257,7 @@ export default async function BibliothequePage({ searchParams }: Props) {
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {exercises!.items.map((e) => (
-                <ExerciseCard key={e.id} exercise={e} isAdmin={isAdmin} />
+                <ExerciseCard key={e.id} exercise={e} categories={exerciseCategoryOptions} isAdmin={isAdmin} />
               ))}
             </div>
             <Suspense>

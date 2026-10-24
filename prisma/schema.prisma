@@ -44,14 +44,6 @@ enum ComponentAttributeType {
   SELECT
 }
 
-enum ExerciseCategory {
-  SOUPLESSE
-  RENFORCEMENT
-  MOBILITE
-  PROPRIOCEPTION
-  AUTRE
-}
-
 enum MeasurementCategory {
   SELLE
   CINTRE
@@ -110,6 +102,7 @@ model User {
   physioTestSections PhysioTestSection[]
   componentAttributes ComponentAttribute[]
   componentCategories ComponentCategory[]
+  exerciseCategories ExerciseCategory[]
   auditLogs    AuditLog[]
 
   createdAt DateTime @default(now())
@@ -521,7 +514,8 @@ model Exercise {
 
   name        String
   description String
-  category    ExerciseCategory @default(AUTRE)
+  categoryId  String
+  category    ExerciseCategory @relation(fields: [categoryId], references: [id])
   frequency   String?          // "2×/jour", "3×/semaine"
   duration    String?          // "30 secondes", "3 séries de 10"
   mediaUrl    String?          // lien vidéo ou image explicative
@@ -533,6 +527,31 @@ model Exercise {
   updatedAt   DateTime         @updatedAt
 
   @@index([createdById])
+  @@index([categoryId])
+}
+
+// Catégorie d'exercice (Souplesse, Renforcement...), gérée par l'admin (CRUD +
+// réordonnancement) — table plutôt qu'un enum : l'admin doit pouvoir en ajouter,
+// les renommer et les désactiver. Supprimable seulement sans exercice rattaché
+// (ou après réaffectation de ceux-ci). Mappée sur `exercise_category` : l'ancien
+// type enum du même nom occupait le nom `ExerciseCategory` côté Postgres pendant
+// la migration (même cas que ComponentCategory).
+model ExerciseCategory {
+  id          String   @id @default(uuid())
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  name        String   @unique
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+
+  exercises   Exercise[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+  @@map("exercise_category")
 }
 
 model BikeComponent {

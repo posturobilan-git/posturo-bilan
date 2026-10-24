@@ -10,6 +10,7 @@ import { decryptFields } from "@/lib/crypto";
 import { PATIENT_ENCRYPTED_FIELDS, INTAKE_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 import { getAttributesByCategory } from "@/actions/componentAttribute.actions";
 import { getActiveCategories } from "@/actions/componentCategory.actions";
+import { getActiveExerciseCategories } from "@/actions/exerciseCategory.actions";
 
 export default async function EtudePage(props: PageProps<"/dashboard/patients/[id]/etude">) {
   const kine = await getCurrentKine();
@@ -19,7 +20,7 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
   const { studyId } = await props.searchParams;
   const editStudyId = typeof studyId === "string" ? studyId : undefined;
 
-  const [patientRaw, bikeTypes, measurements, riderMeasurements, physioTests, components, exercises, attributesByCategory, categories] = await Promise.all([
+  const [patientRaw, bikeTypes, measurements, riderMeasurements, physioTests, components, exercises, attributesByCategory, categories, exerciseCategories] = await Promise.all([
     prisma.patient.findUnique({
       where: {
         id,
@@ -57,10 +58,12 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
     }),
     prisma.exercise.findMany({
       where: { isActive: true },
-      orderBy: [{ category: "asc" }, { name: "asc" }],
+      include: { category: { select: { id: true, name: true } } },
+      orderBy: [{ category: { order: "asc" } }, { name: "asc" }],
     }),
     getAttributesByCategory(),
     getActiveCategories(),
+    getActiveExerciseCategories(),
   ]);
 
   if (!patientRaw) redirect("/dashboard/patients");
@@ -176,6 +179,7 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
             components={components}
             categories={categories}
             exercises={exercises}
+            exerciseCategories={exerciseCategories.map((c) => ({ id: c.id, name: c.name }))}
             attributesByCategory={attributesByCategory}
             initial={initial}
           />

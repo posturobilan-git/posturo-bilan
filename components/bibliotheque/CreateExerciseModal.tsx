@@ -7,11 +7,31 @@ import { ModalPortal } from "@/components/ui/ModalPortal";
 import { PencilIcon } from "@/components/ui/icons";
 import { createExercise, updateExercise } from "@/actions/exercise.actions";
 import { toast } from "@/lib/stores/toastStore";
-import { EXERCISE_CATEGORIES, EXERCISE_CATEGORY_LABELS } from "@/lib/labels";
-import type { Exercise, ExerciseCategory } from "@prisma/client";
+import type { Exercise } from "@prisma/client";
 
-export function CreateExerciseModal({ exercise }: { exercise?: Exercise }) {
+interface CategoryOption {
+  id: string;
+  name: string;
+}
+
+export function CreateExerciseModal({
+  exercise,
+  categories,
+}: {
+  /** Present when editing; its `category` keeps the exercise's current category selectable. */
+  exercise?: Exercise & { category?: CategoryOption & { isActive: boolean } };
+  /** Active categories (the library's selector). */
+  categories: CategoryOption[];
+}) {
   const isEdit = Boolean(exercise);
+
+  // Proposed categories: the active ones, plus the exercise's own when it has since
+  // been deactivated (so editing never silently moves it to another category).
+  const current = exercise?.category;
+  const options = current && !categories.some((c) => c.id === current.id)
+    ? [...categories, { id: current.id, name: `${current.name} (désactivée)` }]
+    : categories;
+  const noCategory = options.length === 0;
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -22,7 +42,7 @@ export function CreateExerciseModal({ exercise }: { exercise?: Exercise }) {
     const payload = {
       name: String(fd.get("name") ?? ""),
       description: String(fd.get("description") ?? ""),
-      category: String(fd.get("category") ?? "AUTRE") as ExerciseCategory,
+      categoryId: String(fd.get("categoryId") ?? ""),
       frequency: (fd.get("frequency") as string) || undefined,
       duration: (fd.get("duration") as string) || undefined,
       mediaUrl: (fd.get("mediaUrl") as string) || undefined,
@@ -88,13 +108,19 @@ export function CreateExerciseModal({ exercise }: { exercise?: Exercise }) {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium text-content">Catégorie</span>
-                  <select name="category" defaultValue={exercise?.category ?? "AUTRE"}
-                    className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500">
-                    {EXERCISE_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>{EXERCISE_CATEGORY_LABELS[c]}</option>
+                  <span className="text-sm font-medium text-content">Catégorie <span className="text-danger-500">*</span></span>
+                  <select name="categoryId" required defaultValue={exercise?.categoryId ?? options[0]?.id ?? ""}
+                    disabled={noCategory}
+                    className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-60">
+                    {options.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
+                  {noCategory && (
+                    <span className="text-xs text-danger-600">
+                      Aucune catégorie active : créez-en une avec « Gérer les catégories ».
+                    </span>
+                  )}
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-content">Fréquence</span>
@@ -120,7 +146,7 @@ export function CreateExerciseModal({ exercise }: { exercise?: Exercise }) {
 
               <div className="flex justify-end gap-3 pt-2">
                 <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Annuler</Button>
-                <Button type="submit" loading={pending}>{isEdit ? "Enregistrer" : "Créer"}</Button>
+                <Button type="submit" loading={pending} disabled={noCategory}>{isEdit ? "Enregistrer" : "Créer"}</Button>
               </div>
             </form>
           </div>
