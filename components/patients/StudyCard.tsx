@@ -18,6 +18,7 @@ import {
   type PhysioTestInfo,
   type StudyPhysioResult,
 } from "@/lib/physio";
+import { compareConfigured, comparePhysioConfigured } from "@/lib/study/config-order";
 
 function fmt(value: number | null | undefined, unit: string): string {
   if (value == null) return "—";
@@ -39,19 +40,24 @@ export function StudyCard({
   riderMeasurementsById: Record<string, MeasurementInfo>;
   physioTestsById: Record<string, PhysioTestInfo>;
 }) {
+  // Rows follow the order configured for this study's bike type — the one the
+  // study form used; anything no longer configured for it comes last.
+  const byConfigOrder = compareConfigured(study.bikeTypeId);
+  const byPhysioOrder = comparePhysioConfigured(study.bikeTypeId);
+
   const values = (study.measureValues as StudyMeasureValue[] | null) ?? [];
-  // Keep only côtes we can label, ordered alphabetically by name.
+  // Keep only côtes we can label.
   const rows = values
     .map((v) => ({ value: v, info: measurementsById[v.measurementId] }))
     .filter((r): r is { value: StudyMeasureValue; info: MeasurementInfo } => Boolean(r.info))
-    .sort((a, b) => a.info.name.localeCompare(b.info.name));
+    .sort((a, b) => byConfigOrder(a.info, b.info));
 
   // Mesures du cycliste — same resolution, with the avant/après/delta layout.
   const riderValues = (study.riderMeasureValues as StudyRiderMeasureValue[] | null) ?? [];
   const riderRows = riderValues
     .map((v) => ({ value: v, info: riderMeasurementsById[v.riderMeasurementId] }))
     .filter((r): r is { value: StudyRiderMeasureValue; info: MeasurementInfo } => Boolean(r.info))
-    .sort((a, b) => a.info.name.localeCompare(b.info.name));
+    .sort((a, b) => byConfigOrder(a.info, b.info));
 
   // Same resolution for the physio test results. Keep rows with a value OR a comment.
   const physioResults = (study.physioResults as StudyPhysioResult[] | null) ?? [];
@@ -59,7 +65,7 @@ export function StudyCard({
     .filter((r) => hasPhysioValue(r) || Boolean(r.comment?.trim()))
     .map((r) => ({ result: r, info: physioTestsById[r.physioTestId] }))
     .filter((r): r is { result: StudyPhysioResult; info: PhysioTestInfo } => Boolean(r.info))
-    .sort((a, b) => a.info.name.localeCompare(b.info.name));
+    .sort((a, b) => byPhysioOrder(a.info, b.info));
   // Douleurs structurées, déjà ordonnées (order asc) par la requête.
   const pains = study.pains ?? [];
   // Photos avant/après — servies (privément) via /api/photos/[id], déjà ordonnées.

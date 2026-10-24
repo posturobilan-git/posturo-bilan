@@ -165,7 +165,7 @@ interface SeedMeasurement {
 }
 
 const MEASUREMENTS: SeedMeasurement[] = [
-  // Tronc commun (l'ordre `order` sert aussi de commonOrder pour les côtes communes)
+  // Tronc commun (l'ordre `order` sert de commonOrder : ordre par défaut du tronc commun)
   { name: "Hauteur de selle", unit: "cm", category: "SELLE", order: 1, isCommon: true, isRequired: true, legacyKey: "saddleHeight" },
   { name: "Recul de selle", unit: "mm", category: "SELLE", order: 2, isCommon: true, legacyKey: "saddleSetback" },
   { name: "Angle de selle", unit: "°", category: "SELLE", order: 3, isCommon: true, legacyKey: "saddleAngle" },
@@ -196,7 +196,7 @@ interface SeedRiderMeasurement {
 }
 
 const RIDER_MEASUREMENTS: SeedRiderMeasurement[] = [
-  // Tronc commun (l'ordre `order` sert aussi de commonOrder pour les mesures communes)
+  // Tronc commun (l'ordre `order` sert de commonOrder : ordre par défaut du tronc commun)
   { name: "KOPS (genou / axe de pédale)", unit: "mm", category: "POSITION", order: 1, isCommon: true, isRequired: true },
   { name: "Angle du genou en bas de pédalage", unit: "°", category: "POSITION", order: 2, isCommon: true, isRequired: true },
   { name: "Angle du genou en haut de pédalage", unit: "°", category: "POSITION", order: 3, isCommon: true },
@@ -220,7 +220,7 @@ interface SeedPhysioTest {
   section?: string; // nom d'une section de PHYSIO_SECTIONS
   bikeTypes?: string[]; // si non commun
   order?: number;
-  commonOrder?: number; // ordre global du tronc commun (si isCommon)
+  commonOrder?: number; // ordre par défaut du tronc commun (si isCommon)
 }
 
 const PHYSIO_TESTS: SeedPhysioTest[] = [
@@ -353,6 +353,31 @@ const PATIENTS: SeedPatient[] = [
     ],
   },
 ];
+
+// ─── Ordre propre à chaque type de vélo (prompt 28) ──────────────────────────────
+// Chaque type de vélo porte sa liste ordonnée, tronc commun compris : un élément
+// commun est lié à TOUS les types, à la suite de ce que le type contient déjà. Les
+// tableaux ci-dessus listent le tronc commun avant les spécifiques, donc créer les
+// éléments dans l'ordre du tableau reproduit l'ordre par défaut (communs d'abord).
+type LinkKind = "measurement" | "riderMeasurement" | "physioTest";
+const nextLinkOrders = new Map<string, number>();
+
+async function nextLinkOrder(kind: LinkKind, bikeTypeId: string): Promise<number> {
+  const key = `${kind}:${bikeTypeId}`;
+  if (!nextLinkOrders.has(key)) {
+    const args = { where: { bikeTypeId }, orderBy: { order: "desc" as const }, select: { order: true } };
+    const last =
+      kind === "measurement"
+        ? await prisma.bikeTypeMeasurement.findFirst(args)
+        : kind === "riderMeasurement"
+          ? await prisma.bikeTypeRiderMeasurement.findFirst(args)
+          : await prisma.bikeTypePhysioTest.findFirst(args);
+    nextLinkOrders.set(key, (last?.order ?? -1) + 1);
+  }
+  const order = nextLinkOrders.get(key)!;
+  nextLinkOrders.set(key, order + 1);
+  return order;
+}
 
 async function main() {
   const admin =
@@ -527,16 +552,16 @@ async function main() {
         // Pour le tronc commun, l'ancien `order` devient l'ordre global d'affichage.
         commonOrder: m.isCommon ? m.order : 0,
         createdById: admin.id,
-        // Non-common côtes are linked to their bike types with a per-bike-type
-        // display order (the old global `order` becomes this link order).
-        bikeTypeLinks: m.isCommon
-          ? undefined
-          : {
-              create: (m.bikeTypes ?? [])
-                .map((n) => bikeTypeByName.get(n))
-                .filter((id): id is string => Boolean(id))
-                .map((bikeTypeId) => ({ bikeTypeId, order: m.order })),
-            },
+        // Linked to its bike types (every one for the common trunk), appended at
+        // the end of each type's own ordered list.
+        bikeTypeLinks: {
+          create: await Promise.all(
+            (m.isCommon ? bikeTypes.map((b) => b.id) : idsForNames(m.bikeTypes)).map(async (bikeTypeId) => ({
+              bikeTypeId,
+              order: await nextLinkOrder("measurement", bikeTypeId),
+            }))
+          ),
+        },
       },
     });
     measCreated++;
@@ -563,14 +588,14 @@ async function main() {
         isRequired: m.isRequired ?? false,
         commonOrder: m.isCommon ? m.order : 0,
         createdById: admin.id,
-        bikeTypeLinks: m.isCommon
-          ? undefined
-          : {
-              create: (m.bikeTypes ?? [])
-                .map((n) => bikeTypeByName.get(n))
-                .filter((id): id is string => Boolean(id))
-                .map((bikeTypeId) => ({ bikeTypeId, order: m.order })),
-            },
+        bikeTypeLinks: {
+          create: await Promise.all(
+            (m.isCommon ? bikeTypes.map((b) => b.id) : idsForNames(m.bikeTypes)).map(async (bikeTypeId) => ({
+              bikeTypeId,
+              order: await nextLinkOrder("riderMeasurement", bikeTypeId),
+            }))
+          ),
+        },
       },
     });
     riderMeasCreated++;
@@ -603,17 +628,44 @@ async function main() {
         commonOrder: t.isCommon ? t.commonOrder ?? 0 : 0,
         sectionId: t.section ? sectionByName.get(t.section) ?? null : null,
         createdById: admin.id,
-        bikeTypeLinks: t.isCommon
-          ? undefined
-          : {
-              create: (t.bikeTypes ?? [])
-                .map((n) => bikeTypeByName.get(n))
-                .filter((id): id is string => Boolean(id))
-                .map((bikeTypeId) => ({ bikeTypeId, order: t.order ?? 0 })),
-            },
+        bikeTypeLinks: {
+          create: await Promise.all(
+            (t.isCommon ? bikeTypes.map((b) => b.id) : idsForNames(t.bikeTypes)).map(async (bikeTypeId) => ({
+              bikeTypeId,
+              order: await nextLinkOrder("physioTest", bikeTypeId),
+            }))
+          ),
+        },
       },
     });
     physioCreated++;
+  }
+
+  // ── Filet de sécurité : tout élément commun figure sur tous les types de vélo ──
+  // (un type ajouté à BIKE_TYPES après coup, ou une base antérieure au prompt 28).
+  // Les manquants sont ajoutés en fin de liste, dans l'ordre par défaut du tronc commun.
+  let commonLinksAdded = 0;
+  const defaultCommonOrder = [{ commonOrder: "asc" as const }, { name: "asc" as const }];
+  for (const { id: bikeTypeId } of bikeTypes) {
+    const where = { isCommon: true, bikeTypeLinks: { none: { bikeTypeId } } };
+    for (const m of await prisma.measurement.findMany({ where, select: { id: true }, orderBy: defaultCommonOrder })) {
+      await prisma.bikeTypeMeasurement.create({
+        data: { bikeTypeId, measurementId: m.id, order: await nextLinkOrder("measurement", bikeTypeId) },
+      });
+      commonLinksAdded++;
+    }
+    for (const m of await prisma.riderMeasurement.findMany({ where, select: { id: true }, orderBy: defaultCommonOrder })) {
+      await prisma.bikeTypeRiderMeasurement.create({
+        data: { bikeTypeId, riderMeasurementId: m.id, order: await nextLinkOrder("riderMeasurement", bikeTypeId) },
+      });
+      commonLinksAdded++;
+    }
+    for (const t of await prisma.physioTest.findMany({ where, select: { id: true }, orderBy: defaultCommonOrder })) {
+      await prisma.bikeTypePhysioTest.create({
+        data: { bikeTypeId, physioTestId: t.id, order: await nextLinkOrder("physioTest", bikeTypeId) },
+      });
+      commonLinksAdded++;
+    }
   }
 
   // Maps: measurement name/id and legacy-key → measurementId (for conversions).
@@ -734,7 +786,7 @@ async function main() {
       `${catCreated}/${COMPONENT_CATEGORIES_SEED.length} catégories de composants, ` +
       `${sectionsCreated}/${PHYSIO_SECTIONS.length} sections physio, ${measCreated}/${MEASUREMENTS.length} côtes, ` +
       `${riderMeasCreated}/${RIDER_MEASUREMENTS.length} mesures cycliste, ` +
-      `${physioCreated}/${PHYSIO_TESTS.length} tests physio, ` +
+      `${physioCreated}/${PHYSIO_TESTS.length} tests physio (${commonLinksAdded} liens du tronc commun ajoutés), ` +
       `${exCreated}/${EXERCISES.length} exercices, ${compCreated}/${COMPONENTS.length} composants ` +
       `(${compTypesLinked} associés à des types de vélo), ` +
       `${compAttrCreated}/${SELLE_ATTRIBUTES.length} attributs Selle, ` +

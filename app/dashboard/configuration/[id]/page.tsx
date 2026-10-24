@@ -6,9 +6,6 @@ import {
   setBikeTypeMeasurements,
   setBikeTypeRiderMeasurements,
   setBikeTypePhysioTests,
-  setCommonMeasurementOrder,
-  setCommonRiderMeasurementOrder,
-  setCommonPhysioTestOrder,
 } from "@/actions/bikeType.actions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
@@ -48,7 +45,7 @@ export default async function BikeTypeConfigPage({
 
       <PageHeader
         title={`Configuration — ${config.bikeType.name}`}
-        description="Choisissez les mesures du vélo, les mesures du cycliste et les tests physio relevés pour ce type de vélo, et leur ordre d'affichage dans le formulaire d'étude."
+        description="Choisissez les mesures du vélo, les mesures du cycliste et les tests physio relevés pour ce type de vélo, et leur ordre d'affichage dans le formulaire d'étude. Le tronc commun y est inclus : placez-le où vous voulez."
       />
 
       <Tabs
@@ -58,16 +55,14 @@ export default async function BikeTypeConfigPage({
           {
             id: "cotes",
             label: "Mesures du vélo",
-            count: config.measurements.common.length + config.measurements.assigned.length,
+            count: config.measurements.assigned.length,
             content: (
               <BikeTypeConfigurator
                 title="Mesures du vélo"
                 subtitle="Mesures du vélo seul, relevées avant / après réglage."
-                common={config.measurements.common}
                 initialAssigned={config.measurements.assigned}
                 initialAvailable={config.measurements.available}
                 save={saveMeasurements}
-                saveCommon={setCommonMeasurementOrder}
                 canEdit
               />
             ),
@@ -75,16 +70,14 @@ export default async function BikeTypeConfigPage({
           {
             id: "mesures-cycliste",
             label: "Mesures du cycliste",
-            count: config.riderMeasurements.common.length + config.riderMeasurements.assigned.length,
+            count: config.riderMeasurements.assigned.length,
             content: (
               <BikeTypeConfigurator
                 title="Mesures du cycliste sur vélo"
                 subtitle="Mesures du cycliste (KOPS, angles…), avant / après saisis sur la même étape."
-                common={config.riderMeasurements.common}
                 initialAssigned={config.riderMeasurements.assigned}
                 initialAvailable={config.riderMeasurements.available}
                 save={saveRiderMeasurements}
-                saveCommon={setCommonRiderMeasurementOrder}
                 canEdit
               />
             ),
@@ -92,16 +85,14 @@ export default async function BikeTypeConfigPage({
           {
             id: "tests",
             label: "Tests physio",
-            count: config.physioTests.common.length + config.physioTests.assigned.length,
+            count: config.physioTests.assigned.length,
             content: (
               <BikeTypeConfigurator
                 title="Tests physiologiques"
                 subtitle="Tests réalisés pendant l'étude, selon le type de résultat (valeur, oui/non, commentaire)."
-                common={config.physioTests.common}
                 initialAssigned={config.physioTests.assigned}
                 initialAvailable={config.physioTests.available}
                 save={savePhysioTests}
-                saveCommon={setCommonPhysioTestOrder}
                 canEdit
               />
             ),

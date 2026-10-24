@@ -11,6 +11,7 @@ import { isLocalEnv } from "@/lib/env";
 import { PHOTO_ANGLE_LABELS } from "@/lib/labels";
 import { pairByAngle } from "@/lib/photos";
 import { formatPhysioValue, hasPhysioValue, type StudyPhysioResult } from "@/lib/physio";
+import { compareConfigured, comparePhysioConfigured } from "@/lib/study/config-order";
 import type { StudyForReport, StudyMeasureValue, StudyRiderMeasureValue } from "@/types";
 import type { PhotoPhase, PhotoAngle } from "@prisma/client";
 import { decryptFields } from "@/lib/crypto";
@@ -51,21 +52,37 @@ async function fetchStudyForReport(studyId: string): Promise<StudyForReport | nu
   };
 }
 
-/** Resolves a study's stored côte values into labelled before/after rows. */
+/**
+ * What the report needs to rank a row like the study form does: the common flag
+ * and this study's bike type's own position (only that link is loaded).
+ */
+function orderSelect(bikeTypeId: string) {
+  return {
+    isCommon: true,
+    commonOrder: true,
+    bikeTypeLinks: { where: { bikeTypeId }, select: { bikeTypeId: true, order: true } },
+  } as const;
+}
+
+/**
+ * Resolves a study's stored côte values into labelled before/after rows, in the
+ * order configured for the study's bike type (same as the form and the dossier).
+ */
 async function buildMeasureRows(study: StudyForReport): Promise<ReportMeasureRow[]> {
   const values = (study.measureValues as StudyMeasureValue[] | null) ?? [];
   if (values.length === 0) return [];
 
   const measurements = await prisma.measurement.findMany({
     where: { id: { in: values.map((v) => v.measurementId) } },
-    select: { id: true, name: true, unit: true },
+    select: { id: true, name: true, unit: true, ...orderSelect(study.bikeTypeId) },
   });
   const byId = new Map(measurements.map((m) => [m.id, m]));
+  const byConfigOrder = compareConfigured(study.bikeTypeId);
 
   return values
     .map((v) => ({ v, m: byId.get(v.measurementId) }))
     .filter((r): r is { v: StudyMeasureValue; m: (typeof measurements)[number] } => Boolean(r.m))
-    .sort((a, b) => a.m.name.localeCompare(b.m.name))
+    .sort((a, b) => byConfigOrder(a.m, b.m))
     .map(({ v, m }) => ({ name: m.name, unit: m.unit, before: v.before ?? null, after: v.after ?? null }));
 }
 
@@ -76,14 +93,15 @@ async function buildRiderMeasureRows(study: StudyForReport): Promise<ReportMeasu
 
   const measurements = await prisma.riderMeasurement.findMany({
     where: { id: { in: values.map((v) => v.riderMeasurementId) } },
-    select: { id: true, name: true, unit: true },
+    select: { id: true, name: true, unit: true, ...orderSelect(study.bikeTypeId) },
   });
   const byId = new Map(measurements.map((m) => [m.id, m]));
+  const byConfigOrder = compareConfigured(study.bikeTypeId);
 
   return values
     .map((v) => ({ v, m: byId.get(v.riderMeasurementId) }))
     .filter((r): r is { v: StudyRiderMeasureValue; m: (typeof measurements)[number] } => Boolean(r.m))
-    .sort((a, b) => a.m.name.localeCompare(b.m.name))
+    .sort((a, b) => byConfigOrder(a.m, b.m))
     .map(({ v, m }) => ({ name: m.name, unit: m.unit, before: v.before ?? null, after: v.after ?? null }));
 }
 
@@ -97,14 +115,23 @@ async function buildPhysioRows(study: StudyForReport): Promise<ReportPhysioRow[]
 
   const tests = await prisma.physioTest.findMany({
     where: { id: { in: results.map((r) => r.physioTestId) } },
-    select: { id: true, name: true, unit: true, outputType: true },
+    select: {
+      id: true,
+      name: true,
+      unit: true,
+      outputType: true,
+      ...orderSelect(study.bikeTypeId),
+      section: { select: { id: true, name: true, order: true } },
+    },
   });
   const byId = new Map(tests.map((t) => [t.id, t]));
+  // Section order first, then the bike type's configured order within a section.
+  const byPhysioOrder = comparePhysioConfigured(study.bikeTypeId);
 
   return results
     .map((r) => ({ r, t: byId.get(r.physioTestId) }))
     .filter((x): x is { r: StudyPhysioResult; t: (typeof tests)[number] } => Boolean(x.t))
-    .sort((a, b) => a.t.name.localeCompare(b.t.name))
+    .sort((a, b) => byPhysioOrder(a.t, b.t))
     .map(({ r, t }) => ({
       name: t.name,
       value: hasPhysioValue(r) ? formatPhysioValue(t.outputType, r.value ?? null, t.unit) : "—",

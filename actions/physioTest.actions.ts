@@ -41,29 +41,6 @@ export async function getPhysioTests(filters?: {
   }));
 }
 
-/**
- * Active physio tests applicable to a study of the given bike type, in display
- * order: the common trunk first (alphabetical), then those explicitly configured
- * for this bike type in their configured order.
- */
-export async function getPhysioTestsForBikeType(bikeTypeId: string): Promise<PhysioTest[]> {
-  await requireKine();
-
-  const [common, links] = await Promise.all([
-    prisma.physioTest.findMany({
-      where: { isActive: true, isCommon: true },
-      orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
-    }),
-    prisma.bikeTypePhysioTest.findMany({
-      where: { bikeTypeId, physioTest: { isActive: true, isCommon: false } },
-      include: { physioTest: true },
-      orderBy: { order: "asc" },
-    }),
-  ]);
-
-  return [...common, ...links.map((l) => l.physioTest)];
-}
-
 // ─── Mutations (ADMIN only) ─────────────────────────────────────────────────────
 
 function relationData(input: PhysioTestInput) {
@@ -76,9 +53,18 @@ function relationData(input: PhysioTestInput) {
     isCommon: input.isCommon,
     isRequired: input.isRequired,
     sectionId: input.sectionId ?? null,
-    // A common test applies to all bike types, so it carries no explicit links.
-    bikeTypeIds: input.isCommon ? [] : input.bikeTypeIds,
   };
+}
+
+/**
+ * Types de vélo auxquels lier l'élément. Un élément commun figure sur TOUS les
+ * types (actifs ou non, pour qu'une réactivation le retrouve), à une position
+ * propre à chacun ; sinon, ceux choisis par l'admin.
+ */
+async function targetBikeTypeIds(input: PhysioTestInput): Promise<string[]> {
+  if (!input.isCommon) return input.bikeTypeIds;
+  const all = await prisma.bikeType.findMany({ select: { id: true } });
+  return all.map((b) => b.id);
 }
 
 /** Next free display order for a test appended to a given bike type's config. */
@@ -99,7 +85,8 @@ export async function createPhysioTest(
 
   try {
     const admin = await requireAdmin();
-    const { bikeTypeIds, ...fields } = relationData(parsed.data);
+    const fields = relationData(parsed.data);
+    const bikeTypeIds = await targetBikeTypeIds(parsed.data);
 
     // New tests are appended to the end of each bike type's configuration.
     const links = await Promise.all(
@@ -128,7 +115,8 @@ export async function updatePhysioTest(
 
   try {
     const admin = await requireAdmin();
-    const { bikeTypeIds, ...fields } = relationData(parsed.data);
+    const fields = relationData(parsed.data);
+    const bikeTypeIds = await targetBikeTypeIds(parsed.data);
 
     // Reconcile bike-type links without disturbing the configured order of the
     // ones that stay: drop the removed links, append any newly-added ones.

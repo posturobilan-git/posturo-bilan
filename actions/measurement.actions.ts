@@ -37,29 +37,6 @@ export async function getMeasurements(filters?: {
   }));
 }
 
-/**
- * Active côtes applicable to a study of the given bike type, in display order:
- * the common trunk first (alphabetical), then those explicitly configured for
- * this bike type in their configured order.
- */
-export async function getMeasurementsForBikeType(bikeTypeId: string): Promise<Measurement[]> {
-  await requireKine();
-
-  const [common, links] = await Promise.all([
-    prisma.measurement.findMany({
-      where: { isActive: true, isCommon: true },
-      orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
-    }),
-    prisma.bikeTypeMeasurement.findMany({
-      where: { bikeTypeId, measurement: { isActive: true, isCommon: false } },
-      include: { measurement: true },
-      orderBy: { order: "asc" },
-    }),
-  ]);
-
-  return [...common, ...links.map((l) => l.measurement)];
-}
-
 // ─── Mutations (ADMIN only) ─────────────────────────────────────────────────────
 
 function relationData(input: MeasurementInput) {
@@ -69,9 +46,18 @@ function relationData(input: MeasurementInput) {
     category: input.category,
     isCommon: input.isCommon,
     isRequired: input.isRequired,
-    // A common measurement applies to all bike types, so it carries no explicit links.
-    bikeTypeIds: input.isCommon ? [] : input.bikeTypeIds,
   };
+}
+
+/**
+ * Types de vélo auxquels lier l'élément. Un élément commun figure sur TOUS les
+ * types (actifs ou non, pour qu'une réactivation le retrouve), à une position
+ * propre à chacun ; sinon, ceux choisis par l'admin.
+ */
+async function targetBikeTypeIds(input: MeasurementInput): Promise<string[]> {
+  if (!input.isCommon) return input.bikeTypeIds;
+  const all = await prisma.bikeType.findMany({ select: { id: true } });
+  return all.map((b) => b.id);
 }
 
 /** Next free display order for a côte appended to a given bike type's config. */
@@ -92,7 +78,8 @@ export async function createMeasurement(
 
   try {
     const admin = await requireAdmin();
-    const { bikeTypeIds, ...fields } = relationData(parsed.data);
+    const fields = relationData(parsed.data);
+    const bikeTypeIds = await targetBikeTypeIds(parsed.data);
 
     // New côtes are appended to the end of each bike type's configuration.
     const links = await Promise.all(
@@ -125,7 +112,8 @@ export async function updateMeasurement(
 
   try {
     const admin = await requireAdmin();
-    const { bikeTypeIds, ...fields } = relationData(parsed.data);
+    const fields = relationData(parsed.data);
+    const bikeTypeIds = await targetBikeTypeIds(parsed.data);
 
     // Reconcile bike-type links without disturbing the configured order of the
     // ones that stay: drop the removed links, append any newly-added ones.

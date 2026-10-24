@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { missingControlProps, missingRowProps } from "@/lib/study/focus-missing";
 import { fieldKey } from "@/lib/study/required-fields";
+import { appliesToBikeType, comparePhysioConfigured } from "@/lib/study/config-order";
 import { FieldError } from "./FieldError";
 import { INVALID_ROW_BASE, RequiredMark } from "./RequiredMark";
 import type { PhysioTest } from "@prisma/client";
@@ -232,51 +233,29 @@ export function PhysioTestsForm({
   onSaveDraft,
   saving,
 }: Props) {
-  // Tests applicables à ce type de vélo : tronc commun (ordre global) + tests
-  // configurés pour ce vélo. Conserve la section pour le regroupement.
+  // Tests applicables à ce type de vélo (tronc commun compris), triés par section
+  // puis dans l'ordre de la configuration du vélo : l'ordre visuel de l'écran.
   const applicable = physioTests
-    .map((t) => {
-      const link = bikeTypeId != null ? t.bikeTypeLinks.find((b) => b.bikeTypeId === bikeTypeId) : undefined;
-      if (t.isCommon) return { t, common: true, order: t.commonOrder };
-      if (link) return { t, common: false, order: link.order };
-      return null;
-    })
-    .filter((x): x is { t: PhysioTestForStudy; common: boolean; order: number } => x !== null);
+    .filter((t) => appliesToBikeType(t, bikeTypeId))
+    .sort(comparePhysioConfigured(bikeTypeId));
 
-  // Regroupement par section : sections triées par leur ordre, le groupe « Autres »
-  // (tests sans section) en dernier. Dans chaque section, tronc commun d'abord.
+  // Regroupement par section : sections dans leur ordre, le groupe « Autres »
+  // (tests sans section) en dernier. La liste étant déjà triée par section, les
+  // groupes sortent dans le bon ordre (Map = ordre d'insertion), et chacun garde
+  // l'ordre configuré de ses tests.
   const SANS_SECTION = "__none__";
-  const groups = new Map<
-    string,
-    { name: string; sectionOrder: number; items: { t: PhysioTestForStudy; common: boolean; order: number }[] }
-  >();
-  for (const x of applicable) {
-    const key = x.t.section?.id ?? SANS_SECTION;
-    if (!groups.has(key)) {
-      groups.set(key, {
-        name: x.t.section?.name ?? "Autres",
-        sectionOrder: x.t.section?.order ?? Number.MAX_SAFE_INTEGER,
-        items: [],
-      });
-    }
-    groups.get(key)!.items.push(x);
+  const groups = new Map<string, { name: string; items: PhysioTestForStudy[] }>();
+  for (const t of applicable) {
+    const key = t.section?.id ?? SANS_SECTION;
+    if (!groups.has(key)) groups.set(key, { name: t.section?.name ?? "Autres", items: [] });
+    groups.get(key)!.items.push(t);
   }
-  const orderedGroups = [...groups.values()]
-    .sort((a, b) => a.sectionOrder - b.sectionOrder || a.name.localeCompare(b.name))
-    .map((g) => ({
-      ...g,
-      items: g.items
-        .sort((a, b) => {
-          if (a.common !== b.common) return a.common ? -1 : 1;
-          return a.order - b.order || a.t.name.localeCompare(b.t.name);
-        })
-        .map((x) => x.t),
-    }));
+  const orderedGroups = [...groups.entries()].map(([key, g]) => ({ key, ...g }));
 
   const hasAny = applicable.length > 0;
   // Les tests affichés sont tous applicables au vélo : isRequired suffit à dire
   // qu'ils bloquent le passage à l'étape suivante.
-  const hasRequired = applicable.some(({ t }) => t.isRequired);
+  const hasRequired = applicable.some((t) => t.isRequired);
 
   return (
     <div className="space-y-5">
@@ -298,7 +277,7 @@ export function PhysioTestsForm({
         </div>
       ) : (
         orderedGroups.map((group) => (
-          <fieldset key={group.name} className="space-y-4 rounded-lg border border-border p-5">
+          <fieldset key={group.key} className="space-y-4 rounded-lg border border-border p-5">
             <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-content-subtle">
               {group.name}
             </legend>
