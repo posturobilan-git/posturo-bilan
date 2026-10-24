@@ -14,6 +14,7 @@ function isEmptyPain(p: PainDraft): boolean {
     !p.type?.trim() &&
     !p.intensity?.trim() &&
     !p.restAtRest &&
+    !p.relievedAtRest &&
     !p.activity?.trim() &&
     !p.duration?.trim() &&
     !p.aggravatingFactors?.trim() &&
@@ -138,15 +139,26 @@ export function PainsForm({
                       className={inputClass}
                     />
                   </Labelled>
-                  <label className="flex items-center gap-2 sm:mt-6">
-                    <input
-                      type="checkbox"
-                      checked={p.restAtRest}
-                      onChange={(e) => onSetField(p.key, "restAtRest", e.target.checked)}
-                      className="h-4 w-4 rounded border-border-strong text-brand-600 focus:ring-brand-500"
-                    />
-                    <span className="text-sm text-content">Présente au repos</span>
-                  </label>
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 sm:mt-6">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={p.restAtRest}
+                        onChange={(e) => onSetField(p.key, "restAtRest", e.target.checked)}
+                        className="h-4 w-4 rounded border-border-strong text-brand-600 focus:ring-brand-500"
+                      />
+                      <span className="text-sm text-content">Présente au repos</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={p.relievedAtRest}
+                        onChange={(e) => onSetField(p.key, "relievedAtRest", e.target.checked)}
+                        className="h-4 w-4 rounded border-border-strong text-brand-600 focus:ring-brand-500"
+                      />
+                      <span className="text-sm text-content">Passe au repos</span>
+                    </label>
+                  </div>
                   <Labelled label="Ce qui augmente la douleur (↑)">
                     <textarea
                       rows={2}

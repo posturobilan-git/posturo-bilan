@@ -46,6 +46,7 @@ function painsCreateData(pains: StudyInput["pains"]) {
     type: p.type ?? null,
     intensity: p.intensity ?? null,
     restAtRest: p.restAtRest,
+    relievedAtRest: p.relievedAtRest,
     activity: p.activity ?? null,
     duration: p.duration ?? null,
     aggravatingFactors: p.aggravatingFactors ?? null,

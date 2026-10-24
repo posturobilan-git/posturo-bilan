@@ -481,6 +481,7 @@ export function ReportTemplate({
               const meta = [
                 p.type,
                 p.restAtRest ? "présente au repos" : null,
+                p.relievedAtRest ? "passe au repos" : null,
                 p.activity,
                 p.duration,
               ]

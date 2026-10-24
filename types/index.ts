@@ -35,6 +35,7 @@ export interface StudyPainInput {
   type?: string;
   intensity?: string;
   restAtRest: boolean;
+  relievedAtRest: boolean;
   activity?: string;
   duration?: string;
   aggravatingFactors?: string;
