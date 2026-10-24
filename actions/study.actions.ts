@@ -320,6 +320,7 @@ export async function saveDraftStudy(
         patientId: validated.patientId,
         kineId: kine.id,
         ...studyDataFrom(validated),
+        pains: { create: painsCreateData(validated.pains) },
         photos: { create: photosCreateData(validated.photos) },
         componentsUsed: { connect: validated.componentIds.map((id) => ({ id })) },
         exercisesPrescribed: { connect: validated.exerciseIds.map((id) => ({ id })) },
