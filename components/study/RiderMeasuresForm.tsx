@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
+import { fieldKey } from "@/lib/study/required-fields";
 import { MeasureRow, MeasuresHeader } from "./MeasureRow";
 import { PhotoUpload } from "./PhotoUpload";
 import type { PhotoDraft } from "@/lib/stores/studyStore";
@@ -24,6 +25,10 @@ interface Props {
   values: Record<string, MeasureValue>;
   /** Mesures ajoutées à la volée pour cette étude uniquement. */
   extraRiderMeasurementIds: string[];
+  /** Valeurs obligatoires encore vides (`fieldKey`), signalées après un passage bloqué. */
+  invalidKeys: ReadonlySet<string>;
+  /** Valeurs qui l'étaient lors d'un passage bloqué : leur ligne de message garde sa place. */
+  reservedKeys: ReadonlySet<string>;
   /** Photos patient (avant/après) — saisies sur cette étape. */
   photos: PhotoDraft[];
   onSetValue: (riderMeasurementId: string, field: "before" | "after", value: number | null) => void;
@@ -43,6 +48,8 @@ export function RiderMeasuresForm({
   bikeTypeId,
   values,
   extraRiderMeasurementIds,
+  invalidKeys,
+  reservedKeys,
   photos,
   onSetValue,
   onAddExtra,
@@ -87,6 +94,9 @@ export function RiderMeasuresForm({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const shown = [...configured, ...extras];
+  // Une mesure obligatoire exige « avant » ET « après » (voir lib/study/required-fields.ts),
+  // mais seulement les mesures configurées : pas celles ajoutées à la volée.
+  const hasRequired = configured.some((m) => m.isRequired);
 
   return (
     <div className="space-y-5">
@@ -95,6 +105,12 @@ export function RiderMeasuresForm({
         <span className="ml-1 text-content-subtle">
           Le delta s&apos;affiche dès que les deux valeurs sont saisies.
         </span>
+        {hasRequired && (
+          <span className="ml-1 text-content-subtle">
+            Les mesures signalées « Obligatoire » doivent être renseignées avant et après réglage
+            pour passer à l&apos;étape suivante.
+          </span>
+        )}
       </p>
 
       {shown.length === 0 ? (
@@ -114,7 +130,11 @@ export function RiderMeasuresForm({
                 key={m.id}
                 name={m.name}
                 unit={m.unit}
-                required={m.isRequired}
+                required={configuredIds.has(m.id) && m.isRequired}
+                invalidBefore={invalidKeys.has(fieldKey(m.id, "before"))}
+                invalidAfter={invalidKeys.has(fieldKey(m.id, "after"))}
+                reservedBefore={reservedKeys.has(fieldKey(m.id, "before"))}
+                reservedAfter={reservedKeys.has(fieldKey(m.id, "after"))}
                 phase="both"
                 before={values[m.id]?.before ?? null}
                 after={values[m.id]?.after ?? null}
