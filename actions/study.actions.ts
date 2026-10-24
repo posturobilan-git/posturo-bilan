@@ -46,6 +46,7 @@ function painsCreateData(pains: StudyInput["pains"]) {
     type: p.type ?? null,
     intensity: p.intensity ?? null,
     restAtRest: p.restAtRest,
+    relievedAtRest: p.relievedAtRest,
     activity: p.activity ?? null,
     duration: p.duration ?? null,
     aggravatingFactors: p.aggravatingFactors ?? null,
@@ -115,8 +116,10 @@ async function assertStudyOwnership(studyId: string) {
 
 /**
  * Authoritative required-field guard for finalising a study. Every active côte /
- * test marked `isRequired` and applicable to the chosen bike type must hold at
- * least a "before" value (côtes) / a result (tests). Returns the missing names.
+ * test marked `isRequired` and applicable to the chosen bike type must be filled:
+ * côtes and mesures du cycliste need BOTH their "before" and "after" values, tests
+ * need a result. Returns the missing names. Mirrored client-side by
+ * lib/study/required-fields.ts — keep the two in sync.
  */
 async function missingRequiredFields(validated: StudyInput): Promise<string[]> {
   const { bikeTypeId } = validated;
@@ -147,19 +150,19 @@ async function missingRequiredFields(validated: StudyInput): Promise<string[]> {
     }),
   ]);
 
-  const beforeById = new Map(validated.measureValues.map((v) => [v.measurementId, v.before]));
-  const riderBeforeById = new Map(
-    validated.riderMeasureValues.map((v) => [v.riderMeasurementId, v.before])
-  );
+  const measureById = new Map(validated.measureValues.map((v) => [v.measurementId, v]));
+  const riderById = new Map(validated.riderMeasureValues.map((v) => [v.riderMeasurementId, v]));
   const resultById = new Map(validated.physioResults.map((r) => [r.physioTestId, r.value]));
   const hasValue = (v: unknown) => v !== null && v !== undefined && v !== "";
 
   const missing: string[] = [];
   for (const m of reqMeasurements) {
-    if (beforeById.get(m.id) == null) missing.push(m.name);
+    const v = measureById.get(m.id);
+    if (v?.before == null || v.after == null) missing.push(m.name);
   }
   for (const m of reqRiderMeasurements) {
-    if (riderBeforeById.get(m.id) == null) missing.push(m.name);
+    const v = riderById.get(m.id);
+    if (v?.before == null || v.after == null) missing.push(m.name);
   }
   for (const t of reqTests) {
     if (!hasValue(resultById.get(t.id))) missing.push(t.name);
@@ -319,6 +322,7 @@ export async function saveDraftStudy(
         patientId: validated.patientId,
         kineId: kine.id,
         ...studyDataFrom(validated),
+        pains: { create: painsCreateData(validated.pains) },
         photos: { create: photosCreateData(validated.photos) },
         componentsUsed: { connect: validated.componentIds.map((id) => ({ id })) },
         exercisesPrescribed: { connect: validated.exerciseIds.map((id) => ({ id })) },

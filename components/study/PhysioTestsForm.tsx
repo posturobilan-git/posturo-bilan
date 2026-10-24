@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { missingControlProps, missingRowProps } from "@/lib/study/focus-missing";
+import { fieldKey } from "@/lib/study/required-fields";
+import { FieldError } from "./FieldError";
+import { INVALID_ROW_BASE, RequiredMark } from "./RequiredMark";
 import type { PhysioTest } from "@prisma/client";
 import type { PhysioValue } from "@/lib/physio";
 
@@ -19,6 +23,10 @@ interface Props {
   results: Record<string, PhysioValue>;
   /** Commentaires libres optionnels, indexés par physioTestId. */
   comments: Record<string, string>;
+  /** Résultats obligatoires encore vides (`fieldKey`), signalés après un passage bloqué. */
+  invalidKeys: ReadonlySet<string>;
+  /** Résultats qui l'étaient lors d'un passage bloqué : leur ligne de message garde sa place. */
+  reservedKeys: ReadonlySet<string>;
   onSetValue: (physioTestId: string, value: PhysioValue) => void;
   onSetComment: (physioTestId: string, comment: string) => void;
   onBack: () => void;
@@ -29,6 +37,19 @@ interface Props {
 
 const inputCls =
   "w-full rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500";
+// Même boîte, en alerte : résultat obligatoire resté vide après un passage bloqué.
+const inputInvalidCls =
+  "w-full rounded-md border border-danger-500 bg-surface px-3 py-2 text-sm focus:border-danger-500 focus:outline-none focus:ring-1 focus:ring-danger-500";
+
+/** The state a required result can be in, passed down to its input. */
+interface RequiredState {
+  /** Résultat obligatoire pour passer à l'étape suivante. */
+  required: boolean;
+  /** Obligatoire et encore vide après un passage bloqué. */
+  invalid: boolean;
+  /** Id du message d'erreur affiché sous le contrôle quand `invalid`. */
+  errorId: string;
+}
 
 /** A two-button toggle (e.g. Positif / Négatif, Oui / Non) for a boolean result. */
 function BooleanToggle({
@@ -36,7 +57,10 @@ function BooleanToggle({
   labels,
   ariaLabel,
   onChange,
-}: {
+  required,
+  invalid,
+  errorId,
+}: RequiredState & {
   value: PhysioValue;
   labels: { yes: string; no: string };
   ariaLabel: string;
@@ -44,12 +68,23 @@ function BooleanToggle({
 }) {
   const current = typeof value === "boolean" ? value : null;
   return (
-    <div className="flex gap-1" role="group" aria-label={ariaLabel}>
-      {([true, false] as const).map((v) => (
+    // Ni aria-required ni aria-invalid sur un rôle « group » (non supportés) : l'obligation
+    // passe par le nom du groupe, le message d'erreur par aria-describedby sur les boutons
+    // (le focus d'un passage bloqué arrive sur le premier : un lecteur d'écran ne lit pas
+    // la description d'un groupe quand c'est un bouton qui prend le focus).
+    <div
+      className="flex gap-1"
+      role="group"
+      aria-label={required ? `${ariaLabel} (obligatoire)` : ariaLabel}
+    >
+      {([true, false] as const).map((v, i) => (
         <button
           key={String(v)}
           type="button"
           aria-pressed={current === v}
+          aria-describedby={invalid ? errorId : undefined}
+          // Le focus d'un passage bloqué arrive sur le premier bouton du groupe.
+          {...(i === 0 ? missingControlProps(invalid) : {})}
           // Re-clicking the active choice clears the answer back to "—".
           onClick={() => onChange(current === v ? null : v)}
           className={`flex-1 rounded-md border px-2 py-2 text-sm transition-colors ${
@@ -57,7 +92,9 @@ function BooleanToggle({
               ? v
                 ? "border-success-500 bg-success-50 font-medium text-success-700"
                 : "border-danger-500 bg-danger-50 font-medium text-danger-700"
-              : "border-border-strong text-content-muted hover:bg-surface-muted"
+              : invalid
+                ? "border-danger-500 bg-surface text-content-muted hover:bg-surface-muted"
+                : "border-border-strong text-content-muted hover:bg-surface-muted"
           }`}
         >
           {v ? labels.yes : labels.no}
@@ -72,19 +109,35 @@ function PhysioInput({
   test,
   value,
   onChange,
-}: {
+  required,
+  invalid,
+  errorId,
+}: RequiredState & {
   test: PhysioTestForStudy;
   value: PhysioValue;
   onChange: (v: PhysioValue) => void;
 }) {
+  const state = { required, invalid, errorId };
   switch (test.outputType) {
     case "YES_NO":
       return (
-        <BooleanToggle value={value} ariaLabel={test.name} labels={{ yes: "Oui", no: "Non" }} onChange={onChange} />
+        <BooleanToggle
+          {...state}
+          value={value}
+          ariaLabel={test.name}
+          labels={{ yes: "Oui", no: "Non" }}
+          onChange={onChange}
+        />
       );
     case "POSITIVE_NEGATIVE":
       return (
-        <BooleanToggle value={value} ariaLabel={test.name} labels={{ yes: "Positif", no: "Négatif" }} onChange={onChange} />
+        <BooleanToggle
+          {...state}
+          value={value}
+          ariaLabel={test.name}
+          labels={{ yes: "Positif", no: "Négatif" }}
+          onChange={onChange}
+        />
       );
     case "VALUE":
     default:
@@ -93,9 +146,14 @@ function PhysioInput({
           type="number"
           step="0.1"
           placeholder="—"
+          aria-label={test.name}
+          aria-required={required || undefined}
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? errorId : undefined}
+          {...missingControlProps(invalid)}
           value={typeof value === "number" ? value : ""}
           onChange={(e) => onChange(e.target.value === "" ? null : parseFloat(e.target.value))}
-          className={inputCls}
+          className={invalid ? inputInvalidCls : inputCls}
         />
       );
   }
@@ -165,6 +223,8 @@ export function PhysioTestsForm({
   bikeTypeId,
   results,
   comments,
+  invalidKeys,
+  reservedKeys,
   onSetValue,
   onSetComment,
   onBack,
@@ -214,12 +274,19 @@ export function PhysioTestsForm({
     }));
 
   const hasAny = applicable.length > 0;
+  // Les tests affichés sont tous applicables au vélo : isRequired suffit à dire
+  // qu'ils bloquent le passage à l'étape suivante.
+  const hasRequired = applicable.some(({ t }) => t.isRequired);
 
   return (
     <div className="space-y-5">
       <p className="text-sm text-content-muted">
         Renseignez les résultats des tests physiologiques pour ce patient.
-        <span className="ml-1 text-content-subtle">Les champs marqués d&apos;un astérisque sont obligatoires.</span>
+        {hasRequired && (
+          <span className="ml-1 text-content-subtle">
+            Les tests signalés « Obligatoire » doivent être renseignés pour passer à l&apos;étape suivante.
+          </span>
+        )}
       </p>
 
       {!hasAny ? (
@@ -236,28 +303,51 @@ export function PhysioTestsForm({
               {group.name}
             </legend>
 
-            {group.items.map((t) => (
-              <div key={t.id} className="grid grid-cols-1 items-start gap-2 sm:grid-cols-[1fr_auto] sm:gap-3">
-                <div className="min-w-0">
-                  <span className="text-sm text-content">
-                    {t.name}
-                    {t.outputType === "VALUE" && t.unit && (
-                      <span className="ml-1 text-content-subtle">({t.unit})</span>
-                    )}
-                    {t.isRequired && <span className="ml-0.5 text-danger-500">*</span>}
-                  </span>
-                  {t.description && <DescriptionToggle description={t.description} />}
-                  <CommentToggle
-                    testId={t.id}
-                    value={comments[t.id] ?? ""}
-                    onChange={(v) => onSetComment(t.id, v)}
-                  />
+            {group.items.map((t) => {
+              const invalid = invalidKeys.has(fieldKey(t.id));
+              const errorId = `physio-error-${t.id}`;
+              const errorText = t.outputType === "VALUE" ? "Valeur obligatoire" : "Réponse obligatoire";
+              return (
+                <div
+                  key={t.id}
+                  {...missingRowProps(invalid)}
+                  className={`grid grid-cols-1 items-start gap-2 sm:grid-cols-[1fr_auto] sm:gap-3 ${
+                    invalid ? `${INVALID_ROW_BASE} before:-inset-y-2` : ""
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <span className="text-sm text-content">
+                      {t.name}
+                      {t.outputType === "VALUE" && t.unit && (
+                        <span className="ml-1 text-content-subtle">({t.unit})</span>
+                      )}
+                      {t.isRequired && <RequiredMark invalid={invalid} />}
+                    </span>
+                    {t.description && <DescriptionToggle description={t.description} />}
+                    <CommentToggle
+                      testId={t.id}
+                      value={comments[t.id] ?? ""}
+                      onChange={(v) => onSetComment(t.id, v)}
+                    />
+                  </div>
+                  <div className="sm:w-48">
+                    <PhysioInput
+                      test={t}
+                      value={results[t.id] ?? null}
+                      onChange={(v) => onSetValue(t.id, v)}
+                      required={t.isRequired}
+                      invalid={invalid}
+                      errorId={errorId}
+                    />
+                    <FieldError
+                      id={errorId}
+                      message={invalid ? errorText : null}
+                      reserve={invalid || reservedKeys.has(fieldKey(t.id)) ? errorText : undefined}
+                    />
+                  </div>
                 </div>
-                <div className="sm:w-48">
-                  <PhysioInput test={t} value={results[t.id] ?? null} onChange={(v) => onSetValue(t.id, v)} />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </fieldset>
         ))
       )}

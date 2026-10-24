@@ -446,6 +446,7 @@ model StudyPain {
   type               String? // ex: "inflammatoires", "mécaniques"...
   intensity          String? // ex: "4-5" sur une échelle /10 (texte libre)
   restAtRest         Boolean @default(false) // douleur présente au repos ?
+  relievedAtRest     Boolean @default(false) // douleur qui passe au repos ?
   activity           String? // activité qui déclenche/affecte la douleur
   duration           String? // durée de la douleur
   aggravatingFactors String? // « Ce qui ↑ » — ce qui augmente la douleur

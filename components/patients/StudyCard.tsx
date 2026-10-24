@@ -102,6 +102,7 @@ export function StudyCard({
                 p.type,
                 p.intensity ? `${p.intensity}/10` : null,
                 p.restAtRest ? "présente au repos" : null,
+                p.relievedAtRest ? "passe au repos" : null,
                 p.activity,
                 p.duration,
               ].filter(Boolean);

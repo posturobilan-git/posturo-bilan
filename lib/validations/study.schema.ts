@@ -34,6 +34,7 @@ export const studyPainSchema = z.object({
   type: z.string().max(200).optional(),
   intensity: z.string().max(50).optional(),
   restAtRest: z.boolean().default(false),
+  relievedAtRest: z.boolean().default(false),
   activity: z.string().max(500).optional(),
   duration: z.string().max(200).optional(),
   aggravatingFactors: z.string().max(1000).optional(),

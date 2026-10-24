@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useTransition } from "react";
+import { useEffect, useRef, useTransition, type FocusEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   useStudyStore,
@@ -16,8 +16,11 @@ import {
   type PhotoDraft,
 } from "@/lib/stores/studyStore";
 import { toast } from "@/lib/stores/toastStore";
+import { findMissingRequired, firstBlockingStep } from "@/lib/study/required-fields";
+import { getMissingControls, pickNextControl, revealControl } from "@/lib/study/focus-missing";
 import { saveDraftStudy, submitStudy } from "@/actions/study.actions";
 import { StudyStepper } from "./StudyStepper";
+import { MissingFieldsBanner } from "./MissingFieldsBanner";
 import { BikeTypeStep } from "./BikeTypeStep";
 import { PainsForm } from "./PainsForm";
 import { MeasuresForm, type MeasurementForStudy } from "./MeasuresForm";
@@ -68,6 +71,9 @@ function painsFromIntake(injuries: string[]): PainDraft[] {
   if (injuries.length === 0) return [makePainDraft()];
   return injuries.map((location) => makePainDraft({ location }));
 }
+
+/** Stable empty set, so steps without alerts get the same prop on every render. */
+const NO_KEYS: ReadonlySet<string> = new Set();
 
 export function StudyForm({
   patient,
@@ -176,67 +182,103 @@ export function StudyForm({
 
   // ── Required-field guards ─────────────────────────────────────────────────────
 
-  /** Required physio tests applicable to the bike type that have no result yet. */
-  function missingRequiredTests(): string[] {
-    const btId = store.bikeTypeId;
-    const missing: string[] = [];
-    for (const t of physioTests) {
-      if (!t.isRequired) continue;
-      const applies = t.isCommon || t.bikeTypeLinks.some((b) => b.bikeTypeId === btId);
-      if (!applies) continue;
-      const v = store.physioResults[t.id];
-      if (v === null || v === undefined || v === "") missing.push(t.name);
+  /**
+   * Every required value still empty: a result per required test, "avant" and
+   * "après" per required côte / mesure du cycliste (only those applicable to the
+   * bike type). Each entry knows the step where it is typed.
+   */
+  const missing = findMissingRequired({
+    bikeTypeId: store.bikeTypeId,
+    physioTests,
+    physioResults: store.physioResults,
+    measurements,
+    measureValues: store.measureValues,
+    riderMeasurements,
+    riderMeasureValues: store.riderMeasureValues,
+  });
+
+  // Alerts show only on the step where a move was blocked, and only for what is
+  // still missing: filling a field clears its alert live.
+  const missingHere = missing.filter((f) => f.step === store.step);
+  const showMissing = store.missingRevealedStep === store.step;
+  const invalidKeys = showMissing ? new Set(missingHere.map((f) => f.key)) : NO_KEYS;
+  // Values that were missing when the move was blocked keep their message line (see FieldError).
+  const reservedKeys = showMissing ? new Set(store.revealedKeys) : NO_KEYS;
+
+  /**
+   * Blocks a move out of the steps [from, to[ while one of them still has an empty
+   * required field (drafts may stay partial, but you can't step past an unfilled
+   * required field). The user is taken to the first such step — not necessarily the
+   * current one when the stepper skips ahead — where every missing field is flagged
+   * and the view scrolls to the first. Returns true when the move was blocked.
+   *
+   * Landing on a LATER step than the current one is still a forward move, so the
+   * draft is saved first like any other forward move (otherwise a stepper click from
+   * step 3 to 7 would carry the user to step 6 without persisting steps 3-5). Staying
+   * on the step, or going back (final submit), saves nothing, as before.
+   */
+  function blockIfMissing(from: number, to: number): boolean {
+    const blocking = firstBlockingStep(missing, from, to);
+    if (blocking === null) return false;
+    const keys = missing.filter((f) => f.step === blocking).map((f) => f.key);
+    if (blocking > store.step) {
+      startSave(async () => {
+        if (await persistDraft()) store.revealMissingFields(blocking, keys);
+      });
+    } else {
+      store.revealMissingFields(blocking, keys);
     }
-    return missing;
+    return true;
   }
 
-  /** Required côtes applicable to the bike type with no "before" value yet. */
-  function missingRequiredMeasures(): string[] {
-    const btId = store.bikeTypeId;
-    const missing: string[] = [];
-    for (const m of measurements) {
-      if (!m.isRequired) continue;
-      const applies = m.isCommon || m.bikeTypeLinks.some((b) => b.bikeTypeId === btId);
-      if (!applies) continue;
-      if (store.measureValues[m.id]?.before == null) missing.push(m.name);
-    }
-    return missing;
+  // ── Scroll & focus on missing fields ──────────────────────────────────────────
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Last field touched (or scrolled to): where « suivante » picks up from.
+  const cursorRef = useRef<Element | null>(null);
+  const handledRevealRef = useRef(store.revealSeq);
+
+  // After a blocked move, scroll to and focus the first missing field. Runs once
+  // the alerts are rendered, so it also works when the move switched step.
+  useEffect(() => {
+    if (store.revealSeq === handledRevealRef.current) return;
+    handledRevealRef.current = store.revealSeq;
+    const first = rootRef.current ? getMissingControls(rootRef.current)[0] : undefined;
+    if (!first) return;
+    cursorRef.current = first;
+    revealControl(first);
+  }, [store.revealSeq]);
+
+  // The store is a module singleton and init() runs after the first render: don't let this
+  // visit's alerts flash for a frame on the next mount.
+  useEffect(() => {
+    return () => useStudyStore.setState({ missingRevealedStep: null, revealedKeys: [] });
+  }, []);
+
+  function goToNextMissing() {
+    if (!rootRef.current) return;
+    const next = pickNextControl(getMissingControls(rootRef.current), cursorRef.current);
+    if (!next) return;
+    cursorRef.current = next;
+    revealControl(next);
   }
 
-  /** Required mesures du cycliste applicable to the bike type with no "before" yet. */
-  function missingRequiredRiderMeasures(): string[] {
-    const btId = store.bikeTypeId;
-    const missing: string[] = [];
-    for (const m of riderMeasurements) {
-      if (!m.isRequired) continue;
-      const applies = m.isCommon || m.bikeTypeLinks.some((b) => b.bikeTypeId === btId);
-      if (!applies) continue;
-      if (store.riderMeasureValues[m.id]?.before == null) missing.push(m.name);
+  function rememberFocus(e: FocusEvent<HTMLDivElement>) {
+    const target = e.target;
+    // The banner's own button must not become the reference point.
+    if (target instanceof Element && !target.closest("[data-missing-nav]")) {
+      cursorRef.current = target;
     }
-    return missing;
-  }
-
-  /** Missing required fields owned by the given step (the one being left). */
-  function missingForStep(step: number): string[] {
-    if (step === 3) return missingRequiredTests(); // Tests physio
-    if (step === 4) return missingRequiredMeasures(); // Mesures vélo (avant)
-    if (step === 5) return missingRequiredRiderMeasures(); // Mesures cycliste
-    return [];
   }
 
   // ── Step transitions ──────────────────────────────────────────────────────────
 
   /**
    * Persists the draft, then advances to the given step. Blocks the move when a
-   * required côte/test on the current step is still empty (drafts may stay
-   * partial, but you can't step past an unfilled required field).
+   * required côte/test on the current step is still empty.
    */
   function advanceTo(step: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9) {
-    const missing = missingForStep(store.step);
-    if (missing.length > 0) {
-      toast.error(`Champs obligatoires manquants : ${missing.join(", ")}.`);
-      return;
-    }
+    if (blockIfMissing(store.step, step)) return;
     startSave(async () => {
       if (await persistDraft()) store.setStep(step);
     });
@@ -253,13 +295,7 @@ export function StudyForm({
       store.setStep(target);
       return;
     }
-    for (let s = store.step; s < target; s++) {
-      const missing = missingForStep(s);
-      if (missing.length > 0) {
-        toast.error(`Champs obligatoires manquants : ${missing.join(", ")}.`);
-        return;
-      }
-    }
+    if (blockIfMissing(store.step, target)) return;
     startSave(async () => {
       if (await persistDraft()) store.setStep(target);
     });
@@ -273,15 +309,7 @@ export function StudyForm({
 
   function handleSubmit() {
     // Final safety net — covers every required field regardless of step.
-    const missing = [
-      ...missingRequiredTests(),
-      ...missingRequiredMeasures(),
-      ...missingRequiredRiderMeasures(),
-    ];
-    if (missing.length > 0) {
-      toast.error(`Champs obligatoires manquants : ${missing.join(", ")}.`);
-      return;
-    }
+    if (blockIfMissing(1, 9)) return;
     startSubmit(async () => {
       const result = await submitStudy({
         patientId: patient.id,
@@ -313,6 +341,8 @@ export function StudyForm({
     bikeTypeId: store.bikeTypeId,
     values: store.measureValues,
     extraMeasurementIds: store.extraMeasurementIds,
+    invalidKeys,
+    reservedKeys,
     observations: store.observations,
     onSetValue: store.setMeasureValue,
     onAddExtra: store.addExtraMeasurement,
@@ -371,8 +401,10 @@ export function StudyForm({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="space-y-6">
+    <div ref={rootRef} onFocus={rememberFocus} className="space-y-6">
       <StudyStepper current={store.step} onStepClick={goToStep} />
+
+      {showMissing && <MissingFieldsBanner count={missingHere.length} onNext={goToNextMissing} />}
 
       {store.step === 1 && (
         <BikeTypeStep
@@ -403,6 +435,8 @@ export function StudyForm({
           bikeTypeId={store.bikeTypeId}
           results={store.physioResults}
           comments={store.physioComments}
+          invalidKeys={invalidKeys}
+          reservedKeys={reservedKeys}
           onSetValue={store.setPhysioValue}
           onSetComment={store.setPhysioComment}
           onBack={() => store.setStep(2)}
@@ -427,6 +461,8 @@ export function StudyForm({
           bikeTypeId={store.bikeTypeId}
           values={store.riderMeasureValues}
           extraRiderMeasurementIds={store.extraRiderMeasurementIds}
+          invalidKeys={invalidKeys}
+          reservedKeys={reservedKeys}
           photos={store.photos}
           onSetValue={store.setRiderMeasureValue}
           onAddExtra={store.addExtraRiderMeasurement}

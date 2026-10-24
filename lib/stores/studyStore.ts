@@ -25,6 +25,7 @@ export function makePainDraft(partial: Partial<StudyPainInput> = {}): PainDraft 
     type: "",
     intensity: "",
     restAtRest: false,
+    relievedAtRest: false,
     activity: "",
     duration: "",
     aggravatingFactors: "",
@@ -92,11 +93,25 @@ interface StudyStoreState {
   selectedExerciseIds: string[];
   // Photos patient (avant/après), saisies sur l'étape « Mesures cycliste ».
   photos: PhotoDraft[];
+  // Étape dont un passage bloqué (champs obligatoires vides) a déclenché
+  // l'affichage des alertes sur les champs manquants. Toujours l'étape courante
+  // ou null : quitter l'étape remet les alertes à zéro (voir setStep).
+  missingRevealedStep: StudyStep | null;
+  // Compteur incrémenté à chaque passage bloqué : déclenche le défilement vers le
+  // premier champ manquant, y compris pour un nouvel essai sur la même étape.
+  // Jamais remis à zéro par init() pour que les composants montés ne le rejouent pas.
+  revealSeq: number;
+  // Valeurs (`fieldKey`) qui étaient manquantes lors des passages bloqués de l'étape
+  // courante, remplies depuis ou non : leur ligne de message garde sa place une fois
+  // la valeur saisie, pour que les lignes suivantes ne sautent pas à chaque réponse.
+  revealedKeys: string[];
 }
 
 interface StudyStoreActions {
   init: (patientId: string, initial?: Partial<StudyStoreState>) => void;
   setStep: (step: StudyStep) => void;
+  /** Va à `step` et y signale les valeurs obligatoires manquantes (`keys` : leurs `fieldKey`). */
+  revealMissingFields: (step: StudyStep, keys: string[]) => void;
   setBikeTypeId: (id: string | null) => void;
   setMeasureValue: (measurementId: string, field: "before" | "after", value: number | null) => void;
   addExtraMeasurement: (measurementId: string) => void;
@@ -139,6 +154,9 @@ const DEFAULT_STATE: StudyStoreState = {
   selectedComponentIds: [],
   selectedExerciseIds: [],
   photos: [],
+  missingRevealedStep: null,
+  revealSeq: 0,
+  revealedKeys: [],
 };
 
 /** Serialises the measureValues map into the array shape the action expects. */
@@ -195,6 +213,7 @@ export function painsToArray(pains: PainDraft[]): StudyPainInput[] {
       type: clean(p.type ?? ""),
       intensity: clean(p.intensity ?? ""),
       restAtRest: p.restAtRest,
+      relievedAtRest: p.relievedAtRest,
       activity: clean(p.activity ?? ""),
       duration: clean(p.duration ?? ""),
       aggravatingFactors: clean(p.aggravatingFactors ?? ""),
@@ -221,9 +240,19 @@ export const useStudyStore = create<StudyStoreState & StudyStoreActions>((set) =
   ...DEFAULT_STATE,
 
   init: (patientId, initial = {}) =>
-    set({ ...DEFAULT_STATE, patientId, ...initial }),
+    set((s) => ({ ...DEFAULT_STATE, revealSeq: s.revealSeq, patientId, ...initial })),
 
-  setStep: (step) => set({ step }),
+  setStep: (step) =>
+    set((s) => (s.step === step ? s : { step, missingRevealedStep: null, revealedKeys: [] })),
+
+  revealMissingFields: (step, keys) =>
+    set((s) => ({
+      step,
+      missingRevealedStep: step,
+      revealSeq: s.revealSeq + 1,
+      // Un nouvel essai sur la même étape garde les valeurs déjà corrigées en réserve.
+      revealedKeys: s.missingRevealedStep === step ? [...new Set([...s.revealedKeys, ...keys])] : keys,
+    })),
 
   setBikeTypeId: (bikeTypeId) => set({ bikeTypeId }),
 

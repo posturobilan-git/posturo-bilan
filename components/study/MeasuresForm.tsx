@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
+import { fieldKey } from "@/lib/study/required-fields";
 import { MeasureRow, MeasuresHeader } from "./MeasureRow";
 import type { Measurement } from "@prisma/client";
 
@@ -24,6 +25,10 @@ interface Props {
   values: Record<string, MeasureValue>;
   /** Côtes ajoutées à la volée pour cette étude uniquement. */
   extraMeasurementIds: string[];
+  /** Valeurs obligatoires encore vides (`fieldKey`), signalées après un passage bloqué. */
+  invalidKeys: ReadonlySet<string>;
+  /** Valeurs qui l'étaient lors d'un passage bloqué : leur ligne de message garde sa place. */
+  reservedKeys: ReadonlySet<string>;
   observations: string;
   onSetValue: (measurementId: string, field: "before" | "after", value: number | null) => void;
   onAddExtra: (measurementId: string) => void;
@@ -41,6 +46,8 @@ export function MeasuresForm({
   phase,
   values,
   extraMeasurementIds,
+  invalidKeys,
+  reservedKeys,
   observations,
   onSetValue,
   onAddExtra,
@@ -84,6 +91,9 @@ export function MeasuresForm({
 
   const isAfter = phase === "after";
   const shown = [...configured, ...extras];
+  // Une côte obligatoire exige « avant » ET « après » (voir lib/study/required-fields.ts),
+  // mais seulement les côtes configurées : pas celles ajoutées à la volée.
+  const hasRequired = configured.some((m) => m.isRequired);
 
   return (
     <div className="space-y-5">
@@ -91,6 +101,13 @@ export function MeasuresForm({
         {isAfter
           ? "Renseignez les mesures du vélo après réglage. Le delta s'affiche par rapport à la valeur avant."
           : "Renseignez les mesures du vélo relevées avant réglage."}
+        {hasRequired && (
+          <span className="ml-1 text-content-subtle">
+            {isAfter
+              ? "Les mesures signalées « Obligatoire » doivent aussi être renseignées après réglage pour passer à l'étape suivante."
+              : "Les mesures signalées « Obligatoire » sont à renseigner avant (ici) et après réglage."}
+          </span>
+        )}
       </p>
 
       {shown.length === 0 ? (
@@ -113,7 +130,11 @@ export function MeasuresForm({
                   key={m.id}
                   name={m.name}
                   unit={m.unit}
-                  required={m.isRequired}
+                  required={!extra && m.isRequired}
+                  invalidBefore={invalidKeys.has(fieldKey(m.id, "before"))}
+                  invalidAfter={invalidKeys.has(fieldKey(m.id, "after"))}
+                  reservedBefore={reservedKeys.has(fieldKey(m.id, "before"))}
+                  reservedAfter={reservedKeys.has(fieldKey(m.id, "after"))}
                   phase={phase}
                   before={v.before}
                   after={v.after}

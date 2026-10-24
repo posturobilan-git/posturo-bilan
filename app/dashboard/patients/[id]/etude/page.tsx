@@ -130,6 +130,7 @@ export default async function EtudePage(props: PageProps<"/dashboard/patients/[i
           type: p.type ?? "",
           intensity: p.intensity ?? "",
           restAtRest: p.restAtRest,
+          relievedAtRest: p.relievedAtRest,
           activity: p.activity ?? "",
           duration: p.duration ?? "",
           aggravatingFactors: p.aggravatingFactors ?? "",

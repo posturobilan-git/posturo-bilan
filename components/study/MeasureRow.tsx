@@ -1,6 +1,10 @@
 "use client";
 
+import { useId } from "react";
+import { missingControlProps, missingRowProps } from "@/lib/study/focus-missing";
+import { FieldError } from "./FieldError";
 import { MeasureDelta } from "./MeasureDelta";
+import { INVALID_ROW_BASE, RequiredMark } from "./RequiredMark";
 
 // Shared fixed-column grid so the per-row inputs line up exactly with the column
 // header rendered once above them (avant · arrow · après · delta). All columns
@@ -12,14 +16,26 @@ const INPUT_GRID = "grid grid-cols-[6rem_0.875rem_6rem_4rem] items-center gap-x-
 const FIELD_BASE = "h-9 w-full rounded-md border px-3 text-sm tabular-nums";
 const LABEL = "text-[11px] font-medium uppercase tracking-wide text-content-subtle";
 
+// La ligne a déjà son propre padding vertical (py-3) : la teinte le couvre pile.
+const INVALID_ROW = `${INVALID_ROW_BASE} before:inset-y-0`;
+
 function NumberField({
   value,
   ariaLabel,
   onChange,
+  required = false,
+  invalid = false,
+  errorId,
 }: {
   value: number | null;
   ariaLabel: string;
   onChange?: (v: number | null) => void;
+  /** Valeur obligatoire pour passer à l'étape suivante. */
+  required?: boolean;
+  /** Obligatoire et encore vide après un passage bloqué. */
+  invalid?: boolean;
+  /** Id du message d'erreur affiché sous la ligne quand `invalid`. */
+  errorId?: string;
 }) {
   return (
     <input
@@ -28,9 +44,17 @@ function NumberField({
       inputMode="decimal"
       placeholder="—"
       aria-label={ariaLabel}
+      aria-required={required || undefined}
+      aria-invalid={invalid || undefined}
+      aria-describedby={invalid ? errorId : undefined}
+      {...missingControlProps(invalid)}
       value={value ?? ""}
       onChange={(e) => onChange?.(e.target.value === "" ? null : parseFloat(e.target.value))}
-      className={`${FIELD_BASE} border-border-strong bg-surface text-content focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500`}
+      className={`${FIELD_BASE} bg-surface text-content focus:outline-none focus:ring-1 ${
+        invalid
+          ? "border-danger-500 focus:border-danger-500 focus:ring-danger-500"
+          : "border-border-strong focus:border-brand-500 focus:ring-brand-500"
+      }`}
     />
   );
 }
@@ -74,11 +98,20 @@ export function MeasuresHeader() {
  * - phase `both`: both editable + delta (rider — avant/après on one screen).
  *
  * Two-column phases (`after`/`both`) expect a {@link MeasuresHeader} above them.
+ *
+ * A required measure needs both its "avant" and its "après" value; each step only
+ * asks for the one(s) it lets you type: "avant" on `before`, "après" on `after`,
+ * both on `both`. The pill sits on the name in every phase (the measure is
+ * required), the alert goes on the empty value(s) only.
  */
 export function MeasureRow({
   name,
   unit,
   required = false,
+  invalidBefore = false,
+  invalidAfter = false,
+  reservedBefore = false,
+  reservedAfter = false,
   before,
   after,
   phase,
@@ -89,7 +122,15 @@ export function MeasureRow({
 }: {
   name: string;
   unit: string;
+  /** Mesure obligatoire (avant ET après) : pastille « Obligatoire » sur le nom. */
   required?: boolean;
+  /** « Avant » obligatoire et encore vide après un passage bloqué. */
+  invalidBefore?: boolean;
+  /** « Après » obligatoire et encore vide après un passage bloqué. */
+  invalidAfter?: boolean;
+  /** « Avant » / « après » qui étaient vides lors d'un passage bloqué : la ligne de message garde sa place. */
+  reservedBefore?: boolean;
+  reservedAfter?: boolean;
   before: number | null;
   after: number | null;
   phase: "before" | "after" | "both";
@@ -100,13 +141,22 @@ export function MeasureRow({
   onRemove?: () => void;
 }) {
   const showAfter = phase !== "before";
+  const errorId = useId();
+  const invalid = invalidBefore || invalidAfter;
+  // Saisies exigées SUR CET ÉCRAN (en phase « après », « avant » n'est qu'une référence).
+  const requiredBefore = required && phase !== "after";
+  const requiredAfter = required && phase !== "before";
+  // La ligne de message garde sa hauteur (texte le plus long possible) une fois la valeur
+  // saisie : sinon les lignes suivantes remontent à chaque réponse.
+  const reserveBefore = invalidBefore || reservedBefore;
+  const reserveAfter = invalidAfter || reservedAfter;
 
   return (
-    <div className="py-3">
+    <div {...missingRowProps(invalid)} className={`py-3 ${invalid ? INVALID_ROW : ""}`}>
       <p className="text-sm font-medium text-content">
         {name}
         <span className="ml-1 font-normal text-content-subtle">({unit})</span>
-        {required && <span className="ml-0.5 text-danger-500">*</span>}
+        {required && <RequiredMark invalid={invalid} />}
         {badge && (
           <span className="ml-2 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
             {badge}
@@ -120,17 +170,38 @@ export function MeasureRow({
             {phase === "after" ? (
               <ReferenceField value={before} unit={unit} ariaLabel={`${name} — avant réglage`} />
             ) : (
-              <NumberField value={before} ariaLabel={`${name} — avant réglage`} onChange={onSetBefore} />
+              <NumberField
+                value={before}
+                ariaLabel={`${name} — avant réglage`}
+                onChange={onSetBefore}
+                required={requiredBefore}
+                invalid={invalidBefore}
+                errorId={errorId}
+              />
             )}
             <span aria-hidden className="text-center text-content-subtle">→</span>
-            <NumberField value={after} ariaLabel={`${name} — après réglage`} onChange={onSetAfter} />
+            <NumberField
+              value={after}
+              ariaLabel={`${name} — après réglage`}
+              onChange={onSetAfter}
+              required={requiredAfter}
+              invalid={invalidAfter}
+              errorId={errorId}
+            />
             <div className="text-right">
               <MeasureDelta before={before} after={after} unit={unit} />
             </div>
           </div>
         ) : (
           <div className="w-24">
-            <NumberField value={before} ariaLabel={`${name} — avant réglage`} onChange={onSetBefore} />
+            <NumberField
+              value={before}
+              ariaLabel={`${name} — avant réglage`}
+              onChange={onSetBefore}
+              required={requiredBefore}
+              invalid={invalidBefore}
+              errorId={errorId}
+            />
           </div>
         )}
         {onRemove && (
@@ -145,6 +216,23 @@ export function MeasureRow({
           </button>
         )}
       </div>
+
+      <FieldError
+        id={errorId}
+        message={invalid ? missingMessage(phase, invalidBefore, invalidAfter) : null}
+        reserve={reserveBefore || reserveAfter ? missingMessage(phase, reserveBefore, reserveAfter) : undefined}
+      />
     </div>
   );
+}
+
+/** Message court sous la ligne ; nomme la colonne seulement quand l'écran en montre deux. */
+function missingMessage(
+  phase: "before" | "after" | "both",
+  invalidBefore: boolean,
+  invalidAfter: boolean
+): string {
+  if (phase === "before") return "Valeur obligatoire";
+  if (invalidBefore && invalidAfter) return "Valeurs « avant » et « après » obligatoires";
+  return invalidBefore ? "Valeur « avant » obligatoire" : "Valeur « après » obligatoire";
 }
