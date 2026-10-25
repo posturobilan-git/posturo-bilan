@@ -67,6 +67,16 @@ async function targetBikeTypeIds(input: PhysioTestInput): Promise<string[]> {
   return all.map((b) => b.id);
 }
 
+/**
+ * Default-order slot for an element becoming common: after every existing one.
+ * `commonOrder` is the template a NEW bike type starts from, so a freshly added
+ * common element must land last there too (as it does on existing bike types).
+ */
+async function nextCommonOrder(): Promise<number> {
+  const max = await prisma.physioTest.aggregate({ where: { isCommon: true }, _max: { commonOrder: true } });
+  return (max._max.commonOrder ?? -1) + 1;
+}
+
 /** Next free display order for a test appended to a given bike type's config. */
 async function nextOrderFor(bikeTypeId: string): Promise<number> {
   const last = await prisma.bikeTypePhysioTest.findFirst({
@@ -85,7 +95,10 @@ export async function createPhysioTest(
 
   try {
     const admin = await requireAdmin();
-    const fields = relationData(parsed.data);
+    const fields = {
+      ...relationData(parsed.data),
+      commonOrder: parsed.data.isCommon ? await nextCommonOrder() : 0,
+    };
     const bikeTypeIds = await targetBikeTypeIds(parsed.data);
 
     // New tests are appended to the end of each bike type's configuration.
@@ -115,7 +128,13 @@ export async function updatePhysioTest(
 
   try {
     const admin = await requireAdmin();
-    const fields = relationData(parsed.data);
+    const current = await prisma.physioTest.findUnique({ where: { id }, select: { isCommon: true } });
+    if (!current) return fail("Élément introuvable.");
+    const fields = {
+      ...relationData(parsed.data),
+      // Becoming common → last in the default order (an element that stays common keeps its slot).
+      ...(parsed.data.isCommon && !current.isCommon && { commonOrder: await nextCommonOrder() }),
+    };
     const bikeTypeIds = await targetBikeTypeIds(parsed.data);
 
     // Reconcile bike-type links without disturbing the configured order of the

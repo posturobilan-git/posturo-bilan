@@ -11,6 +11,15 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { BikeTypeConfigurator } from "@/components/bibliotheque/BikeTypeConfigurator";
 
+/**
+ * Clé d'un configurateur : change dès que la liste enregistrée change côté serveur
+ * (ex. éléments communs ajoutés en fin de liste par l'enregistrement) pour que le
+ * composant reparte de l'état réel au lieu de garder l'état local d'avant.
+ */
+function listsKey(lists: { assigned: { id: string }[]; available: { id: string }[] }) {
+  return `${lists.assigned.map((c) => c.id).join(",")}|${lists.available.map((c) => c.id).join(",")}`;
+}
+
 export default async function BikeTypeConfigPage({
   params,
   searchParams,
@@ -58,6 +67,7 @@ export default async function BikeTypeConfigPage({
             count: config.measurements.assigned.length,
             content: (
               <BikeTypeConfigurator
+                key={listsKey(config.measurements)}
                 title="Mesures du vélo"
                 subtitle="Mesures du vélo seul, relevées avant / après réglage."
                 initialAssigned={config.measurements.assigned}
@@ -73,6 +83,7 @@ export default async function BikeTypeConfigPage({
             count: config.riderMeasurements.assigned.length,
             content: (
               <BikeTypeConfigurator
+                key={listsKey(config.riderMeasurements)}
                 title="Mesures du cycliste sur vélo"
                 subtitle="Mesures du cycliste (KOPS, angles…), avant / après saisis sur la même étape."
                 initialAssigned={config.riderMeasurements.assigned}
@@ -88,6 +99,7 @@ export default async function BikeTypeConfigPage({
             count: config.physioTests.assigned.length,
             content: (
               <BikeTypeConfigurator
+                key={listsKey(config.physioTests)}
                 title="Tests physiologiques"
                 subtitle="Tests réalisés pendant l'étude, selon le type de résultat (valeur, oui/non, commentaire)."
                 initialAssigned={config.physioTests.assigned}

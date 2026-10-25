@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
 import { requireKine, requireAdmin } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
-import { bikeTypeSchema, type BikeTypeInput } from "@/lib/validations/bikeType.schema";
+import { bikeTypeSchema, configIdsSchema, type BikeTypeInput } from "@/lib/validations/bikeType.schema";
 import { PHYSIO_OUTPUT_TYPE_LABELS } from "@/lib/labels";
 import {
   compareConfigured,
@@ -197,6 +197,9 @@ export async function setBikeTypeMeasurements(
   bikeTypeId: string,
   measurementIds: string[]
 ): Promise<ActionResult<void>> {
+  const requested = configIdsSchema.safeParse(measurementIds);
+  if (!requested.success) return fail("Liste d'éléments invalide.");
+
   try {
     const admin = await requireAdmin();
 
@@ -207,24 +210,20 @@ export async function setBikeTypeMeasurements(
     if (!bikeType) return fail("Type de vélo introuvable.");
 
     const [active, common] = await Promise.all([
-      prisma.measurement.findMany({
-        where: { id: { in: measurementIds }, isActive: true },
-        select: { id: true },
-      }),
+      prisma.measurement.findMany({ where: { isActive: true }, select: { id: true } }),
       prisma.measurement.findMany({
         where: { isActive: true, isCommon: true },
         select: { id: true },
         orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
       }),
     ]);
-    const ordered = finalConfigOrder(
-      measurementIds,
-      new Set(active.map((m) => m.id)),
-      common.map((m) => m.id)
-    );
+    const activeIds = new Set(active.map((m) => m.id));
+    const ordered = finalConfigOrder(requested.data, activeIds, common.map((m) => m.id));
 
     await prisma.$transaction([
-      prisma.bikeTypeMeasurement.deleteMany({ where: { bikeTypeId, measurement: { isActive: true } } }),
+      // Only the links of elements seen at read time: one created or reactivated
+      // meanwhile keeps its own link instead of being wiped.
+      prisma.bikeTypeMeasurement.deleteMany({ where: { bikeTypeId, measurementId: { in: [...activeIds] } } }),
       ...(ordered.length
         ? [
             prisma.bikeTypeMeasurement.createMany({
@@ -259,6 +258,9 @@ export async function setBikeTypeRiderMeasurements(
   bikeTypeId: string,
   riderMeasurementIds: string[]
 ): Promise<ActionResult<void>> {
+  const requested = configIdsSchema.safeParse(riderMeasurementIds);
+  if (!requested.success) return fail("Liste d'éléments invalide.");
+
   try {
     const admin = await requireAdmin();
 
@@ -269,26 +271,20 @@ export async function setBikeTypeRiderMeasurements(
     if (!bikeType) return fail("Type de vélo introuvable.");
 
     const [active, common] = await Promise.all([
-      prisma.riderMeasurement.findMany({
-        where: { id: { in: riderMeasurementIds }, isActive: true },
-        select: { id: true },
-      }),
+      prisma.riderMeasurement.findMany({ where: { isActive: true }, select: { id: true } }),
       prisma.riderMeasurement.findMany({
         where: { isActive: true, isCommon: true },
         select: { id: true },
         orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
       }),
     ]);
-    const ordered = finalConfigOrder(
-      riderMeasurementIds,
-      new Set(active.map((m) => m.id)),
-      common.map((m) => m.id)
-    );
+    const activeIds = new Set(active.map((m) => m.id));
+    const ordered = finalConfigOrder(requested.data, activeIds, common.map((m) => m.id));
 
     await prisma.$transaction([
-      prisma.bikeTypeRiderMeasurement.deleteMany({
-        where: { bikeTypeId, riderMeasurement: { isActive: true } },
-      }),
+      // Only the links of elements seen at read time: one created or reactivated
+      // meanwhile keeps its own link instead of being wiped.
+      prisma.bikeTypeRiderMeasurement.deleteMany({ where: { bikeTypeId, riderMeasurementId: { in: [...activeIds] } } }),
       ...(ordered.length
         ? [
             prisma.bikeTypeRiderMeasurement.createMany({
@@ -325,6 +321,9 @@ export async function setBikeTypePhysioTests(
   bikeTypeId: string,
   physioTestIds: string[]
 ): Promise<ActionResult<void>> {
+  const requested = configIdsSchema.safeParse(physioTestIds);
+  if (!requested.success) return fail("Liste d'éléments invalide.");
+
   try {
     const admin = await requireAdmin();
 
@@ -335,24 +334,20 @@ export async function setBikeTypePhysioTests(
     if (!bikeType) return fail("Type de vélo introuvable.");
 
     const [active, common] = await Promise.all([
-      prisma.physioTest.findMany({
-        where: { id: { in: physioTestIds }, isActive: true },
-        select: { id: true },
-      }),
+      prisma.physioTest.findMany({ where: { isActive: true }, select: { id: true } }),
       prisma.physioTest.findMany({
         where: { isActive: true, isCommon: true },
         select: { id: true },
         orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
       }),
     ]);
-    const ordered = finalConfigOrder(
-      physioTestIds,
-      new Set(active.map((t) => t.id)),
-      common.map((t) => t.id)
-    );
+    const activeIds = new Set(active.map((t) => t.id));
+    const ordered = finalConfigOrder(requested.data, activeIds, common.map((t) => t.id));
 
     await prisma.$transaction([
-      prisma.bikeTypePhysioTest.deleteMany({ where: { bikeTypeId, physioTest: { isActive: true } } }),
+      // Only the links of elements seen at read time: one created or reactivated
+      // meanwhile keeps its own link instead of being wiped.
+      prisma.bikeTypePhysioTest.deleteMany({ where: { bikeTypeId, physioTestId: { in: [...activeIds] } } }),
       ...(ordered.length
         ? [
             prisma.bikeTypePhysioTest.createMany({

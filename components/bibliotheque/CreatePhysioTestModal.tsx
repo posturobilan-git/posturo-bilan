@@ -50,9 +50,10 @@ export function CreatePhysioTestModal({
   const [isCommon, setIsCommon] = useState(physioTest?.isCommon ?? false);
   const [isRequired, setIsRequired] = useState(physioTest?.isRequired ?? false);
   const [sectionId, setSectionId] = useState<string>(physioTest?.sectionId ?? "");
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(
-    physioTest?.bikeTypes.map((b) => b.id) ?? []
-  );
+  // Un élément commun est lié à TOUS les types de vélo : on ne pré-sélectionne alors rien
+  // (il faut choisir explicitement les types s'il redevient spécifique).
+  const initialTypes = () => (physioTest && !physioTest.isCommon ? physioTest.bikeTypes.map((b) => b.id) : []);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(initialTypes);
 
   function toggleType(id: string) {
     setSelectedTypes((prev) =>
@@ -66,7 +67,7 @@ export function CreatePhysioTestModal({
     setIsCommon(physioTest?.isCommon ?? false);
     setIsRequired(physioTest?.isRequired ?? false);
     setSectionId(physioTest?.sectionId ?? "");
-    setSelectedTypes(physioTest?.bikeTypes.map((b) => b.id) ?? []);
+    setSelectedTypes(initialTypes());
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

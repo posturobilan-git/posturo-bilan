@@ -46,17 +46,19 @@ export function appliesToBikeType(
 
 /**
  * Rang d'un élément pour un type de vélo : [palier, position, ordre par défaut].
- *  - palier 0 : position propre à ce type (cas normal, y compris le tronc commun) ;
- *  - palier 1 : commun sans position propre (n'arrive pas si la config est
- *    saine) → après les positionnés, dans l'ordre par défaut ;
+ *  - palier 0 : commun sans position propre sur ce type. N'arrive pas quand la
+ *    config est saine ; si une migration est en retard sur le code, ou après une
+ *    écriture concurrente, il retrouve la place qu'avait le tronc commun avant
+ *    les positions par type (en tête, dans l'ordre par défaut) ;
+ *  - palier 1 : position propre à ce type (cas normal, tronc commun compris) ;
  *  - palier 2 : non configuré pour ce type (ajouté à la volée pour une étude, ou
  *    retiré de la config depuis) → en dernier.
  */
 function rank(def: ConfigOrderable, bikeTypeId: string | null): readonly [number, number, number] {
   const link =
     bikeTypeId == null ? undefined : def.bikeTypeLinks.find((l) => l.bikeTypeId === bikeTypeId);
-  if (link) return [0, link.order, 0];
-  if (def.isCommon) return [1, 0, def.commonOrder];
+  if (link) return [1, link.order, 0];
+  if (def.isCommon) return [0, 0, def.commonOrder];
   return [2, 0, 0];
 }
 
