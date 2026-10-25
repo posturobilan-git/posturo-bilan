@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { PatientDossier } from "@/components/patients/PatientDossier";
 import { PatientHeaderActions } from "@/components/patients/PatientHeaderActions";
 import { SendIntakeButton } from "@/components/patients/SendIntakeButton";
+import { MissingPhoneNotice } from "@/components/patients/MissingPhoneNotice";
+import { formatPhoneForDisplay } from "@/lib/phone";
 import type { PatientWithRelations, MeasurementInfo } from "@/types";
 import type { PhysioTestInfo } from "@/lib/physio";
 
@@ -22,26 +24,33 @@ export default async function PatientPage(props: PageProps<"/dashboard/patients/
   // getPatientDossier includes kine, cast to full type
   const patientFull = patient as PatientWithRelations;
 
-  // Resolve measurement & physio-test metadata so study cards can label values.
+  // Resolve measurement & physio-test metadata so study cards can label values —
+  // and order them like the study form (each bike type's configured order).
+  const orderSelect = {
+    isCommon: true,
+    commonOrder: true,
+    bikeTypeLinks: { select: { bikeTypeId: true, order: true } },
+  } as const;
   const [measurements, riderMeasurements, physioTests] = await Promise.all([
-    prisma.measurement.findMany({ select: { id: true, name: true, unit: true } }),
-    prisma.riderMeasurement.findMany({ select: { id: true, name: true, unit: true } }),
+    prisma.measurement.findMany({ select: { id: true, name: true, unit: true, ...orderSelect } }),
+    prisma.riderMeasurement.findMany({ select: { id: true, name: true, unit: true, ...orderSelect } }),
     prisma.physioTest.findMany({
-      select: { id: true, name: true, unit: true, outputType: true },
+      select: {
+        id: true,
+        name: true,
+        unit: true,
+        outputType: true,
+        ...orderSelect,
+        section: { select: { id: true, name: true, order: true } },
+      },
     }),
   ]);
   const measurementsById: Record<string, MeasurementInfo> = {};
-  for (const m of measurements) {
-    measurementsById[m.id] = { name: m.name, unit: m.unit };
-  }
+  for (const { id, ...info } of measurements) measurementsById[id] = info;
   const riderMeasurementsById: Record<string, MeasurementInfo> = {};
-  for (const m of riderMeasurements) {
-    riderMeasurementsById[m.id] = { name: m.name, unit: m.unit };
-  }
+  for (const { id, ...info } of riderMeasurements) riderMeasurementsById[id] = info;
   const physioTestsById: Record<string, PhysioTestInfo> = {};
-  for (const t of physioTests) {
-    physioTestsById[t.id] = { name: t.name, unit: t.unit, outputType: t.outputType };
-  }
+  for (const { id, ...info } of physioTests) physioTestsById[id] = info;
 
   // KINE only sees their own patients (query is scoped), so anything visible
   // here is editable; ADMIN can edit everything.
@@ -51,7 +60,21 @@ export default async function PatientPage(props: PageProps<"/dashboard/patients/
     <div className="space-y-6">
       <PageHeader
         title={`${patient.firstName} ${patient.lastName}`}
-        description={patient.email}
+        description={
+          <>
+            {patient.email}
+            {patient.phone ? (
+              <> · {formatPhoneForDisplay(patient.phone)}</>
+            ) : (
+              !patient.isAnonymized && (
+                <>
+                  {" "}
+                  <MissingPhoneNotice />
+                </>
+              )
+            )}
+          </>
+        }
         action={
           <div className="flex flex-wrap items-center gap-3">
             {/* Accueil pending — let the kiné email the patient the form link */}
@@ -71,7 +94,7 @@ export default async function PatientPage(props: PageProps<"/dashboard/patients/
                   firstName: patient.firstName,
                   lastName: patient.lastName,
                   email: patient.email,
-                  phone: patient.phone,
+                  phone: patient.phone ? formatPhoneForDisplay(patient.phone) : null,
                 }}
                 studyCount={patientFull.studies.length}
                 isAnonymized={patient.isAnonymized}

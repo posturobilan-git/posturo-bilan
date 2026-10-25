@@ -2,15 +2,9 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import type { Exercise, ExerciseCategory, BikeComponent } from "@prisma/client";
+import type { Exercise, BikeComponent } from "@prisma/client";
 
-const CATEGORY_LABELS: Record<ExerciseCategory, string> = {
-  SOUPLESSE: "Souplesse",
-  RENFORCEMENT: "Renforcement",
-  MOBILITE: "Mobilité",
-  PROPRIOCEPTION: "Proprioception",
-  AUTRE: "Autre",
-};
+export type ExerciseForStudy = Exercise & { category: { id: string; name: string } };
 
 // ─── Summary block shown before final submit ──────────────────────────────────
 
@@ -23,7 +17,7 @@ function StudySummary({
 }: {
   measureCount: number;
   components: BikeComponent[];
-  exercises: Exercise[];
+  exercises: ExerciseForStudy[];
   selectedComponentIds: string[];
   selectedExerciseIds: string[];
 }) {
@@ -55,7 +49,9 @@ function StudySummary({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
-  exercises: Exercise[];
+  exercises: ExerciseForStudy[];
+  /** Active categories, in their display order — the filter's options. */
+  categories: { id: string; name: string }[];
   components: BikeComponent[];
   selected: string[];
   selectedComponentIds: string[];
@@ -68,6 +64,7 @@ interface Props {
 
 export function ExercisePicker({
   exercises,
+  categories,
   components,
   selected,
   selectedComponentIds,
@@ -78,14 +75,12 @@ export function ExercisePicker({
   saving,
 }: Props) {
   const [search, setSearch] = useState("");
-  const [filterCategory, setFilterCategory] = useState<ExerciseCategory | "">("");
-
-  const categories = [...new Set(exercises.map((e) => e.category))] as ExerciseCategory[];
+  const [filterCategoryId, setFilterCategoryId] = useState("");
 
   const filtered = exercises.filter((e) => {
     const matchesSearch =
       !search || e.name.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = !filterCategory || e.category === filterCategory;
+    const matchesCategory = !filterCategoryId || e.categoryId === filterCategoryId;
     return matchesSearch && matchesCategory;
   });
 
@@ -105,13 +100,13 @@ export function ExercisePicker({
           className="flex-1 rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
         <select
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value as ExerciseCategory | "")}
+          value={filterCategoryId}
+          onChange={(e) => setFilterCategoryId(e.target.value)}
           className="rounded-md border border-border-strong px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
         >
           <option value="">Toutes catégories</option>
           {categories.map((c) => (
-            <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+            <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
       </div>
@@ -141,7 +136,7 @@ export function ExercisePicker({
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-content">{e.name}</p>
                 <p className="text-xs text-content-muted">
-                  {CATEGORY_LABELS[e.category]}
+                  {e.category.name}
                   {e.frequency ? ` · ${e.frequency}` : ""}
                   {e.duration ? ` · ${e.duration}` : ""}
                 </p>

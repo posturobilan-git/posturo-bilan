@@ -44,14 +44,6 @@ enum ComponentAttributeType {
   SELECT
 }
 
-enum ExerciseCategory {
-  SOUPLESSE
-  RENFORCEMENT
-  MOBILITE
-  PROPRIOCEPTION
-  AUTRE
-}
-
 enum MeasurementCategory {
   SELLE
   CINTRE
@@ -110,6 +102,7 @@ model User {
   physioTestSections PhysioTestSection[]
   componentAttributes ComponentAttribute[]
   componentCategories ComponentCategory[]
+  exerciseCategories ExerciseCategory[]
   auditLogs    AuditLog[]
 
   createdAt DateTime @default(now())
@@ -223,12 +216,14 @@ model Measurement {
   isActive    Boolean             @default(true)
   isRequired  Boolean             @default(false) // saisie obligatoire dans l'étude
 
-  // Ordre d'affichage global du tronc commun (côtes communes uniquement).
-  // S'applique avant les côtes spécifiques au type de vélo. Ignoré si non commune.
+  // Ordre PAR DÉFAUT du tronc commun (côtes communes uniquement) : point de départ
+  // d'un nouveau type de vélo, et départage un commun sans position propre. L'ordre
+  // réellement affiché est celui de chaque type de vélo (BikeTypeMeasurement.order).
   commonOrder Int                 @default(0)
 
-  // Si non commune, liée à un ou plusieurs types de vélo via la table de
-  // configuration (qui porte aussi l'ordre d'affichage propre à chaque vélo).
+  // Liens avec les types de vélo, via la table de configuration qui porte l'ordre
+  // d'affichage propre à chaque vélo. Une côte commune est liée à TOUS les types
+  // (à la position choisie pour chacun) ; sinon, aux types qui la relèvent.
   bikeTypeLinks BikeTypeMeasurement[]
 
   createdAt   DateTime @default(now())
@@ -237,17 +232,18 @@ model Measurement {
   @@index([createdById])
 }
 
-// Configuration d'une étude par type de vélo : quelles côtes (non communes) sont
-// relevées pour ce vélo, et dans quel ordre elles s'affichent dans le formulaire.
-// Le tronc commun (Measurement.isCommon) s'applique à tous les vélos sans lien
-// explicite. L'ordre remplace l'ancien champ global `Measurement.order`.
+// Configuration d'une étude par type de vélo : quelles côtes sont relevées pour ce
+// vélo, et dans quel ordre elles s'affichent dans le formulaire, le récapitulatif,
+// le dossier patient et le PDF. Une liste ordonnée unique par type de vélo : le
+// tronc commun (Measurement.isCommon) y figure comme les autres côtes, à la
+// position choisie par l'admin — il est lié à tous les types et ne se retire pas.
 model BikeTypeMeasurement {
   bikeTypeId    String
   bikeType      BikeType    @relation(fields: [bikeTypeId], references: [id], onDelete: Cascade)
   measurementId String
   measurement   Measurement @relation(fields: [measurementId], references: [id], onDelete: Cascade)
 
-  order Int @default(0) // ordre d'affichage de cette côte pour ce type de vélo
+  order Int @default(0) // position de cette côte dans la liste de ce type de vélo
 
   @@id([bikeTypeId, measurementId])
   @@index([measurementId])
@@ -270,11 +266,12 @@ model RiderMeasurement {
   isActive    Boolean             @default(true)
   isRequired  Boolean             @default(false) // saisie obligatoire dans l'étude
 
-  // Ordre d'affichage global du tronc commun (mesures communes uniquement).
+  // Ordre PAR DÉFAUT du tronc commun (mesures communes uniquement) — voir
+  // Measurement.commonOrder.
   commonOrder Int                 @default(0)
 
-  // Si non commune, liée à un ou plusieurs types de vélo via la table de
-  // configuration (qui porte aussi l'ordre d'affichage propre à chaque vélo).
+  // Liens avec les types de vélo (ordre propre à chacun). Une mesure commune est
+  // liée à TOUS les types ; sinon, aux types qui la relèvent.
   bikeTypeLinks BikeTypeRiderMeasurement[]
 
   createdAt   DateTime @default(now())
@@ -284,7 +281,8 @@ model RiderMeasurement {
 }
 
 // Configuration des mesures du cycliste par type de vélo (même rôle que
-// BikeTypeMeasurement pour les côtes : sélection + ordre d'affichage).
+// BikeTypeMeasurement pour les côtes : sélection + ordre d'affichage, tronc
+// commun compris).
 model BikeTypeRiderMeasurement {
   bikeTypeId         String
   bikeType           BikeType         @relation(fields: [bikeTypeId], references: [id], onDelete: Cascade)
@@ -313,7 +311,8 @@ model PhysioTest {
   isActive    Boolean          @default(true)
   isRequired  Boolean          @default(false) // saisie obligatoire dans l'étude
 
-  // Ordre d'affichage global du tronc commun (tests communs uniquement).
+  // Ordre PAR DÉFAUT du tronc commun (tests communs uniquement) — voir
+  // Measurement.commonOrder.
   commonOrder Int              @default(0)
 
   // Section/catégorie de regroupement dans le formulaire (Genou, Hanche...).
@@ -349,7 +348,9 @@ model PhysioTestSection {
 }
 
 // Configuration des tests physio par type de vélo (même rôle que
-// BikeTypeMeasurement pour les côtes : sélection + ordre d'affichage).
+// BikeTypeMeasurement pour les côtes : sélection + ordre d'affichage, tronc
+// commun compris). La liste est plate ; le formulaire l'affiche section par
+// section, donc seul compte l'ordre au sein de chaque section.
 model BikeTypePhysioTest {
   bikeTypeId   String
   bikeType     BikeType   @relation(fields: [bikeTypeId], references: [id], onDelete: Cascade)
@@ -513,7 +514,8 @@ model Exercise {
 
   name        String
   description String
-  category    ExerciseCategory @default(AUTRE)
+  categoryId  String
+  category    ExerciseCategory @relation(fields: [categoryId], references: [id])
   frequency   String?          // "2×/jour", "3×/semaine"
   duration    String?          // "30 secondes", "3 séries de 10"
   mediaUrl    String?          // lien vidéo ou image explicative
@@ -525,6 +527,31 @@ model Exercise {
   updatedAt   DateTime         @updatedAt
 
   @@index([createdById])
+  @@index([categoryId])
+}
+
+// Catégorie d'exercice (Souplesse, Renforcement...), gérée par l'admin (CRUD +
+// réordonnancement) — table plutôt qu'un enum : l'admin doit pouvoir en ajouter,
+// les renommer et les désactiver. Supprimable seulement sans exercice rattaché
+// (ou après réaffectation de ceux-ci). Mappée sur `exercise_category` : l'ancien
+// type enum du même nom occupait le nom `ExerciseCategory` côté Postgres pendant
+// la migration (même cas que ComponentCategory).
+model ExerciseCategory {
+  id          String   @id @default(uuid())
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  name        String   @unique
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+
+  exercises   Exercise[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+  @@map("exercise_category")
 }
 
 model BikeComponent {

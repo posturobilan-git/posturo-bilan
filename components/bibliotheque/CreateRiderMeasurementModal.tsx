@@ -39,9 +39,10 @@ export function CreateRiderMeasurementModal({
 
   const [isCommon, setIsCommon] = useState(measurement?.isCommon ?? false);
   const [isRequired, setIsRequired] = useState(measurement?.isRequired ?? false);
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(
-    measurement?.bikeTypes.map((b) => b.id) ?? []
-  );
+  // Un élément commun est lié à TOUS les types de vélo : on ne pré-sélectionne alors rien
+  // (il faut choisir explicitement les types s'il redevient spécifique).
+  const initialTypes = () => (measurement && !measurement.isCommon ? measurement.bikeTypes.map((b) => b.id) : []);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(initialTypes);
 
   function toggleType(id: string) {
     setSelectedTypes((prev) =>
@@ -53,7 +54,7 @@ export function CreateRiderMeasurementModal({
     setError(null);
     setIsCommon(measurement?.isCommon ?? false);
     setIsRequired(measurement?.isRequired ?? false);
-    setSelectedTypes(measurement?.bikeTypes.map((b) => b.id) ?? []);
+    setSelectedTypes(initialTypes());
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {

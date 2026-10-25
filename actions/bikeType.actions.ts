@@ -5,8 +5,14 @@ import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
 import { requireKine, requireAdmin } from "@/lib/auth";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
-import { bikeTypeSchema, type BikeTypeInput } from "@/lib/validations/bikeType.schema";
+import { bikeTypeSchema, configIdsSchema, type BikeTypeInput } from "@/lib/validations/bikeType.schema";
 import { PHYSIO_OUTPUT_TYPE_LABELS } from "@/lib/labels";
+import {
+  compareConfigured,
+  comparePhysioConfigured,
+  finalConfigOrder,
+  type SectionRef,
+} from "@/lib/study/config-order";
 import { Prisma, type BikeType, type PhysioOutputType } from "@prisma/client";
 
 export type BikeTypeWithCount = BikeType & { _count: { studies: number } };
@@ -47,12 +53,20 @@ export interface ConfigItem {
   id: string;
   name: string;
   hint?: string;
+  /** Tronc commun : présent sur tous les types de vélo, jamais retirable — seule sa position change. */
+  isCommon: boolean;
+  /**
+   * Regroupement d'affichage (section d'un test physio) : l'ordre ne compte
+   * qu'au sein d'un groupe. `undefined` = pas de regroupement, `null` = sans section.
+   */
+  group?: SectionRef | null;
 }
 
-/** The three columns of a transfer list: pinned trunk, selected, and available. */
+/** The two columns of a transfer list. */
 export interface ConfigLists {
-  common: ConfigItem[];
+  /** Tout ce qui s'applique au type de vélo, tronc commun compris, dans l'ordre d'affichage. */
   assigned: ConfigItem[];
+  /** Éléments spécifiques pas encore affectés à ce type de vélo. */
   available: ConfigItem[];
 }
 
@@ -67,7 +81,7 @@ function physioHint(t: { outputType: PhysioOutputType; unit: string | null }): s
   return t.outputType === "VALUE" ? t.unit ?? "valeur" : PHYSIO_OUTPUT_TYPE_LABELS[t.outputType];
 }
 
-/** Full configuration of a bike type's study form (two transfer lists). */
+/** Full configuration of a bike type's study form (three transfer lists). */
 export async function getBikeTypeConfig(bikeTypeId: string): Promise<BikeTypeConfig | null> {
   await requireKine();
 
@@ -77,105 +91,115 @@ export async function getBikeTypeConfig(bikeTypeId: string): Promise<BikeTypeCon
   });
   if (!bikeType) return null;
 
-  const [
-    mCommon,
-    mLinks,
-    mOthers,
-    rmCommon,
-    rmLinks,
-    rmOthers,
-    pCommon,
-    pLinks,
-    pOthers,
-  ] = await Promise.all([
+  // Applicable = commun (toujours) ou lié à ce type. On ne charge que le lien de
+  // CE type : c'est lui qui donne la position, via le même comparateur que le
+  // formulaire d'étude.
+  const applicable = {
+    isActive: true,
+    OR: [{ isCommon: true }, { bikeTypeLinks: { some: { bikeTypeId } } }],
+  };
+  const ownLink = { where: { bikeTypeId }, select: { bikeTypeId: true, order: true } };
+  const notAssigned = { isActive: true, isCommon: false, bikeTypeLinks: { none: { bikeTypeId } } };
+
+  const [mAssigned, mOthers, rmAssigned, rmOthers, pAssigned, pOthers] = await Promise.all([
     prisma.measurement.findMany({
-      where: { isActive: true, isCommon: true },
-      select: { id: true, name: true, unit: true },
-      orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
-    }),
-    prisma.bikeTypeMeasurement.findMany({
-      where: { bikeTypeId, measurement: { isActive: true, isCommon: false } },
-      include: { measurement: { select: { id: true, name: true, unit: true } } },
-      orderBy: { order: "asc" },
+      where: applicable,
+      select: { id: true, name: true, unit: true, isCommon: true, commonOrder: true, bikeTypeLinks: ownLink },
     }),
     prisma.measurement.findMany({
-      where: { isActive: true, isCommon: false, bikeTypeLinks: { none: { bikeTypeId } } },
+      where: notAssigned,
       select: { id: true, name: true, unit: true },
       orderBy: { name: "asc" },
     }),
     prisma.riderMeasurement.findMany({
-      where: { isActive: true, isCommon: true },
-      select: { id: true, name: true, unit: true },
-      orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
-    }),
-    prisma.bikeTypeRiderMeasurement.findMany({
-      where: { bikeTypeId, riderMeasurement: { isActive: true, isCommon: false } },
-      include: { riderMeasurement: { select: { id: true, name: true, unit: true } } },
-      orderBy: { order: "asc" },
+      where: applicable,
+      select: { id: true, name: true, unit: true, isCommon: true, commonOrder: true, bikeTypeLinks: ownLink },
     }),
     prisma.riderMeasurement.findMany({
-      where: { isActive: true, isCommon: false, bikeTypeLinks: { none: { bikeTypeId } } },
+      where: notAssigned,
       select: { id: true, name: true, unit: true },
       orderBy: { name: "asc" },
     }),
     prisma.physioTest.findMany({
-      where: { isActive: true, isCommon: true },
-      select: { id: true, name: true, unit: true, outputType: true },
-      orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
-    }),
-    prisma.bikeTypePhysioTest.findMany({
-      where: { bikeTypeId, physioTest: { isActive: true, isCommon: false } },
-      include: { physioTest: { select: { id: true, name: true, unit: true, outputType: true } } },
-      orderBy: { order: "asc" },
+      where: applicable,
+      select: {
+        id: true,
+        name: true,
+        unit: true,
+        outputType: true,
+        isCommon: true,
+        commonOrder: true,
+        bikeTypeLinks: ownLink,
+        section: { select: { id: true, name: true, order: true } },
+      },
     }),
     prisma.physioTest.findMany({
-      where: { isActive: true, isCommon: false, bikeTypeLinks: { none: { bikeTypeId } } },
-      select: { id: true, name: true, unit: true, outputType: true },
+      where: notAssigned,
+      select: {
+        id: true,
+        name: true,
+        unit: true,
+        outputType: true,
+        section: { select: { id: true, name: true, order: true } },
+      },
       orderBy: { name: "asc" },
     }),
   ]);
 
-  const asMeasure = (m: { id: string; name: string; unit: string }): ConfigItem => ({
+  const asMeasure = (m: { id: string; name: string; unit: string; isCommon?: boolean }): ConfigItem => ({
     id: m.id,
     name: m.name,
     hint: m.unit,
+    isCommon: m.isCommon ?? false,
   });
   const asPhysio = (t: {
     id: string;
     name: string;
     unit: string | null;
     outputType: PhysioOutputType;
-  }): ConfigItem => ({ id: t.id, name: t.name, hint: physioHint(t) });
+    isCommon?: boolean;
+    section: SectionRef | null;
+  }): ConfigItem => ({
+    id: t.id,
+    name: t.name,
+    hint: physioHint(t),
+    isCommon: t.isCommon ?? false,
+    group: t.section,
+  });
 
   return {
     bikeType,
     measurements: {
-      common: mCommon.map(asMeasure),
-      assigned: mLinks.map((l) => asMeasure(l.measurement)),
+      assigned: mAssigned.sort(compareConfigured(bikeTypeId)).map(asMeasure),
       available: mOthers.map(asMeasure),
     },
     riderMeasurements: {
-      common: rmCommon.map(asMeasure),
-      assigned: rmLinks.map((l) => asMeasure(l.riderMeasurement)),
+      assigned: rmAssigned.sort(compareConfigured(bikeTypeId)).map(asMeasure),
       available: rmOthers.map(asMeasure),
     },
     physioTests: {
-      common: pCommon.map(asPhysio),
-      assigned: pLinks.map((l) => asPhysio(l.physioTest)),
+      // Ordre global (sections puis position) : au sein d'une section, c'est la
+      // position enregistrée ; l'écran de config regroupe par section.
+      assigned: pAssigned.sort(comparePhysioConfigured(bikeTypeId)).map(asPhysio),
       available: pOthers.map(asPhysio),
     },
   };
 }
 
 /**
- * Replaces the ordered set of (non-common) côtes configured for a bike type.
- * The given list is the exact right-column content, top to bottom. Common côtes
- * are implicit and never passed here.
+ * Replaces the ordered list of côtes configured for a bike type. The given list
+ * is the exact right-column content, top to bottom, common trunk included — a
+ * common côte can be placed anywhere but never removed: any active common côte
+ * missing from the list is appended at the end. Links of deactivated côtes are
+ * left alone so reactivating one restores its place.
  */
 export async function setBikeTypeMeasurements(
   bikeTypeId: string,
   measurementIds: string[]
 ): Promise<ActionResult<void>> {
+  const requested = configIdsSchema.safeParse(measurementIds);
+  if (!requested.success) return fail("Liste d'éléments invalide.");
+
   try {
     const admin = await requireAdmin();
 
@@ -185,17 +209,21 @@ export async function setBikeTypeMeasurements(
     });
     if (!bikeType) return fail("Type de vélo introuvable.");
 
-    // Ignore any common côtes that slipped in — they apply to all bike types and
-    // must never be stored as explicit links.
-    const valid = await prisma.measurement.findMany({
-      where: { id: { in: measurementIds }, isCommon: false },
-      select: { id: true },
-    });
-    const validIds = new Set(valid.map((m) => m.id));
-    const ordered = measurementIds.filter((id) => validIds.has(id));
+    const [active, common] = await Promise.all([
+      prisma.measurement.findMany({ where: { isActive: true }, select: { id: true } }),
+      prisma.measurement.findMany({
+        where: { isActive: true, isCommon: true },
+        select: { id: true },
+        orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
+      }),
+    ]);
+    const activeIds = new Set(active.map((m) => m.id));
+    const ordered = finalConfigOrder(requested.data, activeIds, common.map((m) => m.id));
 
     await prisma.$transaction([
-      prisma.bikeTypeMeasurement.deleteMany({ where: { bikeTypeId } }),
+      // Only the links of elements seen at read time: one created or reactivated
+      // meanwhile keeps its own link instead of being wiped.
+      prisma.bikeTypeMeasurement.deleteMany({ where: { bikeTypeId, measurementId: { in: [...activeIds] } } }),
       ...(ordered.length
         ? [
             prisma.bikeTypeMeasurement.createMany({
@@ -223,13 +251,16 @@ export async function setBikeTypeMeasurements(
 }
 
 /**
- * Replaces the ordered set of (non-common) mesures du cycliste configured for a
- * bike type. Mirrors setBikeTypeMeasurements; common mesures are implicit.
+ * Replaces the ordered list of mesures du cycliste configured for a bike type.
+ * Mirrors setBikeTypeMeasurements (common mesures: any position, never removed).
  */
 export async function setBikeTypeRiderMeasurements(
   bikeTypeId: string,
   riderMeasurementIds: string[]
 ): Promise<ActionResult<void>> {
+  const requested = configIdsSchema.safeParse(riderMeasurementIds);
+  if (!requested.success) return fail("Liste d'éléments invalide.");
+
   try {
     const admin = await requireAdmin();
 
@@ -239,16 +270,21 @@ export async function setBikeTypeRiderMeasurements(
     });
     if (!bikeType) return fail("Type de vélo introuvable.");
 
-    // Ignore any common mesures that slipped in — they apply to all bike types.
-    const valid = await prisma.riderMeasurement.findMany({
-      where: { id: { in: riderMeasurementIds }, isCommon: false },
-      select: { id: true },
-    });
-    const validIds = new Set(valid.map((m) => m.id));
-    const ordered = riderMeasurementIds.filter((id) => validIds.has(id));
+    const [active, common] = await Promise.all([
+      prisma.riderMeasurement.findMany({ where: { isActive: true }, select: { id: true } }),
+      prisma.riderMeasurement.findMany({
+        where: { isActive: true, isCommon: true },
+        select: { id: true },
+        orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
+      }),
+    ]);
+    const activeIds = new Set(active.map((m) => m.id));
+    const ordered = finalConfigOrder(requested.data, activeIds, common.map((m) => m.id));
 
     await prisma.$transaction([
-      prisma.bikeTypeRiderMeasurement.deleteMany({ where: { bikeTypeId } }),
+      // Only the links of elements seen at read time: one created or reactivated
+      // meanwhile keeps its own link instead of being wiped.
+      prisma.bikeTypeRiderMeasurement.deleteMany({ where: { bikeTypeId, riderMeasurementId: { in: [...activeIds] } } }),
       ...(ordered.length
         ? [
             prisma.bikeTypeRiderMeasurement.createMany({
@@ -276,13 +312,18 @@ export async function setBikeTypeRiderMeasurements(
 }
 
 /**
- * Replaces the ordered set of (non-common) physio tests configured for a bike
- * type. Mirrors setBikeTypeMeasurements; common tests are implicit.
+ * Replaces the ordered list of physio tests configured for a bike type. Mirrors
+ * setBikeTypeMeasurements (common tests: any position, never removed). The list
+ * is flat; the form shows it section by section, so the order that matters is
+ * the one within each section.
  */
 export async function setBikeTypePhysioTests(
   bikeTypeId: string,
   physioTestIds: string[]
 ): Promise<ActionResult<void>> {
+  const requested = configIdsSchema.safeParse(physioTestIds);
+  if (!requested.success) return fail("Liste d'éléments invalide.");
+
   try {
     const admin = await requireAdmin();
 
@@ -292,15 +333,21 @@ export async function setBikeTypePhysioTests(
     });
     if (!bikeType) return fail("Type de vélo introuvable.");
 
-    const valid = await prisma.physioTest.findMany({
-      where: { id: { in: physioTestIds }, isCommon: false },
-      select: { id: true },
-    });
-    const validIds = new Set(valid.map((t) => t.id));
-    const ordered = physioTestIds.filter((id) => validIds.has(id));
+    const [active, common] = await Promise.all([
+      prisma.physioTest.findMany({ where: { isActive: true }, select: { id: true } }),
+      prisma.physioTest.findMany({
+        where: { isActive: true, isCommon: true },
+        select: { id: true },
+        orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
+      }),
+    ]);
+    const activeIds = new Set(active.map((t) => t.id));
+    const ordered = finalConfigOrder(requested.data, activeIds, common.map((t) => t.id));
 
     await prisma.$transaction([
-      prisma.bikeTypePhysioTest.deleteMany({ where: { bikeTypeId } }),
+      // Only the links of elements seen at read time: one created or reactivated
+      // meanwhile keeps its own link instead of being wiped.
+      prisma.bikeTypePhysioTest.deleteMany({ where: { bikeTypeId, physioTestId: { in: [...activeIds] } } }),
       ...(ordered.length
         ? [
             prisma.bikeTypePhysioTest.createMany({
@@ -327,115 +374,6 @@ export async function setBikeTypePhysioTests(
   }
 }
 
-/**
- * Persists the global display order of the common-trunk côtes from an ordered
- * list of ids (top to bottom). Non-common ids are ignored. This order is global
- * (shared by every bike type) and applies first in the study form.
- */
-export async function setCommonMeasurementOrder(
-  measurementIds: string[]
-): Promise<ActionResult<void>> {
-  try {
-    const admin = await requireAdmin();
-    const valid = await prisma.measurement.findMany({
-      where: { id: { in: measurementIds }, isCommon: true },
-      select: { id: true },
-    });
-    const validIds = new Set(valid.map((m) => m.id));
-    const ordered = measurementIds.filter((id) => validIds.has(id));
-
-    await prisma.$transaction(
-      ordered.map((id, commonOrder) =>
-        prisma.measurement.update({ where: { id }, data: { commonOrder } })
-      )
-    );
-
-    await logAudit({
-      userId: admin.id,
-      action: "UPDATE",
-      entity: "measurement",
-      entityId: "commonOrder",
-      metadata: { count: ordered.length },
-    });
-    revalidatePath("/dashboard/configuration");
-    return ok(undefined);
-  } catch (e) {
-    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
-    console.error("setCommonMeasurementOrder failed:", e);
-    return fail("Impossible d'enregistrer l'ordre du tronc commun. Réessayez.");
-  }
-}
-
-/** Mirrors setCommonMeasurementOrder for the common-trunk mesures du cycliste. */
-export async function setCommonRiderMeasurementOrder(
-  riderMeasurementIds: string[]
-): Promise<ActionResult<void>> {
-  try {
-    const admin = await requireAdmin();
-    const valid = await prisma.riderMeasurement.findMany({
-      where: { id: { in: riderMeasurementIds }, isCommon: true },
-      select: { id: true },
-    });
-    const validIds = new Set(valid.map((m) => m.id));
-    const ordered = riderMeasurementIds.filter((id) => validIds.has(id));
-
-    await prisma.$transaction(
-      ordered.map((id, commonOrder) =>
-        prisma.riderMeasurement.update({ where: { id }, data: { commonOrder } })
-      )
-    );
-
-    await logAudit({
-      userId: admin.id,
-      action: "UPDATE",
-      entity: "riderMeasurement",
-      entityId: "commonOrder",
-      metadata: { count: ordered.length },
-    });
-    revalidatePath("/dashboard/configuration");
-    return ok(undefined);
-  } catch (e) {
-    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
-    console.error("setCommonRiderMeasurementOrder failed:", e);
-    return fail("Impossible d'enregistrer l'ordre du tronc commun. Réessayez.");
-  }
-}
-
-/** Mirrors setCommonMeasurementOrder for the common-trunk physio tests. */
-export async function setCommonPhysioTestOrder(
-  physioTestIds: string[]
-): Promise<ActionResult<void>> {
-  try {
-    const admin = await requireAdmin();
-    const valid = await prisma.physioTest.findMany({
-      where: { id: { in: physioTestIds }, isCommon: true },
-      select: { id: true },
-    });
-    const validIds = new Set(valid.map((t) => t.id));
-    const ordered = physioTestIds.filter((id) => validIds.has(id));
-
-    await prisma.$transaction(
-      ordered.map((id, commonOrder) =>
-        prisma.physioTest.update({ where: { id }, data: { commonOrder } })
-      )
-    );
-
-    await logAudit({
-      userId: admin.id,
-      action: "UPDATE",
-      entity: "physioTest",
-      entityId: "commonOrder",
-      metadata: { count: ordered.length },
-    });
-    revalidatePath("/dashboard/configuration");
-    return ok(undefined);
-  } catch (e) {
-    if (e instanceof Error && e.message === "Accès refusé") return fail("Réservé aux administrateurs.");
-    console.error("setCommonPhysioTestOrder failed:", e);
-    return fail("Impossible d'enregistrer l'ordre du tronc commun. Réessayez.");
-  }
-}
-
 // ─── Mutations (ADMIN only) ─────────────────────────────────────────────────────
 
 export async function createBikeType(data: BikeTypeInput): Promise<ActionResult<{ id: string }>> {
@@ -444,8 +382,27 @@ export async function createBikeType(data: BikeTypeInput): Promise<ActionResult<
 
   try {
     const admin = await requireAdmin();
+
+    // Un nouveau type part de l'ordre par défaut du tronc commun (commonOrder) :
+    // les éléments communs — actifs ou non, pour qu'une réactivation les retrouve —
+    // sont liés d'emblée, dans cet ordre. Le tout dans la même écriture.
+    const defaultOrder = [{ commonOrder: "asc" as const }, { name: "asc" as const }];
+    const [mCommon, rmCommon, pCommon] = await Promise.all([
+      prisma.measurement.findMany({ where: { isCommon: true }, select: { id: true }, orderBy: defaultOrder }),
+      prisma.riderMeasurement.findMany({ where: { isCommon: true }, select: { id: true }, orderBy: defaultOrder }),
+      prisma.physioTest.findMany({ where: { isCommon: true }, select: { id: true }, orderBy: defaultOrder }),
+    ]);
+
     const bikeType = await prisma.bikeType.create({
-      data: { ...parsed.data, createdById: admin.id },
+      data: {
+        ...parsed.data,
+        createdById: admin.id,
+        measurementLinks: { create: mCommon.map((m, order) => ({ measurementId: m.id, order })) },
+        riderMeasurementLinks: {
+          create: rmCommon.map((m, order) => ({ riderMeasurementId: m.id, order })),
+        },
+        physioTestLinks: { create: pCommon.map((t, order) => ({ physioTestId: t.id, order })) },
+      },
     });
     await logAudit({ userId: admin.id, action: "CREATE", entity: "bikeType", entityId: bikeType.id });
     revalidatePath("/dashboard/configuration");

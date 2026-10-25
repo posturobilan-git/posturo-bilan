@@ -17,6 +17,11 @@ import {
 } from "@/lib/stores/studyStore";
 import { toast } from "@/lib/stores/toastStore";
 import { findMissingRequired, firstBlockingStep } from "@/lib/study/required-fields";
+import {
+  compareConfigured,
+  comparePhysioConfigured,
+  type ConfigOrderable,
+} from "@/lib/study/config-order";
 import { getMissingControls, pickNextControl, revealControl } from "@/lib/study/focus-missing";
 import { saveDraftStudy, submitStudy } from "@/actions/study.actions";
 import { StudyStepper } from "./StudyStepper";
@@ -27,14 +32,14 @@ import { MeasuresForm, type MeasurementForStudy } from "./MeasuresForm";
 import { RiderMeasuresForm, type RiderMeasurementForStudy } from "./RiderMeasuresForm";
 import { PhysioTestsForm, type PhysioTestForStudy } from "./PhysioTestsForm";
 import { ComponentPicker, type ComponentForStudy } from "./ComponentPicker";
-import { ExercisePicker } from "./ExercisePicker";
+import { ExercisePicker, type ExerciseForStudy } from "./ExercisePicker";
 import {
   StudySummaryStep,
   type RecapMeasureRow,
   type RecapPhysioRow,
 } from "./StudySummaryStep";
 import type { ComparePhoto } from "./PhotoComparison";
-import type { BikeType, ComponentAttribute, Exercise, Patient, PatientIntake } from "@prisma/client";
+import type { BikeType, ComponentAttribute, Patient, PatientIntake } from "@prisma/client";
 import type { PhysioValue } from "@/lib/physio";
 import type { StudyPainInput } from "@/types";
 
@@ -47,7 +52,9 @@ interface Props {
   components: ComponentForStudy[];
   categories: { id: string; name: string }[];
   attributesByCategory: Record<string, ComponentAttribute[]>;
-  exercises: Exercise[];
+  exercises: ExerciseForStudy[];
+  /** Active exercise categories — the picker's filter. */
+  exerciseCategories: { id: string; name: string }[];
   /** Pre-filled from an existing study, if any */
   initial?: {
     studyId: string;
@@ -85,6 +92,7 @@ export function StudyForm({
   categories,
   attributesByCategory,
   exercises,
+  exerciseCategories,
   initial,
 }: Props) {
   const router = useRouter();
@@ -355,18 +363,22 @@ export function StudyForm({
   // ── Read-only recap rows for the final step ──────────────────────────────────
   // Resolved from the store + metadata, mirroring the dossier patient display.
 
-  function buildMeasureRecap(
-    defs: { id: string; name: string; unit: string }[],
+  // Les lignes suivent l'ordre configuré du type de vélo (celui du formulaire) ;
+  // celles qui n'y figurent pas (ajoutées pour cette étude) viennent après.
+  const byConfigOrder = compareConfigured(store.bikeTypeId);
+
+  function buildMeasureRecap<D extends ConfigOrderable & { id: string; unit: string }>(
+    defs: D[],
     values: Record<string, { before: number | null; after: number | null }>
   ): RecapMeasureRow[] {
     const byId = new Map(defs.map((d) => [d.id, d]));
     return Object.entries(values)
       .map(([id, v]) => ({ id, def: byId.get(id), v }))
-      .filter((r): r is { id: string; def: { id: string; name: string; unit: string }; v: { before: number | null; after: number | null } } =>
+      .filter((r): r is { id: string; def: D; v: { before: number | null; after: number | null } } =>
         Boolean(r.def) && (r.v.before != null || r.v.after != null)
       )
-      .map(({ id, def, v }) => ({ id, name: def.name, unit: def.unit, before: v.before, after: v.after }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => byConfigOrder(a.def, b.def))
+      .map(({ id, def, v }) => ({ id, name: def.name, unit: def.unit, before: v.before, after: v.after }));
   }
 
   const measureRecap = buildMeasureRecap(measurements, store.measureValues);
@@ -381,6 +393,7 @@ export function StudyForm({
   const beforePhotos = toCompare("BEFORE");
   const afterPhotos = toCompare("AFTER");
 
+  const byPhysioOrder = comparePhysioConfigured(store.bikeTypeId);
   const physioById = new Map(physioTests.map((t) => [t.id, t]));
   const physioRecap: RecapPhysioRow[] = [
     ...new Set([
@@ -397,8 +410,8 @@ export function StudyForm({
     .filter((r): r is { id: string; def: PhysioTestForStudy; value: PhysioValue; comment: string | null } =>
       Boolean(r.def) && ((r.value !== null && r.value !== undefined && r.value !== "") || Boolean(r.comment))
     )
-    .map((r) => ({ id: r.id, name: r.def.name, outputType: r.def.outputType, unit: r.def.unit, value: r.value, comment: r.comment }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => byPhysioOrder(a.def, b.def))
+    .map((r) => ({ id: r.id, name: r.def.name, outputType: r.def.outputType, unit: r.def.unit, value: r.value, comment: r.comment }));
 
   return (
     <div ref={rootRef} onFocus={rememberFocus} className="space-y-6">
@@ -502,6 +515,7 @@ export function StudyForm({
       {store.step === 8 && (
         <ExercisePicker
           exercises={exercises}
+          categories={exerciseCategories}
           components={components}
           selected={store.selectedExerciseIds}
           selectedComponentIds={store.selectedComponentIds}

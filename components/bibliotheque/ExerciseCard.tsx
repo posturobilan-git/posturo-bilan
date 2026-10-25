@@ -3,13 +3,21 @@
 import { useTransition } from "react";
 import { toggleExercise, deleteExercise, type ExerciseWithCount } from "@/actions/exercise.actions";
 import { toast } from "@/lib/stores/toastStore";
-import { EXERCISE_CATEGORY_LABELS } from "@/lib/labels";
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { IconButton } from "@/components/ui/IconButton";
-import { EyeIcon, EyeOffIcon } from "@/components/ui/icons";
+import { EyeIcon, EyeOffIcon, TrashIcon } from "@/components/ui/icons";
 import { CreateExerciseModal } from "./CreateExerciseModal";
 
-export function ExerciseCard({ exercise, isAdmin }: { exercise: ExerciseWithCount; isAdmin: boolean }) {
+export function ExerciseCard({
+  exercise,
+  categories,
+  isAdmin,
+}: {
+  exercise: ExerciseWithCount;
+  /** Active categories, for the edit form's selector. */
+  categories: { id: string; name: string }[];
+  isAdmin: boolean;
+}) {
   const [pending, startTransition] = useTransition();
 
   function handleToggle() {
@@ -25,7 +33,7 @@ export function ExerciseCard({ exercise, isAdmin }: { exercise: ExerciseWithCoun
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-semibold text-content">{exercise.name}</h3>
         <span className="flex-shrink-0 rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-700">
-          {EXERCISE_CATEGORY_LABELS[exercise.category]}
+          {exercise.category.name}
         </span>
       </div>
 
@@ -60,22 +68,25 @@ export function ExerciseCard({ exercise, isAdmin }: { exercise: ExerciseWithCoun
         </span>
         {isAdmin && (
           <div className="flex items-center gap-1">
-            <CreateExerciseModal exercise={exercise} />
+            <CreateExerciseModal exercise={exercise} categories={categories} />
             <IconButton
               icon={exercise.isActive ? <EyeOffIcon /> : <EyeIcon />}
               label={exercise.isActive ? "Désactiver" : "Activer"}
               onClick={handleToggle}
               disabled={pending}
             />
-            <DeleteButton
-              onConfirm={() => deleteExercise(exercise.id)}
-              successMessage="Exercice supprimé."
-              warning={
-                exercise._count.studies > 0
-                  ? `Retiré de ${exercise._count.studies} étude(s).`
-                  : undefined
-              }
-            />
+            {/* Un exercice déjà prescrit fait partie de l'historique des études : on le
+                désactive, on ne le supprime pas. */}
+            {exercise._count.studies > 0 ? (
+              <IconButton
+                icon={<TrashIcon />}
+                label={`Suppression impossible : prescrit dans ${exercise._count.studies} étude(s) — désactivez-le`}
+                variant="danger"
+                disabled
+              />
+            ) : (
+              <DeleteButton onConfirm={() => deleteExercise(exercise.id)} successMessage="Exercice supprimé." />
+            )}
           </div>
         )}
       </div>

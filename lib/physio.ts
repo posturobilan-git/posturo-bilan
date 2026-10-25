@@ -1,4 +1,5 @@
 import type { PhysioOutputType } from "@prisma/client";
+import type { PhysioConfigOrderable } from "@/lib/study/config-order";
 
 /** A physio result value. Its concrete type depends on the test's outputType. */
 export type PhysioValue = number | boolean | string | null;
@@ -11,9 +12,11 @@ export interface StudyPhysioResult {
   comment?: string | null;
 }
 
-/** Metadata needed to render a stored physio result. */
-export interface PhysioTestInfo {
-  name: string;
+/**
+ * Metadata needed to render a stored physio result, and to order it like the
+ * study form does (section, then the bike type's configured order).
+ */
+export interface PhysioTestInfo extends PhysioConfigOrderable {
   outputType: PhysioOutputType;
   unit: string | null;
 }

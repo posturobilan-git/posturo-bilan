@@ -55,7 +55,6 @@ export function NewPatientButton({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const phone = fd.get("phone") as string;
     const kineId = fd.get("kineId") as string | null;
 
     setError(null);
@@ -64,7 +63,7 @@ export function NewPatientButton({
         firstName: fd.get("firstName") as string,
         lastName: fd.get("lastName") as string,
         email: fd.get("email") as string,
-        phone: phone || undefined,
+        phone: String(fd.get("phone") ?? ""),
         kineId: isAdmin && kineId ? kineId : undefined,
       });
       if (!result.ok) {
@@ -111,7 +110,15 @@ export function NewPatientButton({
                 <Field label="Nom" name="lastName" required autoComplete="family-name" />
               </div>
               <Field label="Email" name="email" type="email" required autoComplete="email" />
-              <Field label="Téléphone" name="phone" type="tel" placeholder="Optionnel" autoComplete="tel" />
+              <Field
+                label="Téléphone"
+                name="phone"
+                type="tel"
+                inputMode="tel"
+                required
+                placeholder="06 12 34 56 78"
+                autoComplete="tel"
+              />
 
               {/* Sélecteur de kiné — ADMIN uniquement */}
               {isAdmin && kines.length > 0 && (

@@ -40,31 +40,6 @@ export async function getRiderMeasurements(filters?: {
   }));
 }
 
-/**
- * Active mesures du cycliste applicable to a study of the given bike type, in
- * display order: the common trunk first, then those configured for this bike
- * type in their configured order. Mirrors getMeasurementsForBikeType.
- */
-export async function getRiderMeasurementsForBikeType(
-  bikeTypeId: string
-): Promise<RiderMeasurement[]> {
-  await requireKine();
-
-  const [common, links] = await Promise.all([
-    prisma.riderMeasurement.findMany({
-      where: { isActive: true, isCommon: true },
-      orderBy: [{ commonOrder: "asc" }, { name: "asc" }],
-    }),
-    prisma.bikeTypeRiderMeasurement.findMany({
-      where: { bikeTypeId, riderMeasurement: { isActive: true, isCommon: false } },
-      include: { riderMeasurement: true },
-      orderBy: { order: "asc" },
-    }),
-  ]);
-
-  return [...common, ...links.map((l) => l.riderMeasurement)];
-}
-
 // ─── Mutations (ADMIN only) ─────────────────────────────────────────────────────
 
 function relationData(input: RiderMeasurementInput) {
@@ -74,9 +49,28 @@ function relationData(input: RiderMeasurementInput) {
     category: input.category,
     isCommon: input.isCommon,
     isRequired: input.isRequired,
-    // A common measurement applies to all bike types, so it carries no explicit links.
-    bikeTypeIds: input.isCommon ? [] : input.bikeTypeIds,
   };
+}
+
+/**
+ * Types de vélo auxquels lier l'élément. Un élément commun figure sur TOUS les
+ * types (actifs ou non, pour qu'une réactivation le retrouve), à une position
+ * propre à chacun ; sinon, ceux choisis par l'admin.
+ */
+async function targetBikeTypeIds(input: RiderMeasurementInput): Promise<string[]> {
+  if (!input.isCommon) return input.bikeTypeIds;
+  const all = await prisma.bikeType.findMany({ select: { id: true } });
+  return all.map((b) => b.id);
+}
+
+/**
+ * Default-order slot for an element becoming common: after every existing one.
+ * `commonOrder` is the template a NEW bike type starts from, so a freshly added
+ * common element must land last there too (as it does on existing bike types).
+ */
+async function nextCommonOrder(): Promise<number> {
+  const max = await prisma.riderMeasurement.aggregate({ where: { isCommon: true }, _max: { commonOrder: true } });
+  return (max._max.commonOrder ?? -1) + 1;
 }
 
 /** Next free display order for a mesure appended to a given bike type's config. */
@@ -97,7 +91,11 @@ export async function createRiderMeasurement(
 
   try {
     const admin = await requireAdmin();
-    const { bikeTypeIds, ...fields } = relationData(parsed.data);
+    const fields = {
+      ...relationData(parsed.data),
+      commonOrder: parsed.data.isCommon ? await nextCommonOrder() : 0,
+    };
+    const bikeTypeIds = await targetBikeTypeIds(parsed.data);
 
     const links = await Promise.all(
       bikeTypeIds.map(async (bikeTypeId) => ({ bikeTypeId, order: await nextOrderFor(bikeTypeId) }))
@@ -129,7 +127,14 @@ export async function updateRiderMeasurement(
 
   try {
     const admin = await requireAdmin();
-    const { bikeTypeIds, ...fields } = relationData(parsed.data);
+    const current = await prisma.riderMeasurement.findUnique({ where: { id }, select: { isCommon: true } });
+    if (!current) return fail("Élément introuvable.");
+    const fields = {
+      ...relationData(parsed.data),
+      // Becoming common → last in the default order (an element that stays common keeps its slot).
+      ...(parsed.data.isCommon && !current.isCommon && { commonOrder: await nextCommonOrder() }),
+    };
+    const bikeTypeIds = await targetBikeTypeIds(parsed.data);
 
     // Reconcile bike-type links without disturbing the configured order of the
     // ones that stay: drop the removed links, append any newly-added ones.

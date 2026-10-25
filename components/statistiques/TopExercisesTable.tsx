@@ -1,6 +1,4 @@
-import { EXERCISE_CATEGORY_LABELS } from "@/lib/labels";
 import type { TopExercise } from "@/lib/stats";
-import type { ExerciseCategory } from "@prisma/client";
 
 export function TopExercisesTable({ items }: { items: TopExercise[] }) {
   if (items.length === 0) {
@@ -25,7 +23,7 @@ export function TopExercisesTable({ items }: { items: TopExercise[] }) {
             <td className="px-4 py-2.5 font-medium text-content">{e.name}</td>
             <td className="px-4 py-2.5">
               <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
-                {EXERCISE_CATEGORY_LABELS[e.category as ExerciseCategory] ?? e.category}
+                {e.category}
               </span>
             </td>
             <td className="px-4 py-2.5 text-right font-semibold text-content">{e.count}</td>

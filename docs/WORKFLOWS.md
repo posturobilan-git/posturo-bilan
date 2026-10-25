@@ -16,14 +16,16 @@ Cal.com (nouvelle réservation)
 POST /api/webhooks/cal?kineId=<uuid>
   ├── Vérifie la signature (header x-cal-signature-256 + CAL_WEBHOOK_SECRET)
   ├── Lit le kineId dans le query param (un Event Type Cal.com par kiné)
-  ├── Extrait email, nom (→ prénom/nom), uid de réservation depuis l'attendee
+  ├── Extrait email, nom (→ prénom/nom), uid de réservation depuis l'attendee,
+  │   et le téléphone s'il est présent et valide (jamais supposé présent)
   ├── Upsert du patient (email = clé de déduplication), génère son inviteToken
   └── sendIntakeEmail(patientId) → email avec lien /accueil/[token]
         │
         ▼
   Patient ouvre /accueil/[token] (public)
     ├── Étape 1 : CGU + consentement RGPD (obligatoire)
-    └── Étape 2 : formulaire → PatientIntake enregistré, lien invalidé
+    └── Étape 2 : formulaire (téléphone obligatoire, normalisé E.164 sur le patient)
+        → PatientIntake enregistré, lien invalidé
 ```
 
 **Configuration Cal.com :** créer un Event Type par kiné et y ajouter un webhook

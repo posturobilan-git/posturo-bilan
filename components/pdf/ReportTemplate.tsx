@@ -628,7 +628,7 @@ export function ReportTemplate({
               <View style={styles.exerciseBody}>
                 <Text style={styles.exerciseName}>{e.name}</Text>
                 <Text style={styles.exerciseMeta}>
-                  {[e.category, e.frequency, e.duration].filter(Boolean).join(" · ")}
+                  {[e.category.name, e.frequency, e.duration].filter(Boolean).join(" · ")}
                 </Text>
                 {e.description ? <Text style={styles.exerciseDesc}>{e.description}</Text> : null}
               </View>

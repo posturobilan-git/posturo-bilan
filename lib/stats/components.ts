@@ -52,7 +52,7 @@ export async function getComponentStats(): Promise<ComponentStats> {
 
     prisma.exercise.findMany({
       where: { isActive: true },
-      include: { _count: { select: { studies: true } } },
+      include: { _count: { select: { studies: true } }, category: { select: { name: true } } },
       orderBy: { studies: { _count: "desc" } },
       take: 8,
     }),
@@ -87,7 +87,7 @@ export async function getComponentStats(): Promise<ComponentStats> {
     topExercises: topExercises.map((e) => ({
       id: e.id,
       name: e.name,
-      category: e.category,
+      category: e.category.name,
       count: e._count.studies,
     })),
   };

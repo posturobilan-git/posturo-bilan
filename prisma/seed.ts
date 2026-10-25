@@ -4,7 +4,6 @@ loadEnvConfig(process.cwd());
 import { PrismaPg } from "@prisma/adapter-pg";
 import {
   PrismaClient,
-  ExerciseCategory,
   ComponentAttributeType,
   MeasurementCategory,
   PhysioOutputType,
@@ -31,21 +30,25 @@ const COMPONENT_CATEGORIES_SEED = ["Selle", "Potence", "Cintre", "Cale-pieds", "
 // L'ordre du tableau définit l'ordre d'affichage des groupes.
 const PHYSIO_SECTIONS = ["Tronc commun", "Genou", "Hanche", "Tests dynamiques"];
 
+// ─── Catégories d'exercices (gérées par l'admin — prompt 28) ─────────────────────
+// L'ordre du tableau définit l'ordre d'affichage.
+const EXERCISE_CATEGORIES_SEED = ["Souplesse", "Renforcement", "Mobilité", "Proprioception", "Autre"];
+
 const EXERCISES: Array<{
   name: string;
   description: string;
-  category: ExerciseCategory;
+  categoryName: string; // nom d'une entrée de EXERCISE_CATEGORIES_SEED
   frequency?: string;
   duration?: string;
 }> = [
-  { name: "Étirement du psoas", description: "Fente avant, bassin rétroversé, étirement de la chaîne antérieure de la hanche.", category: "SOUPLESSE", frequency: "2×/jour", duration: "30 s par côté" },
-  { name: "Gainage planche", description: "Maintien isométrique en appui avant-bras, dos neutre.", category: "RENFORCEMENT", frequency: "1×/jour", duration: "3 × 45 s" },
-  { name: "Mobilité thoracique", description: "Rotation du segment thoracique en quadrupédie, main derrière la tête.", category: "MOBILITE", frequency: "1×/jour", duration: "10 répétitions/côté" },
-  { name: "Renforcement VMO", description: "Extension de genou en fin d'amplitude pour le vaste médial oblique.", category: "RENFORCEMENT", frequency: "3×/semaine", duration: "3 × 15" },
-  { name: "Étirement ischio-jambiers", description: "Flexion de hanche jambe tendue, dos droit.", category: "SOUPLESSE", frequency: "2×/jour", duration: "30 s par jambe" },
-  { name: "Proprioception cheville", description: "Équilibre unipodal sur surface instable, yeux ouverts puis fermés.", category: "PROPRIOCEPTION", frequency: "1×/jour", duration: "3 × 30 s" },
-  { name: "Mobilité hanche 90/90", description: "Travail des rotations interne et externe de hanche en position assise.", category: "MOBILITE", frequency: "1×/jour", duration: "10 transitions" },
-  { name: "Renforcement moyen fessier", description: "Abduction de hanche en décubitus latéral, contrôle du bassin.", category: "RENFORCEMENT", frequency: "3×/semaine", duration: "3 × 15/côté" },
+  { name: "Étirement du psoas", description: "Fente avant, bassin rétroversé, étirement de la chaîne antérieure de la hanche.", categoryName: "Souplesse", frequency: "2×/jour", duration: "30 s par côté" },
+  { name: "Gainage planche", description: "Maintien isométrique en appui avant-bras, dos neutre.", categoryName: "Renforcement", frequency: "1×/jour", duration: "3 × 45 s" },
+  { name: "Mobilité thoracique", description: "Rotation du segment thoracique en quadrupédie, main derrière la tête.", categoryName: "Mobilité", frequency: "1×/jour", duration: "10 répétitions/côté" },
+  { name: "Renforcement VMO", description: "Extension de genou en fin d'amplitude pour le vaste médial oblique.", categoryName: "Renforcement", frequency: "3×/semaine", duration: "3 × 15" },
+  { name: "Étirement ischio-jambiers", description: "Flexion de hanche jambe tendue, dos droit.", categoryName: "Souplesse", frequency: "2×/jour", duration: "30 s par jambe" },
+  { name: "Proprioception cheville", description: "Équilibre unipodal sur surface instable, yeux ouverts puis fermés.", categoryName: "Proprioception", frequency: "1×/jour", duration: "3 × 30 s" },
+  { name: "Mobilité hanche 90/90", description: "Travail des rotations interne et externe de hanche en position assise.", categoryName: "Mobilité", frequency: "1×/jour", duration: "10 transitions" },
+  { name: "Renforcement moyen fessier", description: "Abduction de hanche en décubitus latéral, contrôle du bassin.", categoryName: "Renforcement", frequency: "3×/semaine", duration: "3 × 15/côté" },
 ];
 
 const COMPONENTS: Array<{
@@ -165,7 +168,7 @@ interface SeedMeasurement {
 }
 
 const MEASUREMENTS: SeedMeasurement[] = [
-  // Tronc commun (l'ordre `order` sert aussi de commonOrder pour les côtes communes)
+  // Tronc commun (l'ordre `order` sert de commonOrder : ordre par défaut du tronc commun)
   { name: "Hauteur de selle", unit: "cm", category: "SELLE", order: 1, isCommon: true, isRequired: true, legacyKey: "saddleHeight" },
   { name: "Recul de selle", unit: "mm", category: "SELLE", order: 2, isCommon: true, legacyKey: "saddleSetback" },
   { name: "Angle de selle", unit: "°", category: "SELLE", order: 3, isCommon: true, legacyKey: "saddleAngle" },
@@ -196,7 +199,7 @@ interface SeedRiderMeasurement {
 }
 
 const RIDER_MEASUREMENTS: SeedRiderMeasurement[] = [
-  // Tronc commun (l'ordre `order` sert aussi de commonOrder pour les mesures communes)
+  // Tronc commun (l'ordre `order` sert de commonOrder : ordre par défaut du tronc commun)
   { name: "KOPS (genou / axe de pédale)", unit: "mm", category: "POSITION", order: 1, isCommon: true, isRequired: true },
   { name: "Angle du genou en bas de pédalage", unit: "°", category: "POSITION", order: 2, isCommon: true, isRequired: true },
   { name: "Angle du genou en haut de pédalage", unit: "°", category: "POSITION", order: 3, isCommon: true },
@@ -220,7 +223,7 @@ interface SeedPhysioTest {
   section?: string; // nom d'une section de PHYSIO_SECTIONS
   bikeTypes?: string[]; // si non commun
   order?: number;
-  commonOrder?: number; // ordre global du tronc commun (si isCommon)
+  commonOrder?: number; // ordre par défaut du tronc commun (si isCommon)
 }
 
 const PHYSIO_TESTS: SeedPhysioTest[] = [
@@ -270,6 +273,7 @@ const PATIENTS: SeedPatient[] = [
     email: "emma.petit@example.com",
     firstName: "Emma",
     lastName: "Petit",
+    // Pas de téléphone, volontairement : patient « historique » — le dossier affiche « Téléphone manquant ».
     intake: { heightCm: 168, weightKg: 60, bikeType: "Route", ridingLevel: "Sportif", weeklyHours: 6, yearsRiding: 4, injuries: ["douleur cervicale"], goals: "Améliorer le confort sur longue distance." },
     studies: [], // patient sans étude encore
   },
@@ -277,6 +281,7 @@ const PATIENTS: SeedPatient[] = [
     email: "marie.dupont@example.com",
     firstName: "Marie",
     lastName: "Dupont",
+    phone: "+33612345601",
     intake: { heightCm: 172, weightKg: 64, bikeType: "Route", ridingLevel: "Compétiteur", weeklyHours: 12, yearsRiding: 8, injuries: ["lombalgie"], goals: "Optimiser l'aérodynamisme sans douleur lombaire." },
     studies: [
       {
@@ -292,6 +297,7 @@ const PATIENTS: SeedPatient[] = [
     email: "thomas.martin@example.com",
     firstName: "Thomas",
     lastName: "Martin",
+    phone: "+33612345602",
     intake: { heightCm: 181, weightKg: 78, bikeType: "Gravel", ridingLevel: "Sportif", weeklyHours: 8, yearsRiding: 10, injuries: ["douleur genou gauche"], goals: "Soulager le genou en montée." },
     studies: [
       {
@@ -320,6 +326,7 @@ const PATIENTS: SeedPatient[] = [
     email: "sophie.bernard@example.com",
     firstName: "Sophie",
     lastName: "Bernard",
+    phone: "+33612345603",
     intake: { heightCm: 165, weightKg: 58, bikeType: "Triathlon", ridingLevel: "Compétiteur", weeklyHours: 14, yearsRiding: 6, injuries: ["douleur périnéale"], goals: "Tenir la position de triathlon sans gêne." },
     studies: [
       {
@@ -341,6 +348,7 @@ const PATIENTS: SeedPatient[] = [
     email: "julien.leroy@example.com",
     firstName: "Julien",
     lastName: "Leroy",
+    phone: "+33612345604",
     intake: { heightCm: 178, weightKg: 82, bikeType: "VTT", ridingLevel: "Loisir", weeklyHours: 4, yearsRiding: 3, injuries: ["douleur épaule"], goals: "Confort en sortie VTT le week-end." },
     studies: [
       {
@@ -353,6 +361,31 @@ const PATIENTS: SeedPatient[] = [
     ],
   },
 ];
+
+// ─── Ordre propre à chaque type de vélo (prompt 28) ──────────────────────────────
+// Chaque type de vélo porte sa liste ordonnée, tronc commun compris : un élément
+// commun est lié à TOUS les types, à la suite de ce que le type contient déjà. Les
+// tableaux ci-dessus listent le tronc commun avant les spécifiques, donc créer les
+// éléments dans l'ordre du tableau reproduit l'ordre par défaut (communs d'abord).
+type LinkKind = "measurement" | "riderMeasurement" | "physioTest";
+const nextLinkOrders = new Map<string, number>();
+
+async function nextLinkOrder(kind: LinkKind, bikeTypeId: string): Promise<number> {
+  const key = `${kind}:${bikeTypeId}`;
+  if (!nextLinkOrders.has(key)) {
+    const args = { where: { bikeTypeId }, orderBy: { order: "desc" as const }, select: { order: true } };
+    const last =
+      kind === "measurement"
+        ? await prisma.bikeTypeMeasurement.findFirst(args)
+        : kind === "riderMeasurement"
+          ? await prisma.bikeTypeRiderMeasurement.findFirst(args)
+          : await prisma.bikeTypePhysioTest.findFirst(args);
+    nextLinkOrders.set(key, (last?.order ?? -1) + 1);
+  }
+  const order = nextLinkOrders.get(key)!;
+  nextLinkOrders.set(key, order + 1);
+  return order;
+}
 
 async function main() {
   const admin =
@@ -401,12 +434,26 @@ async function main() {
   const sections = await prisma.physioTestSection.findMany();
   const sectionByName = new Map(sections.map((s) => [s.name, s.id]));
 
+  // ── Catégories d'exercices ──
+  let exCatCreated = 0;
+  for (const [i, name] of EXERCISE_CATEGORIES_SEED.entries()) {
+    const exists = await prisma.exerciseCategory.findFirst({ where: { name } });
+    if (exists) continue;
+    await prisma.exerciseCategory.create({ data: { name, order: i, createdById: admin.id } });
+    exCatCreated++;
+  }
+  const exerciseCategories = await prisma.exerciseCategory.findMany();
+  const exerciseCategoryByName = new Map(exerciseCategories.map((c) => [c.name, c.id]));
+
   // ── Exercices ──
   let exCreated = 0;
   for (const ex of EXERCISES) {
     const exists = await prisma.exercise.findFirst({ where: { name: ex.name } });
     if (exists) continue;
-    await prisma.exercise.create({ data: { ...ex, createdById: admin.id } });
+    const { categoryName, ...fields } = ex;
+    const categoryId = exerciseCategoryByName.get(categoryName);
+    if (!categoryId) continue; // catégorie introuvable — ne devrait pas arriver
+    await prisma.exercise.create({ data: { ...fields, categoryId, createdById: admin.id } });
     exCreated++;
   }
 
@@ -527,16 +574,16 @@ async function main() {
         // Pour le tronc commun, l'ancien `order` devient l'ordre global d'affichage.
         commonOrder: m.isCommon ? m.order : 0,
         createdById: admin.id,
-        // Non-common côtes are linked to their bike types with a per-bike-type
-        // display order (the old global `order` becomes this link order).
-        bikeTypeLinks: m.isCommon
-          ? undefined
-          : {
-              create: (m.bikeTypes ?? [])
-                .map((n) => bikeTypeByName.get(n))
-                .filter((id): id is string => Boolean(id))
-                .map((bikeTypeId) => ({ bikeTypeId, order: m.order })),
-            },
+        // Linked to its bike types (every one for the common trunk), appended at
+        // the end of each type's own ordered list.
+        bikeTypeLinks: {
+          create: await Promise.all(
+            (m.isCommon ? bikeTypes.map((b) => b.id) : idsForNames(m.bikeTypes)).map(async (bikeTypeId) => ({
+              bikeTypeId,
+              order: await nextLinkOrder("measurement", bikeTypeId),
+            }))
+          ),
+        },
       },
     });
     measCreated++;
@@ -563,14 +610,14 @@ async function main() {
         isRequired: m.isRequired ?? false,
         commonOrder: m.isCommon ? m.order : 0,
         createdById: admin.id,
-        bikeTypeLinks: m.isCommon
-          ? undefined
-          : {
-              create: (m.bikeTypes ?? [])
-                .map((n) => bikeTypeByName.get(n))
-                .filter((id): id is string => Boolean(id))
-                .map((bikeTypeId) => ({ bikeTypeId, order: m.order })),
-            },
+        bikeTypeLinks: {
+          create: await Promise.all(
+            (m.isCommon ? bikeTypes.map((b) => b.id) : idsForNames(m.bikeTypes)).map(async (bikeTypeId) => ({
+              bikeTypeId,
+              order: await nextLinkOrder("riderMeasurement", bikeTypeId),
+            }))
+          ),
+        },
       },
     });
     riderMeasCreated++;
@@ -603,17 +650,44 @@ async function main() {
         commonOrder: t.isCommon ? t.commonOrder ?? 0 : 0,
         sectionId: t.section ? sectionByName.get(t.section) ?? null : null,
         createdById: admin.id,
-        bikeTypeLinks: t.isCommon
-          ? undefined
-          : {
-              create: (t.bikeTypes ?? [])
-                .map((n) => bikeTypeByName.get(n))
-                .filter((id): id is string => Boolean(id))
-                .map((bikeTypeId) => ({ bikeTypeId, order: t.order ?? 0 })),
-            },
+        bikeTypeLinks: {
+          create: await Promise.all(
+            (t.isCommon ? bikeTypes.map((b) => b.id) : idsForNames(t.bikeTypes)).map(async (bikeTypeId) => ({
+              bikeTypeId,
+              order: await nextLinkOrder("physioTest", bikeTypeId),
+            }))
+          ),
+        },
       },
     });
     physioCreated++;
+  }
+
+  // ── Filet de sécurité : tout élément commun figure sur tous les types de vélo ──
+  // (un type ajouté à BIKE_TYPES après coup, ou une base antérieure au prompt 28).
+  // Les manquants sont ajoutés en fin de liste, dans l'ordre par défaut du tronc commun.
+  let commonLinksAdded = 0;
+  const defaultCommonOrder = [{ commonOrder: "asc" as const }, { name: "asc" as const }];
+  for (const { id: bikeTypeId } of bikeTypes) {
+    const where = { isCommon: true, bikeTypeLinks: { none: { bikeTypeId } } };
+    for (const m of await prisma.measurement.findMany({ where, select: { id: true }, orderBy: defaultCommonOrder })) {
+      await prisma.bikeTypeMeasurement.create({
+        data: { bikeTypeId, measurementId: m.id, order: await nextLinkOrder("measurement", bikeTypeId) },
+      });
+      commonLinksAdded++;
+    }
+    for (const m of await prisma.riderMeasurement.findMany({ where, select: { id: true }, orderBy: defaultCommonOrder })) {
+      await prisma.bikeTypeRiderMeasurement.create({
+        data: { bikeTypeId, riderMeasurementId: m.id, order: await nextLinkOrder("riderMeasurement", bikeTypeId) },
+      });
+      commonLinksAdded++;
+    }
+    for (const t of await prisma.physioTest.findMany({ where, select: { id: true }, orderBy: defaultCommonOrder })) {
+      await prisma.bikeTypePhysioTest.create({
+        data: { bikeTypeId, physioTestId: t.id, order: await nextLinkOrder("physioTest", bikeTypeId) },
+      });
+      commonLinksAdded++;
+    }
   }
 
   // Maps: measurement name/id and legacy-key → measurementId (for conversions).
@@ -734,7 +808,8 @@ async function main() {
       `${catCreated}/${COMPONENT_CATEGORIES_SEED.length} catégories de composants, ` +
       `${sectionsCreated}/${PHYSIO_SECTIONS.length} sections physio, ${measCreated}/${MEASUREMENTS.length} côtes, ` +
       `${riderMeasCreated}/${RIDER_MEASUREMENTS.length} mesures cycliste, ` +
-      `${physioCreated}/${PHYSIO_TESTS.length} tests physio, ` +
+      `${physioCreated}/${PHYSIO_TESTS.length} tests physio (${commonLinksAdded} liens du tronc commun ajoutés), ` +
+      `${exCatCreated}/${EXERCISE_CATEGORIES_SEED.length} catégories d'exercices, ` +
       `${exCreated}/${EXERCISES.length} exercices, ${compCreated}/${COMPONENTS.length} composants ` +
       `(${compTypesLinked} associés à des types de vélo), ` +
       `${compAttrCreated}/${SELLE_ATTRIBUTES.length} attributs Selle, ` +

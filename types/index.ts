@@ -17,6 +17,8 @@ import type {
   PhotoAngle,
 } from "@prisma/client";
 
+import type { ConfigOrderable } from "@/lib/study/config-order";
+
 export type { StudyStatus, Role, ComponentCategory, ExerciseCategory, StudyPain, StudyPhoto };
 
 /** Une photo patient saisie/transmise au serveur (sans id ni order : l'ordre est
@@ -56,9 +58,12 @@ export interface StudyRiderMeasureValue {
   after: number | null;
 }
 
-/** Métadonnées minimales d'une côte/mesure, pour résoudre les valeurs à l'affichage. */
-export interface MeasurementInfo {
-  name: string;
+/**
+ * Métadonnées d'une côte/mesure, pour résoudre les valeurs à l'affichage et les
+ * ranger dans l'ordre configuré du type de vélo de l'étude (nom, tronc commun,
+ * positions par type de vélo).
+ */
+export interface MeasurementInfo extends ConfigOrderable {
   unit: string;
 }
 
@@ -114,7 +119,7 @@ export type StudyWithRelations = Study & {
 export type StudyForReport = Study & {
   bikeType: BikeType;
   componentsUsed: (BikeComponent & { category: { name: string } })[];
-  exercisesPrescribed: Exercise[];
+  exercisesPrescribed: (Exercise & { category: { name: string } })[];
   pains: StudyPain[];
   photos: StudyPhoto[];
   patient: Patient & { intake: PatientIntake | null };

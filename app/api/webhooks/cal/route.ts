@@ -11,7 +11,7 @@ import {
   calWebhookSchema,
   extractAttendee,
 } from "@/lib/cal";
-import { encryptFields, hashEmail } from "@/lib/crypto";
+import { encrypt, encryptFields, hashEmail } from "@/lib/crypto";
 
 /**
  * Cal.com booking webhook.
@@ -21,6 +21,10 @@ import { encryptFields, hashEmail } from "@/lib/crypto";
  *
  * On `BOOKING_CREATED`: verify the signature, upsert the patient by email, and
  * email them their "formulaire d'accueil" link via sendIntakeEmail.
+ *
+ * The patient's phone is kept when the booking carries a valid one, but a booking
+ * without it is fine (nothing here requires it): the patient is created without a
+ * number and the accueil form — where it is mandatory — collects it.
  */
 export async function POST(req: NextRequest) {
   const secret = process.env.CAL_WEBHOOK_SECRET;
@@ -76,8 +80,13 @@ export async function POST(req: NextRequest) {
       where: { emailHash: hashEmail(attendee.email) },
       create: {
         ...encryptFields(
-          { email: attendee.email, firstName: attendee.firstName, lastName: attendee.lastName },
-          ["email", "firstName", "lastName"] as const
+          {
+            email: attendee.email,
+            firstName: attendee.firstName,
+            lastName: attendee.lastName,
+            phone: attendee.phone ?? undefined,
+          },
+          ["email", "firstName", "lastName", "phone"] as const
         ),
         emailHash: hashEmail(attendee.email),
         kineId: kine.id,
@@ -86,15 +95,24 @@ export async function POST(req: NextRequest) {
         inviteExpiresAt: inviteExpiryFromNow(),
       },
       update: { bookingId: attendee.bookingId },
-      select: { id: true },
+      select: { id: true, phone: true },
     });
+
+    // A returning patient who has no number yet gets the one from this booking;
+    // an existing number is never overwritten (the kiné or the patient set it).
+    if (attendee.phone && !patient.phone) {
+      await prisma.patient.update({
+        where: { id: patient.id },
+        data: { phone: encrypt(attendee.phone) },
+      });
+    }
 
     await logAudit({
       userId: kine.id,
       action: "CREATE",
       entity: "patient",
       entityId: patient.id,
-      metadata: { source: "cal.com", startTime: attendee.startTime },
+      metadata: { source: "cal.com", startTime: attendee.startTime, hasPhone: Boolean(attendee.phone) },
     });
 
     const sent = await sendIntakeEmail(patient.id);

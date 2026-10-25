@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/Button";
 import { fieldKey } from "@/lib/study/required-fields";
+import { appliesToBikeType, compareConfigured } from "@/lib/study/config-order";
 import { MeasureRow, MeasuresHeader } from "./MeasureRow";
 import type { Measurement } from "@prisma/client";
 
@@ -60,21 +61,11 @@ export function MeasuresForm({
 }: Props) {
   const byId = new Map(measurements.map((m) => [m.id, m]));
 
-  // Côtes configurées pour ce type de vélo : tronc commun d'abord
-  // (alphabétique), puis les côtes du vélo dans l'ordre de la configuration.
+  // Côtes configurées pour ce type de vélo, dans l'ordre de sa configuration
+  // (tronc commun compris, à la position choisie par l'admin).
   const configured = measurements
-    .map((m) => {
-      const link = bikeTypeId != null ? m.bikeTypeLinks.find((b) => b.bikeTypeId === bikeTypeId) : undefined;
-      if (m.isCommon) return { m, common: true, order: m.commonOrder };
-      if (link) return { m, common: false, order: link.order };
-      return null;
-    })
-    .filter((x): x is { m: MeasurementForStudy; common: boolean; order: number } => x !== null)
-    .sort((a, b) => {
-      if (a.common !== b.common) return a.common ? -1 : 1;
-      return a.order - b.order || a.m.name.localeCompare(b.m.name);
-    })
-    .map((x) => x.m);
+    .filter((m) => appliesToBikeType(m, bikeTypeId))
+    .sort(compareConfigured(bikeTypeId));
 
   const configuredIds = new Set(configured.map((m) => m.id));
   // Côtes ajoutées à la volée — affichées après les configurées, ordre d'ajout.

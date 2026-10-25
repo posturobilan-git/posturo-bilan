@@ -56,6 +56,7 @@ const FIELD_LABELS: Record<string, string> = {
   email: "Email",
   firstName: "Prénom",
   lastName: "Nom",
+  phone: "Téléphone",
 };
 
 function labelForPath(path: PropertyKey[]): string {

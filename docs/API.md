@@ -31,7 +31,8 @@ sont acceptés pour faciliter les tests.
   "payload": {
     "uid": "string? (id de réservation)",
     "startTime": "string?",
-    "attendees": [{ "email": "string (required)", "name": "string?" }]
+    "attendees": [{ "email": "string (required)", "name": "string?", "phoneNumber": "string?" }],
+    "responses": "object? (réponses aux questions de réservation, ex. attendeePhoneNumber)"
   }
 }
 ```
@@ -39,6 +40,11 @@ sont acceptés pour faciliter les tests.
 **Comportement :**
 - Lit `kineId` dans le query param (400 si absent)
 - Upsert du patient (email = clé de déduplication), génération de l'`inviteToken`
+- Téléphone : repris s'il figure dans la réservation (`attendees[].phoneNumber`,
+  `responses.attendeePhoneNumber` ou une question « téléphone »), validé et stocké en
+  E.164 (chiffré). Jamais supposé présent : sans numéro valide le patient est créé
+  sans téléphone et le formulaire d'accueil le collecte. Un patient existant sans
+  numéro reçoit celui de la réservation ; un numéro déjà enregistré n'est jamais écrasé
 - `sendIntakeEmail(patientId)` → email du lien `/accueil/[token]`
 - Réponse `{ success: true, patientId: "uuid" }` (207 si l'email échoue)
 
@@ -64,7 +70,7 @@ Job quotidien (cf. `vercel.json`, `0 8 * * *`) qui envoie le suivi J+30.
 
 | Page | Token | Soumission |
 |------|-------|------------|
-| `/accueil/[token]` | `Patient.inviteToken` | `PatientIntake` + consentement RGPD |
+| `/accueil/[token]` | `Patient.inviteToken` | `PatientIntake` + téléphone du patient (obligatoire) + consentement RGPD |
 | `/suivi/[token]` | `Study.followupToken` | `Followup` + étude → `followup_completed` |
 
 Soumission via Server Actions publiques (`submitAccueilForm`,

@@ -1,4 +1,5 @@
 import type { PhysioValue } from "@/lib/physio";
+import { appliesToBikeType } from "./config-order";
 
 /**
  * Champs obligatoires de l'étude posturale, côté client.
@@ -58,11 +59,6 @@ interface RequirableDef {
 }
 
 type BeforeAfter = { before: number | null; after: number | null };
-
-/** Le test / la côte s'applique-t-il à ce type de vélo ? (tronc commun ou lié) */
-export function appliesToBikeType(def: RequirableDef, bikeTypeId: string | null): boolean {
-  return def.isCommon || def.bikeTypeLinks.some((b) => b.bikeTypeId === bikeTypeId);
-}
 
 /** Obligatoire ET applicable : c'est ce qui bloque le passage à l'étape suivante. */
 export function isEnforcedRequired(def: RequirableDef, bikeTypeId: string | null): boolean {
