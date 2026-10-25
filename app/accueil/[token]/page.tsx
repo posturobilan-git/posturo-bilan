@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { decryptFields } from "@/lib/crypto";
+import { formatPhoneForDisplay } from "@/lib/phone";
 import { AccueilForm } from "./AccueilForm";
 
 export const metadata: Metadata = {
@@ -39,12 +40,13 @@ export default async function AccueilPage({
     where: { inviteToken: token },
     select: {
       firstName: true,
+      phone: true,
       isAnonymized: true,
       inviteExpiresAt: true,
       inviteCompletedAt: true,
     },
   });
-  const patient = raw && decryptFields(raw, ["firstName"] as const);
+  const patient = raw && decryptFields(raw, ["firstName", "phone"] as const);
 
   if (!patient || patient.isAnonymized) {
     return (
@@ -82,7 +84,12 @@ export default async function AccueilPage({
   return (
     <main className="min-h-screen bg-canvas px-4 py-10">
       <div className="mx-auto w-full max-w-2xl">
-        <AccueilForm token={token} firstName={patient.firstName} cabinetName={CABINET} />
+        <AccueilForm
+          token={token}
+          firstName={patient.firstName}
+          cabinetName={CABINET}
+          initialPhone={patient.phone ? formatPhoneForDisplay(patient.phone) : ""}
+        />
       </div>
     </main>
   );

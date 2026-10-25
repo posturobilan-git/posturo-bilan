@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { PatientDossier } from "@/components/patients/PatientDossier";
 import { PatientHeaderActions } from "@/components/patients/PatientHeaderActions";
 import { SendIntakeButton } from "@/components/patients/SendIntakeButton";
+import { MissingPhoneNotice } from "@/components/patients/MissingPhoneNotice";
+import { formatPhoneForDisplay } from "@/lib/phone";
 import type { PatientWithRelations, MeasurementInfo } from "@/types";
 import type { PhysioTestInfo } from "@/lib/physio";
 
@@ -58,7 +60,21 @@ export default async function PatientPage(props: PageProps<"/dashboard/patients/
     <div className="space-y-6">
       <PageHeader
         title={`${patient.firstName} ${patient.lastName}`}
-        description={patient.email}
+        description={
+          <>
+            {patient.email}
+            {patient.phone ? (
+              <> · {formatPhoneForDisplay(patient.phone)}</>
+            ) : (
+              !patient.isAnonymized && (
+                <>
+                  {" "}
+                  <MissingPhoneNotice />
+                </>
+              )
+            )}
+          </>
+        }
         action={
           <div className="flex flex-wrap items-center gap-3">
             {/* Accueil pending — let the kiné email the patient the form link */}
@@ -78,7 +94,7 @@ export default async function PatientPage(props: PageProps<"/dashboard/patients/
                   firstName: patient.firstName,
                   lastName: patient.lastName,
                   email: patient.email,
-                  phone: patient.phone,
+                  phone: patient.phone ? formatPhoneForDisplay(patient.phone) : null,
                 }}
                 studyCount={patientFull.studies.length}
                 isAnonymized={patient.isAnonymized}

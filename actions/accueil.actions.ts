@@ -7,7 +7,7 @@ import { INTAKE_CGU_VERSION } from "@/lib/legal";
 import { logAudit } from "@/lib/audit";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { ok, fail, formatZodError, type ActionResult } from "@/lib/action-result";
-import { encryptFields } from "@/lib/crypto";
+import { encrypt, encryptFields } from "@/lib/crypto";
 import { INTAKE_ENCRYPTED_FIELDS } from "@/lib/crypto.constants";
 
 /**
@@ -31,7 +31,7 @@ export async function submitAccueilForm(
 
   const parsed = accueilFormSchema.safeParse(data);
   if (!parsed.success) return fail(formatZodError(parsed.error));
-  const intake = parsed.data; // cguAccepted is validated above, not persisted
+  const intake = parsed.data; // cguAccepted is validated above, not persisted; phone goes on the patient
 
   try {
     const patient = await prisma.patient.findUnique({
@@ -68,8 +68,9 @@ export async function submitAccueilForm(
       INTAKE_ENCRYPTED_FIELDS
     );
 
-    // Save the intake, record the RGPD consent on the patient, and invalidate
-    // the link — all atomically.
+    // Save the intake, record the patient's phone (E.164, encrypted — it replaces
+    // any number the cabinet had: this one comes from the patient) and the RGPD
+    // consent on the patient, and invalidate the link — all atomically.
     await prisma.$transaction([
       prisma.patientIntake.upsert({
         where: { patientId: patient.id },
@@ -79,6 +80,7 @@ export async function submitAccueilForm(
       prisma.patient.update({
         where: { id: patient.id },
         data: {
+          phone: encrypt(intake.phone),
           inviteCompletedAt: new Date(),
           consentAcceptedAt: new Date(),
           consentVersion: INTAKE_CGU_VERSION,

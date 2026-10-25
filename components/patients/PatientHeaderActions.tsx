@@ -11,20 +11,26 @@ interface PatientFields {
   firstName: string;
   lastName: string;
   email: string;
+  /** Déjà mis en forme pour l'affichage (06 12 34 56 78) ; null si le patient n'en a pas. */
   phone: string | null;
 }
 
 interface FieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
   name: string;
+  required?: boolean;
 }
 
-function Field({ label, name, ...props }: FieldProps) {
+function Field({ label, name, required, ...props }: FieldProps) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-sm font-medium text-content">{label}</span>
+      <span className="text-sm font-medium text-content">
+        {label}
+        {required && <span className="ml-0.5 text-danger-600">*</span>}
+      </span>
       <input
         name={name}
+        required={required}
         className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-content focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         {...props}
       />
@@ -61,7 +67,6 @@ export function PatientHeaderActions({
   function handleEdit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const phone = fd.get("phone") as string;
 
     setError(null);
     startTransition(async () => {
@@ -69,7 +74,7 @@ export function PatientHeaderActions({
         firstName: fd.get("firstName") as string,
         lastName: fd.get("lastName") as string,
         email: fd.get("email") as string,
-        phone: phone || undefined,
+        phone: String(fd.get("phone") ?? ""),
       });
       if (!result.ok) {
         setError(result.error);
@@ -166,7 +171,18 @@ export function PatientHeaderActions({
                 <Field label="Nom" name="lastName" defaultValue={patient.lastName} required autoComplete="family-name" />
               </div>
               <Field label="Email" name="email" type="email" defaultValue={patient.email} required autoComplete="email" />
-              <Field label="Téléphone" name="phone" type="tel" defaultValue={patient.phone ?? ""} placeholder="Optionnel" autoComplete="tel" />
+              {/* Obligatoire : un patient sans numéro (réservation sans téléphone, dossier
+                  antérieur) doit en recevoir un pour enregistrer une modification. */}
+              <Field
+                label="Téléphone"
+                name="phone"
+                type="tel"
+                inputMode="tel"
+                required
+                defaultValue={patient.phone ?? ""}
+                placeholder="06 12 34 56 78"
+                autoComplete="tel"
+              />
 
               {error && (
                 <p className="rounded-md bg-danger-50 px-3 py-2 text-sm text-danger-700">{error}</p>

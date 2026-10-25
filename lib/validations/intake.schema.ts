@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { phoneSchema } from "./phone.schema";
 
 /** Manual intake entered by the kiné directly in the app (no webhook). */
 export const manualIntakeSchema = z.object({
@@ -15,10 +16,12 @@ export const manualIntakeSchema = z.object({
 
 /**
  * Public "formulaire d'accueil" submitted by the patient themselves via the
- * tokenised link. Same fields as the manual intake, plus mandatory consent to
- * the CGU before the data can be saved.
+ * tokenised link. Same fields as the manual intake, plus the patient's phone
+ * number (mandatory — it is stored on the patient, not on the intake) and
+ * mandatory consent to the CGU before the data can be saved.
  */
 export const accueilFormSchema = manualIntakeSchema.extend({
+  phone: phoneSchema,
   cguAccepted: z.boolean().refine((v) => v === true, {
     message: "Vous devez accepter les conditions pour continuer.",
   }),

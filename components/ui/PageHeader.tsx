@@ -2,7 +2,8 @@ import { ReactNode } from "react";
 
 interface PageHeaderProps {
   title: string;
-  description?: string;
+  /** Texte, ou éléments en ligne (le conteneur est un <p>). */
+  description?: ReactNode;
   action?: ReactNode;
 }
 

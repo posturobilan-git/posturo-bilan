@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { normalizePhone } from "@/lib/phone";
 
 /**
  * Verifies a Cal.com webhook signature.
@@ -52,11 +53,22 @@ export function calSignatureDiagnostics(
 
 // ─── Payload ─────────────────────────────────────────────────────────────────
 
-const attendeeSchema = z.object({ email: z.string().email(), name: z.string().nullish() });
+const attendeeSchema = z.object({
+  email: z.string().email(),
+  name: z.string().nullish(),
+  // Present only when the attendee's phone is stored on the booking.
+  phoneNumber: z.string().nullish(),
+});
 
 /**
  * Minimal shape of a Cal.com booking webhook. Only the fields we consume are
  * validated; everything else is ignored.
+ *
+ * `responses` / `userFieldsResponses` hold the answers to the Event Type's
+ * booking questions. Which questions exist (and so whether a phone number is
+ * there at all) is the Event Type's configuration, not ours: they are typed
+ * `unknown` so an unexpected shape can never reject a booking, and read
+ * defensively by extractPhone.
  */
 export const calWebhookSchema = z.object({
   triggerEvent: z.string(),
@@ -65,6 +77,10 @@ export const calWebhookSchema = z.object({
     startTime: z.string().nullish(),
     attendees: z.array(attendeeSchema).nullish(),
     attendee: attendeeSchema.nullish(),
+    // `.optional()` is required: in Zod 4 a bare `z.unknown()` key is NOT optional,
+    // and a booking without these answers must still parse.
+    responses: z.unknown().optional(),
+    userFieldsResponses: z.unknown().optional(),
   }),
 });
 
@@ -74,8 +90,55 @@ interface AttendeeFields {
   email: string;
   firstName: string;
   lastName: string;
+  /** Valid phone number from the booking, in E.164 — null when the booking carries none. */
+  phone: string | null;
   bookingId: string | null;
   startTime: string | null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** The text of one booking answer: a bare string, or Cal.com's `{ value: "…" }`. */
+function answerText(answer: unknown): string | null {
+  if (typeof answer === "string") return answer;
+  const value = asRecord(answer)?.value;
+  return typeof value === "string" ? value : null;
+}
+
+// A custom booking question about the phone ("phone", "telephone", "mobile"…).
+const PHONE_QUESTION = /phone|t[eé]l|mobile|portable/i;
+
+/**
+ * The attendee's phone number, when the booking has one. NEVER assumed present:
+ * the Event Type may not ask for it, the attendee may skip it or type something
+ * that isn't a number. Looks at the attendee's own `phoneNumber`, Cal.com's
+ * `attendeePhoneNumber` system field, then any phone-like custom question; the
+ * first value that is a valid number wins (E.164). Otherwise null — the accueil
+ * form then collects it from the patient.
+ */
+export function extractPhone(data: CalWebhook): string | null {
+  const p = data.payload;
+  const attendee = p.attendees?.[0] ?? p.attendee;
+
+  const candidates: unknown[] = [attendee?.phoneNumber];
+  for (const source of [p.responses, p.userFieldsResponses]) {
+    const answers = asRecord(source);
+    if (!answers) continue;
+    candidates.push(answers.attendeePhoneNumber);
+    for (const [question, answer] of Object.entries(answers)) {
+      if (PHONE_QUESTION.test(question)) candidates.push(answer);
+    }
+  }
+
+  for (const candidate of candidates) {
+    const phone = normalizePhone(answerText(candidate));
+    if (phone) return phone;
+  }
+  return null;
 }
 
 /**
@@ -99,6 +162,7 @@ export function extractAttendee(data: CalWebhook): AttendeeFields | null {
     email: attendee.email,
     firstName: firstName || "Patient",
     lastName,
+    phone: extractPhone(data),
     bookingId: p.uid ?? null,
     startTime: p.startTime ?? null,
   };

@@ -273,6 +273,7 @@ const PATIENTS: SeedPatient[] = [
     email: "emma.petit@example.com",
     firstName: "Emma",
     lastName: "Petit",
+    // Pas de téléphone, volontairement : patient « historique » — le dossier affiche « Téléphone manquant ».
     intake: { heightCm: 168, weightKg: 60, bikeType: "Route", ridingLevel: "Sportif", weeklyHours: 6, yearsRiding: 4, injuries: ["douleur cervicale"], goals: "Améliorer le confort sur longue distance." },
     studies: [], // patient sans étude encore
   },
@@ -280,6 +281,7 @@ const PATIENTS: SeedPatient[] = [
     email: "marie.dupont@example.com",
     firstName: "Marie",
     lastName: "Dupont",
+    phone: "+33612345601",
     intake: { heightCm: 172, weightKg: 64, bikeType: "Route", ridingLevel: "Compétiteur", weeklyHours: 12, yearsRiding: 8, injuries: ["lombalgie"], goals: "Optimiser l'aérodynamisme sans douleur lombaire." },
     studies: [
       {
@@ -295,6 +297,7 @@ const PATIENTS: SeedPatient[] = [
     email: "thomas.martin@example.com",
     firstName: "Thomas",
     lastName: "Martin",
+    phone: "+33612345602",
     intake: { heightCm: 181, weightKg: 78, bikeType: "Gravel", ridingLevel: "Sportif", weeklyHours: 8, yearsRiding: 10, injuries: ["douleur genou gauche"], goals: "Soulager le genou en montée." },
     studies: [
       {
@@ -323,6 +326,7 @@ const PATIENTS: SeedPatient[] = [
     email: "sophie.bernard@example.com",
     firstName: "Sophie",
     lastName: "Bernard",
+    phone: "+33612345603",
     intake: { heightCm: 165, weightKg: 58, bikeType: "Triathlon", ridingLevel: "Compétiteur", weeklyHours: 14, yearsRiding: 6, injuries: ["douleur périnéale"], goals: "Tenir la position de triathlon sans gêne." },
     studies: [
       {
@@ -344,6 +348,7 @@ const PATIENTS: SeedPatient[] = [
     email: "julien.leroy@example.com",
     firstName: "Julien",
     lastName: "Leroy",
+    phone: "+33612345604",
     intake: { heightCm: 178, weightKg: 82, bikeType: "VTT", ridingLevel: "Loisir", weeklyHours: 4, yearsRiding: 3, injuries: ["douleur épaule"], goals: "Confort en sortie VTT le week-end." },
     studies: [
       {
